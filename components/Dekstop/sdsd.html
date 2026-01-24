@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Table</title>
+</head>
+
+<body>
+    <table border="9">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Age</th>
+                <th>Class</th>
+                <th>Edit</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <script>
+
+
+        let users = [
+            { name: "John", age: 23, class: "7" },
+            { name: "Jane", age: 24, class: "8" },
+            { name: "Doe", age: 25, class: "9" }
+        ];
+
+        let tbody = document.querySelector("tbody");
+        users.forEach((user, index) => addUserRow(user, index));
+
+        function addUserRow(user, index) {
+            const row = document.createElement('tr');
+            row.id = `row${index}`;
+            row.innerHTML = `
+        <td>${user.name}</td>
+        <td>${user.age}</td>
+        <td>${user.class}</td>
+        <td><button contentEditable="false" onclick="editRow(this, ${index})">edit</button></td>
+         <td><button contentEditable="false" onclick="deleteRow(this, ${index})">😒</button></td>
+
+      `;
+            tbody.appendChild(row);
+        }
+
+        function showTooltip(cell, msg) {
+            removeTooltip(cell); // clear old tooltip
+            let tip = document.createElement("div");
+            tip.innerText = msg;
+            tip.style.position = "absolute";
+            tip.style.background = "yellow";
+            tip.style.padding = "2px 5px";
+            tip.style.fontSize = "12px";
+            tip.style.border = "1px solid black";
+            tip.style.zIndex = "1000";
+
+            // position just above cell
+            let rect = cell.getBoundingClientRect();
+            tip.style.left = rect.left + window.scrollX + "px";
+            tip.style.top = rect.top + window.scrollY - 20 + "px";
+
+            tip.className = "tooltip";
+            document.body.appendChild(tip);
+            cell._tooltip = tip;
+            cell.style.background = "lightblue"
+        }
+
+        function removeTooltip(cell) {
+            if (cell._tooltip) {
+                cell._tooltip.remove();
+                cell.style.background = "transparent"
+                cell._tooltip = null;
+            }
+
+        }
+
+        function AddnewRow() {
+            let tbody = document.querySelector("tbody");
+            let newRow = document.createElement("tr");
+            newRow.id = `row${users.length}`;
+            // Create empty cells for the new row
+            newRow.innerHTML = `
+                <td ></td>
+                <td ></td>
+                <td ></td>
+                <td><button onclick="editRow(this, ${users.length})">edit</button></td>
+                <td><button onclick="deleteRow(this, ${users.length})">😒</button></td>
+            `;
+
+            tbody.appendChild(newRow);
+
+            // Add a new empty user to the array
+            users.push({ name: "", age: "", class: "" });
+        }
+
+        //add a button in dom to add new row
+        let addButton = document.createElement("button");
+        addButton.innerText = "Add New Row";
+        addButton.onclick = AddnewRow;
+        document.body.appendChild(addButton);
+
+
+
+
+        function deleteRow(button, index) {
+            let row = document.getElementById(`row${index}`);
+            row.remove();
+            users.splice(index, 1);
+            console.log("Updated Users:", users);
+        }
+
+        function editRow(button, index) {
+            let row = document.getElementById(`row${index}`);
+            let cells = row.querySelectorAll("td");
+
+            if (row.isContentEditable) {
+                row.contentEditable = "false";
+                button.innerText = "edit";
+                button.contentEditable = "false";
+
+
+                let name = cells[0].innerText.trim();
+                let age = cells[1].innerText.trim();
+                let className = cells[2].innerText.trim();
+                // button.contentEditable = "false";
+
+                let valid = true;
+
+                if (!/^[a-zA-Z ]+$/.test(name)) {
+                    showTooltip(cells[0], `${name} is not Looks like  Good Name!`);
+                    valid = false;
+                } else removeTooltip(cells[0]);
+
+                if (!/^[0-9]+$/.test(age)) {
+                    showTooltip(cells[1], `${age} is just a Number!`);
+                    valid = false;
+                } else removeTooltip(cells[1]);
+
+                if (!/^[0-9]+$/.test(className) || className < 1 || className > 12) {
+                    showTooltip(cells[2], `${className} is not between 1 to 12!`);
+                    valid = false;
+                } else removeTooltip(cells[2]);
+
+                if (valid) {
+                    users[index] = { name, age: Number(age), class: className };
+                    console.log("Updated Users:", users);
+                }
+
+            } else {
+                row.contentEditable = "true";
+                button.innerText = "save";
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,113 @@
+
+.keyboard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 12px;
+  border-radius: 12px;
+  background: linear-gradient(to bottom, #f5f5f5 0%, #efefef 95%, #e5e5e5 100%);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 10px 25px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.glowLayer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.glowWave {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #00c6ff 0%, #0072ff 30%, transparent 100%);
+  filter: blur(15px);
+  /* Updated animation to expand from button center to keyboard boundaries */
+  animation: radialShockwave 0.8s ease-out forwards;
+  transform: translate(-50%, -50%);
+}
+
+@keyframes radialShockwave {
+  0% {
+    width: 1px;
+    height: 1px;
+    opacity: 0.9;
+    box-shadow: 0 0 10px #00c6ff;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    width: 800px;
+    height: 800px;
+    opacity: 0;
+    box-shadow: 0 0 0px #0072ff;
+  }
+}
+
+.row {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 1;
+}
+
+.key {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  color: #333;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  border-radius: 5px;
+  background: linear-gradient(to bottom, #fafafa 0%, #f0f0f0 95%, #e8e8e8 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8), 0 2px 0 rgba(255, 255, 255, 0.7), 0 3px 0 rgba(255, 255, 255, 0.6), 0
+    4px 0 rgba(0, 0, 0, 0.1), 0 5px 3px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  position: relative;
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+}
+
+.key:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8), 0 2px 0 rgba(255, 255, 255, 0.7), 0 3px 0 rgba(255, 255, 255, 0.6), 0
+    5px 0 rgba(0, 0, 0, 0.1), 0 6px 4px rgba(0, 0, 0, 0.18);
+}
+
+.key:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8), 0 2px 0 rgba(0, 0, 0, 0.05), inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.key.active {
+  animation: pressDown 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8), 0 2px 0 rgba(0, 0, 0, 0.05), inset 0 1px 2px rgba(0, 0, 0, 0.1);
+  background: linear-gradient(to bottom, #f0f0f0 0%, #e8e8e8 95%, #dcdcdc 100%);
+}
+
+@keyframes pressDown {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(3px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}

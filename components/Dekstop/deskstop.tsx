@@ -1,0 +1,683 @@
+"use client"
+
+import  {   useRef, useEffect, useState, useCallback } from "react"
+import { Window } from "./window"
+import { TerminalUI } from "@/app/components/terminal/terminalUI"
+import { ScienceBook } from "@/app/components/terminal/ai-book"
+import { AISearch } from "@/app/components/terminal/AiSearch"
+import { ExcelEditor } from "@/app/components/terminal/ExcelEditor"
+import { MailSender } from "@/app/components/terminal/mail-sender"
+import { PdfViewer } from "@/app/components/terminal/pdfviwer"
+import { DesktopIcon } from "./dekstopIcon"
+import { StickyNote } from "./stickyNote"
+import { ProjectExplorerWindow } from "./ProjectExpWindow"
+import { PhotosApp } from "./photosApp"
+import { gsap } from "gsap"
+import { FileTextIcon, FolderIcon, Trash2Icon, CameraIcon, TerminalIcon, BookIcon, SearchIcon, TableIcon, MailIcon, ListTodoIcon } from 'lucide-react' // Import Lucide icons
+import { Dock } from "./dock"
+import { WavesDemo } from "./waveDemo.tsx"
+import Shuffle, { GooeyText } from "./textAnimation"
+import AppLaunchpad from "./launchpad"
+import { FileDetailsViewer } from "./file-details-viewer"
+import { TerminalProvider } from "@/app/context/terminalContext"
+import { KeyboardProvider } from "@/app/context/keyBoardContext"
+import { toast } from "sonner"
+import CircularGallery from "./Gallery"
+import MotionGallary from "./motionGalary"
+import DomeGallery from "../animationComponents/gallery"
+import InfiniteMenu from "../animationComponents/newsGallery"
+import DotGrid from "../animationComponents/dotGrid"
+import TextType from "./textAnimation"
+import KeyboardWrapper from "./keyboardWrapper"
+import CustomCursor from "../CustomCursor"
+
+interface WindowState {
+  id: string
+  title: string
+  icon: string // Path to icon image (for window title bar)
+  // component: React.ReactNode
+  x: number
+  y: number
+  width: number
+  height: number
+  isMinimized: boolean
+  zIndex: number
+}
+
+export function Desktop() {
+  const [openWindows, setOpenWindows] = useState<WindowState[]>([])
+  const [nextZIndex, setNextZIndex] = useState(1)
+  const desktopRef = useRef<HTMLDivElement>(null)
+  const portfolioTextRef = useRef<HTMLHeadingElement>(null)
+  const [commandToAutoRun, setCommandToAutoRun] = useState<{ command: string; args?: Record<string, any> } | null>(null)
+
+
+
+  const [icons, setIcons] = useState([
+  { id: 1, name: "Resume PDF", icon: <FileTextIcon />, x: 100, y: 400 },
+  { id: 2, name: "About Me", icon: <FolderIcon />, x: 100, y: 550 },
+  { id: 3, name: "ShowCraft", icon: <FolderIcon />, x: 1200, y: 100 },
+  { id: 4, name: "SharpBuy", icon: <FolderIcon />, x: 1200, y: 200 },
+  { id: 5, name: "Ponderiee", icon: <FolderIcon />, x: 1200, y: 300 },
+  { id: 6, name: "Nirantara", icon: <FolderIcon />, x: 1200, y: 400 },
+  { id: 7, name: "Don't Look", icon: <Trash2Icon />, x: 1300, y: 500 }
+]);
+
+  // news items
+
+  
+  const news = [
+    {
+      image: 'https://picsum.photos/300/300?grayscale',
+      link: 'https://google.com/',
+      title: 'Item 1',
+      description: 'This is pretty cool, right?'
+    },
+    {
+      image: 'https://picsum.photos/400/400?grayscale',
+      link: 'https://google.com/',
+      title: 'Item 2',
+      description: 'This is pretty cool, right?'
+    },
+    {
+      image: 'https://picsum.photos/500/500?grayscale',
+      link: 'https://google.com/',
+      title: 'Item 3',
+      description: 'This is pretty cool, right?'
+    },
+    {
+      image: 'https://picsum.photos/600/600?grayscale',
+      link: 'https://google.com/',
+      title: 'Item 4',
+      description: 'This is pretty cool, right?'
+    }
+  ];
+  
+
+  useEffect(() => {
+    // GSAP animation for "welcome to my portfolio."
+    if (portfolioTextRef.current) {
+      gsap.fromTo(
+        portfolioTextRef.current,
+        { opacity: 0, y: 20 },
+        { opacity: 1, y: 0, duration: 1, ease: "power3.out", delay: 0.5 }
+      );
+    }
+  }, []);
+
+
+
+  const openApplication = useCallback(
+    (appName: string, initialX?: number, initialY?: number ,commandToRun?: string ,arg?:any) => {
+      // alert(appName)
+      let component: React.ReactNode | null = null;
+      let title = "";
+      let iconPath = "";
+      let defaultWidth = 800;
+      let defaultHeight = 500;
+  
+      switch (appName) {
+        case "Terminal":
+          component = (
+            <div className="" >
+              <TerminalUI
+            key={`terminal-${Date.now()}`} // 👈 Force remount
+
+              autoRunCommand={commandToRun}
+              autoRunCommandArgs={arg} 
+              onCommandExecuted={() => setCommandToAutoRun(null)}
+            />
+            </div>
+          );
+          title = "Terminal";
+          iconPath = "/icons/terminal.png";
+          defaultWidth = 500;
+          defaultHeight = 300;
+          break;
+        case "Science Book":
+          component = <ScienceBook />;
+          title = "Science Book";
+          iconPath = "/icons/book.png";
+          defaultWidth = 700;
+          defaultHeight = 600;
+          break;
+        case "Safari":
+          component = <AISearch />;
+          title = "AI Search";
+          iconPath = "/icons/ai.png";
+          defaultWidth = 700;
+          defaultHeight = 550;
+          break;
+        case "Excel Editor":
+          component = <ExcelEditor />;
+          title = "Excel Editor";
+          iconPath = "/icons/excel.png";
+          defaultWidth = 900;
+          defaultHeight = 600;
+          break;
+        case "Mail":
+          component = <MailSender />;
+          title = "Mail Sender";
+          iconPath = "/icons/mail.png";
+          defaultWidth = 600;
+          defaultHeight = 500;
+          break;
+        case "PDF Viewer":
+          component = (
+            <PdfViewer pdfUrl="https://ncert.nic.in/textbook/pdf/leph2ps.pdf" />
+          );
+          title = "PDF Viewer";
+          iconPath = "/icons/pdf.png";
+          defaultWidth = 700;
+          defaultHeight = 600;
+          break;
+        case "App Store":
+          component = <AppLaunchpad />;
+          title = "App Store";
+          iconPath = "/icons/todo.png";
+          defaultWidth = desktopRef.current
+            ? desktopRef.current.offsetWidth
+            : window.innerWidth;
+          defaultHeight = desktopRef.current
+            ? desktopRef.current.offsetHeight
+            : window.innerHeight;
+          break;
+        case "Finder":
+          component = (
+            <ProjectExplorerWindow onOpenFile={openFileDetailsWindow} />
+          );
+          title = "Project Explorer";
+          iconPath = "/icons/folder.png";
+          defaultWidth = 450;
+          defaultHeight = 350;
+          break;
+        case "Resume PDF":
+          component = <PdfViewer pdfUrl="/VIBHAV.pdf" />;
+          title = "Resume";
+          iconPath = "/icons/pdf.png";
+          defaultWidth = 700;
+          defaultHeight = 600;
+          break;
+        case "About Me":
+          component = (
+            <div className="p-4 text-gray-200">
+             Proficient in solving a wide range of problems in web front-end and back-end development, with 3.6 years of deep experience in JavaScript. Skilled in creating custom libraries and crafting CSS utility classes similar to Tailwind and material ui components.
+            </div>
+          );
+          title = "About Me";
+          iconPath = "/icons/folder.png";
+          defaultWidth = 500;
+          defaultHeight = 300;
+          break;
+        case "Don't Look":
+          component = (
+            <div className="p-4 text-gray-200">
+              You looked! Nothing to see here... yet.
+            </div>
+          );
+          title = "Don't Look";
+          iconPath = "/icons/trash.png";
+          defaultWidth = 400;
+          defaultHeight = 250;
+          break;
+        case "Photos":
+          component = <div style={{ width: '100vw', height: '100vh' }}>
+          <DomeGallery grayscale={false}/>
+        </div>;
+          title = "Photos";
+          iconPath = "/icons/camera.png";
+          defaultWidth = 900;
+          defaultHeight = 650;
+          break;
+          case "TV":
+            component = <div style={{ height: '600px', position: 'relative' }}>
+            <InfiniteMenu items={news}/>
+          </div>;
+            title = "news";
+            iconPath = "/icons/camera.png";
+            defaultWidth = 900;
+            defaultHeight = 650;
+            break;
+        default:
+          console.warn(`Application "${appName}" not found.`);
+          return;
+      }
+  
+      const existingWindow = openWindows.find((win) => win.title === title);
+      if (existingWindow) {
+        setOpenWindows((prev) =>
+          prev.map((win) =>
+            win.id === existingWindow.id
+              ? { ...win, zIndex: nextZIndex, isMinimized: false }
+              : win
+          )
+        );
+        setNextZIndex((prev) => prev + 1);
+        return;
+      }
+  
+      const newWindow: WindowState = {
+        id: `window-${Date.now()}`,
+        title,
+        icon: iconPath,
+        component,
+        x:
+          initialX !== undefined
+            ? initialX
+            : Math.random() * 100 + 50,
+        y:
+          initialY !== undefined
+            ? initialY
+            : Math.random() * 50 + 50,
+        width: defaultWidth,
+        height: defaultHeight,
+        isMinimized: false,
+        zIndex: nextZIndex,
+      };
+  
+      setOpenWindows((prev) => [...prev, newWindow]);
+      setNextZIndex((prev) => prev + 1);
+    },
+    [
+      commandToAutoRun
+      
+    ]
+  );
+
+  const runCommandInTerminal = useCallback(
+    (command: string , args:string) => {
+      console.log("execute command",command)
+      setCommandToAutoRun({command,args}) // Set the command to be run
+      openApplication("Terminal",150,150,command,args) // Open the terminal (it will pick up the command)
+    },
+    [openApplication,commandToAutoRun]
+  )
+  
+  
+
+  const openFileDetailsWindow = (file: ProjectFile) => {
+    const newWindow: WindowState = {
+      id: `file-details-${file.name}-${Date.now()}`,
+      title: `File: ${file.name}`,
+      // subtitle: file.type,
+      icon: "/icons/file.png", // Generic file icon for details window
+      component: <FileDetailsViewer file={file} />,
+      x: Math.random() * 150 + 100, // Random position for new window
+      y: Math.random() * 100 + 100,
+      width: 700,
+      height: 500,
+      isMinimized: false,
+      zIndex: nextZIndex,
+    }
+
+    setOpenWindows((prev) => [...prev, newWindow])
+    setNextZIndex((prev) => prev + 1)
+  }
+
+  const closeWindow = (id: string) => {
+    setOpenWindows((prev) => prev.filter((win) => win.id !== id));
+  };
+
+  const minimizeWindow = (id: string) => {
+    setOpenWindows((prev) =>
+      prev.map((win) => (win.id === id ? { ...win, isMinimized: !win.isMinimized } : win)),
+    );
+  };
+
+  const bringToFront = (id: string) => {
+    setOpenWindows((prev) =>
+      prev.map((win) => (win.id === id ? { ...win, zIndex: nextZIndex } : win)),
+    );
+    setNextZIndex((prev) => prev + 1);
+  };
+
+
+
+  // key board shortcuts 
+
+  const handleUndo = useCallback(() => {
+    console.log("Undo operation")
+    // Implement undo logic here
+  }, [])
+
+  const handleRedo = useCallback(() => {
+    console.log("Redo operation")
+    // Implement redo logic here
+  }, [])
+
+  const handleSave = useCallback(() => {
+    console.log("Save operation")
+    // Could save desktop state, open documents, etc.
+  }, [])
+
+  const handleFind = useCallback(() => {
+    console.log("Find operation")
+    // Could open spotlight-like search
+    openApplication("Safari") // Open AI Search as find
+  }, [openApplication])
+
+  const handleSelectAll = useCallback(() => {
+    console.log("Select all operation")
+    // Could select all desktop icons or files in active window
+  }, [])
+
+
+
+  // ______________________________________________________________________________________
+
+  // Dock icons using Lucide components
+  const dockAppIcons = [
+    { name: "Finder", icon: <FolderIcon /> }, // Using FolderIcon for Finder
+    { name: "Safari", icon: <SearchIcon /> }, // Using SearchIcon for Safari
+    { name: "Mail", icon: <MailIcon /> },
+    { name: "Messages", icon: <MailIcon /> }, // Using MailIcon for Messages
+    { name: "Maps", icon: <SearchIcon /> }, // Using SearchIcon for Maps
+    { name: "Photos", icon: <CameraIcon /> }, // Camera icon for Photos app
+    { name: "FaceTime", icon: <CameraIcon /> }, // Camera icon for FaceTime
+    { name: "Calendar", icon: <ListTodoIcon /> }, // Using ListTodoIcon for Calendar
+    { name: "Reminders", icon: <ListTodoIcon /> }, // Using ListTodoIcon for Reminders
+    { name: "Notes", icon: <FileTextIcon /> }, // Using FileTextIcon for Notes
+    { name: "Terminal", icon: <TerminalIcon /> },
+    { name: "App Store", icon: <SearchIcon /> }, // Using SearchIcon for App Store
+    { name: "Settings", icon: <ListTodoIcon /> }, // Using ListTodoIcon for Settings
+    { name: "TV", icon: <SearchIcon /> }, // Using SearchIcon for TV
+    { name: "Music", icon: <SearchIcon /> }, // Using SearchIcon for Music
+    { name: "Spotify", icon: <SearchIcon /> }, // Using SearchIcon for Spotify
+    { name: "Trash", icon: <Trash2Icon /> },
+   
+    // { name: "Science Book", icon: <BookIcon /> },
+    // { name: "AI Search", icon: <SearchIcon /> },
+    // { name: "Excel Editor", icon: <TableIcon /> },
+    // { name: "Mail Sender", icon: <MailIcon /> },
+    // { name: "PDF Viewer", icon: <FileTextIcon /> },
+    // { name: "To-Do List", icon: <ListTodoIcon /> },
+    // { name: "Project Explorer", icon: <FolderIcon /> },
+  ];
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+         
+      if (e.ctrlKey && e.shiftKey && e.key === 'N') {
+        e.preventDefault();
+     
+        const folderName = prompt('Enter folder name:');
+        toast.success("CTRL + SHIFT + N")
+        if (folderName) {
+          // Call API to create folder
+          fetch('/api/Projects', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: folderName,
+              type: 'folder',
+              parentId:  null
+            })
+          })
+          .then(response => response.json())
+          .then(data => {
+            // Refresh project explorer or update UI
+            toast.success(`Folder '${folderName}' created`);
+          });
+        }
+      }
+    };
+  
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+
+
+  // update icon posiiton 
+  const updateIconPosition = (id:any, x:number, y:number) => {
+  setIcons(prev =>
+    prev.map(i =>
+      i.id === id ? { ...i, x, y } : i
+    )
+  );
+};
+
+
+const autoArrange = () => {
+  if (!desktopRef.current) return;
+
+  const paddingX = 80;   // grid left gap
+  const paddingY = 80;   // grid top gap
+  const colGap = 150;    // horizontal space between icons
+  const rowGap = 130;    // vertical space between icons
+
+  const maxRows = Math.floor(desktopRef.current.offsetHeight / rowGap);
+
+  let col = 0;
+  let row = 0;
+
+  const arranged = icons.map((icon, index) => {
+    const x = paddingX + col * colGap;
+    const y = paddingY + row * rowGap;
+
+    row++;
+    if (row >= maxRows) {
+      row = 0;
+      col++;
+    }
+
+    return { ...icon, x, y };
+  });
+
+  setIcons(arranged);
+};
+
+
+
+  return (
+   <>
+     <KeyboardProvider
+      onUndo={handleUndo}
+      onRedo={handleRedo}
+      onSave={handleSave}
+      onFind={handleFind}
+      onSelectAll={handleSelectAll}
+      onOpenApps={openApplication}
+      
+    >
+    <TerminalProvider openApplication={openApplication} runCommandInTerminal={runCommandInTerminal}>
+{/*  */}
+
+ <KeyboardWrapper
+        initialX={200}
+        initialY={400}
+        desktopRef={desktopRef}
+      />
+
+      
+    <div
+      ref={desktopRef}
+      className="relative w-full h-screen  overflow-hidden"
+      // style={{
+      //   backgroundImage: `
+      //     linear-gradient(to right,rgb(0, 0, 0) 1px, transparent 1px),
+      //     linear-gradient(to bottom,rgb(28, 19, 56) 1px, transparent 1px)
+      //   `,
+      //   backgroundSize: '40px 40px',
+      // }}
+    >
+          <WavesDemo /> 
+          {/* <KeyboardWrapper
+        initialX={50}
+        initialY={50}
+        desktopRef={desktopRef}
+      /> */}
+
+      {/* Top Bar */}
+      <div className="absolute top-0 left-0 right-0 h-8 bg-gray-700 bg-opacity-50 backdrop-blur-sm flex items-center px-4 text-gray-300 text-sm z-50">
+        <div className="flex space-x-4">
+          <span className="font-bold text-white">VIBHAV'S MAC</span>
+          <a href="#" className="hover:text-white transition-colors">Contact</a>
+          <a href="#" className="hover:text-white transition-colors">Resume</a>
+        </div>
+        <div className="ml-auto flex items-center space-x-4">
+          {/* Placeholder for system icons */}
+          <span className="text-gray-400">🔍</span>
+          <span className="text-gray-400">🌐</span>
+          <span className="text-gray-400">🔋</span>
+          <span className="text-gray-400">🔊</span>
+          <span className="text-gray-400">Wi-Fi</span>
+          <span className="text-gray-400" onClick={autoArrange}>A</span>
+          <span className="text-gray-400">⌘</span>
+          <span className="text-gray-400">04:00</span>
+          {/* <span className="text-gray-400">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span> */}
+        </div>
+      </div>
+{/* <CustomCursor /> */}
+      {/* Central Portfolio Text */}
+      {/* <h1
+        ref={portfolioTextRef}
+        className="absolute top-50 left-1/2 -translate-x-1/2 -translate-y-1/2 text-9xl font-serif text-gray-800 opacity-0"
+        // style={{ fontFamily: 'Georgia, serif' }}
+      >
+      
+        
+         <span className="poppins" style={{fontFamily:"fantasy",letterSpacing:2}}>
+         
+      <TextType
+  text={["Thanks For Reaching  Out", "I'm a Creative Coder", "where Art and the Technology Meets!"]}
+  typingSpeed={75}
+  pauseDuration={2000}
+  showCursor={true}
+  cursorCharacter="|"
+  textColors={['#111', '#111', '#111']}
+/>
+        </span> 
+      
+      </h1> */}
+
+      {/* Desktop Icons */}
+      {/* <DesktopIcon
+        name="Resume.pdf"
+        icon={<FileTextIcon />}
+        initialX={100}
+        initialY={400}
+        onDoubleClick={() =>  openApplication("Resume PDF", 150, 100,'resume')}
+        desktopRef={desktopRef}
+      />
+      <DesktopIcon
+        name="About Me"
+        icon={<FolderIcon />}
+        initialX={100}
+        initialY={550}
+        onDoubleClick={() => openApplication("About Me", 200, 150)}
+        desktopRef={desktopRef}
+      />
+      <DesktopIcon
+        name="ShowCraft"
+        icon={<FolderIcon />}
+        initialX={desktopRef.current ? desktopRef.current.offsetWidth - 200 : 1200}
+        initialY={100}
+        onDoubleClick={() => openApplication("Finder", 250, 100)}
+        desktopRef={desktopRef}
+      />
+      <DesktopIcon
+        name="SharpBuy"
+        icon={<FolderIcon />}
+        initialX={desktopRef.current ? desktopRef.current.offsetWidth - 200 : 1200}
+        initialY={200}
+        onDoubleClick={() => openApplication("Finder", 250, 100)}
+        desktopRef={desktopRef}
+      />
+      <DesktopIcon
+        name="Ponderiee"
+        icon={<FolderIcon />}
+        initialX={desktopRef.current ? desktopRef.current.offsetWidth - 200 : 1200}
+        initialY={300}
+        onDoubleClick={() => openApplication("Finder", 250, 100)}
+        desktopRef={desktopRef}
+      />
+      <DesktopIcon
+        name="Nirantara"
+        icon={<FolderIcon />}
+        initialX={desktopRef.current ? desktopRef.current.offsetWidth - 200 : 1200}
+        initialY={400}
+        onDoubleClick={() => openApplication("Finder", 250, 100)}
+        desktopRef={desktopRef}
+      />
+      <DesktopIcon
+        name="Don't Look"
+        icon={<Trash2Icon />}
+        initialX={desktopRef.current ? desktopRef.current.offsetWidth - 200 : 1300}
+        initialY={500}
+        onDoubleClick={() => openApplication("Don't Look", 300, 200)}
+        desktopRef={desktopRef}
+      /> */}
+
+      {icons.map(icon => (
+  <DesktopIcon
+    key={icon.id}
+    name={icon.name}
+    icon={icon.icon}
+    initialX={icon.x}
+    initialY={icon.y}
+    onPositionChange={(x,y) =>
+      updateIconPosition(icon.id, x, y)
+    }
+    onDoubleClick={() => openApplication(icon.name)}
+    desktopRef={desktopRef}
+  />
+))}
+
+
+      {/* Sticky Note */}
+      <StickyNote initialX={50} initialY={50} desktopRef={desktopRef} />
+
+      {/* Render open windows */}
+      {openWindows.map((win) => (
+        <Window
+          key={win.id}
+          id={win.id}
+          title={win.title}
+          icon={win.icon}
+          initialX={win.x}
+          initialY={win.y}
+          initialWidth={win.width}
+          initialHeight={win.height}
+          isMinimized={win.isMinimized}
+          zIndex={50 + win.zIndex}
+          onClose={closeWindow}
+          onMinimize={minimizeWindow}
+          onFocus={bringToFront}
+          desktopRef={desktopRef}
+        >
+          {win.component}
+        </Window>
+      ))}
+
+      {/* Dock */}
+      {/* <Dock appIcons={dockAppIcons} onAppClick={openApplication} /> */}
+      <Dock 
+      appIcons={dockAppIcons}
+      minappIcons={[
+        ...openWindows
+        .filter(win => win.isMinimized) // only minimized windows
+        .map(win => ({
+          id: win.id,
+          icon: win.icon,
+          title: win.title,
+          isMinimized: true,
+        }))
+      ]} 
+      onAppClick={openApplication}
+      onminAppClick={(id) => {
+        setOpenWindows(prev =>
+          prev.map(win =>
+            win.id === id ? { ...win, isMinimized: false } : win
+          )
+        )
+      }}
+      />
+    </div>
+    </TerminalProvider>
+    </KeyboardProvider>
+   </>
+  );
+}
+
+

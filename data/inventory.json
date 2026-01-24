@@ -1,0 +1,122 @@
+[
+    {
+        "category": "Orange",
+        "variety": "Navel",
+        "color": "Orange",
+        "weight": "200g",
+        "price": "50",
+        "country_of_origin": "Spain",
+        "manufacturing_date": "",
+        "expiry_date": "",
+        "organic": "false",
+        "seedless": "false"
+    },
+    {
+        "category": "Apple",
+        "variety": "Gala",
+        "color": "Red",
+        "weight": "150g",
+        "price": "100",
+        "country_of_origin": "USA",
+        "manufacturing_date": "",
+        "expiry_date": "",
+        "organic": "true",
+        "seedless": "false"
+    },
+    {
+        "category": "Banana",
+        "variety": "Cavendish",
+        "color": "Yellow",
+        "weight": "120g",
+        "price": "40",
+        "country_of_origin": "Ecuador",
+        "manufacturing_date": "",
+        "expiry_date": "",
+        "organic": "true",
+        "ripe": "false"
+    },
+    {
+        "category": "Lime",
+        "variety": "Key Lime",
+        "color": "Green",
+        "weight": "50g",
+        "price": "30",
+        "country_of_origin": "Mexico",
+        "manufacturing_date": "",
+        "expiry_date": "",
+        "organic": "false",
+        "seedless": "true"
+    },
+    {
+        "category": "Pomegranate",
+        "variety": "Wonderful",
+        "color": "Red",
+        "weight": "250g",
+        "price": "150",
+        "country_of_origin": "India",
+        "manufacturing_date": "",
+        "expiry_date": "",
+        "organic": "true",
+        "seedless": "false"
+    },
+    {
+        "category": "Pineapple",
+        "variety": "Queen",
+        "color": "Yellow",
+        "weight": "1.2kg",
+        "price": "80",
+        "country_of_origin": "Philippines",
+        "manufacturing_date": "",
+        "expiry_date": "",
+        "organic": "false",
+        "sweetness_level": "Medium"
+    },
+    {
+        "category": "Lemon",
+        "variety": "Eureka",
+        "color": "Yellow",
+        "weight": "120g",
+        "price": "60",
+        "country_of_origin": "India",
+        "manufacturing_date": "",
+        "expiry_date": "",
+        "organic": "true",
+        "seedless": "false"
+    },
+    {
+        "category": "Mango",
+        "variety": "Alphonso",
+        "color": "Yellow",
+        "weight": "200g",
+        "price": "120",
+        "country_of_origin": "India",
+        "manufacturing_date": "",
+        "expiry_date": "",
+        "organic": "true",
+        "sweetness_level": "High"
+    },
+    {
+        "category": "Bell Pepper",
+        "color": "Green",
+        "weight": "150g",
+        "price": "80",
+        "country_of_origin": "Netherlands",
+        "manufacturing_date": "",
+        "expiry_date": "",
+        "organic": "false",
+        "spicy": "false",
+        "sweetness_level": "Low"
+    },
+    {
+        "category": "Papaya",
+        "variety": "Solo",
+        "color": "Orange",
+        "weight": "500g",
+        "price": "60",
+        "country_of_origin": "Mexico",
+        "manufacturing_date": "",
+        "expiry_date": "",
+        "organic": "true",
+        "seedless": "false"
+    }
+]
