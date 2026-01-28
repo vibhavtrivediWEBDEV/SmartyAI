@@ -88,7 +88,10 @@ export default function PortfolioScene({ setdekstopView }: { setdekstopView: any
         
           <CameraAnimation controlsRef={controlsRef} humanRef={humanRef} setShowDesktop={setShowDesktop} setdekstopView={setdekstopView} />
           <Lights />
-          <Room />
+          <Suspense fallback={null}>
+                   <Room />
+          </Suspense>
+          
           <Human ref={humanRef} />
           <LaptopScreen onclick={() => window.dispatchEvent(new CustomEvent("playAnimation", { detail: "mixamo.com" }))} showDesktop={showDesktop} setdekstopView={setdekstopView} />
 
