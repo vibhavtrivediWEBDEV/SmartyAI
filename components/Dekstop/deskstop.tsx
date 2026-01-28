@@ -30,6 +30,7 @@ import DotGrid from "../animationComponents/dotGrid"
 import TextType from "./textAnimation"
 import KeyboardWrapper from "./keyboardWrapper"
 import CustomCursor from "../CustomCursor"
+import GamePage from "./Game"
 
 interface WindowState {
   id: string
@@ -137,6 +138,14 @@ export function Desktop() {
         case "Science Book":
           component = <ScienceBook />;
           title = "Science Book";
+          iconPath = "/icons/book.png";
+          defaultWidth = 700;
+          defaultHeight = 600;
+          break;
+         
+          case "game":
+          component = <GamePage />;
+          title = "devil level";
           iconPath = "/icons/book.png";
           defaultWidth = 700;
           defaultHeight = 600;
@@ -441,30 +450,27 @@ export function Desktop() {
 const autoArrange = () => {
   if (!desktopRef.current) return;
 
-  const paddingX = 80;   // grid left gap
-  const paddingY = 80;   // grid top gap
-  const colGap = 150;    // horizontal space between icons
-  const rowGap = 130;    // vertical space between icons
+  const paddingX = 80;
+  const paddingY = 80;
+  const colGap = 150;
+  const rowGap = 130;
 
-  const maxRows = Math.floor(desktopRef.current.offsetHeight / rowGap);
-
-  let col = 0;
-  let row = 0;
+  const maxRows = Math.floor(
+    (desktopRef.current.offsetHeight - paddingY - 100) / rowGap
+  );
 
   const arranged = icons.map((icon, index) => {
+    const col = Math.floor(index / maxRows); // Column based on index
+    const row = index % maxRows;             // Row wraps around
+
     const x = paddingX + col * colGap;
     const y = paddingY + row * rowGap;
-
-    row++;
-    if (row >= maxRows) {
-      row = 0;
-      col++;
-    }
 
     return { ...icon, x, y };
   });
 
   setIcons(arranged);
+  toast.success("Icons auto-arranged!");
 };
 
 
@@ -514,18 +520,19 @@ const autoArrange = () => {
           <span className="font-bold text-white">VIBHAV'S MAC</span>
           <a href="#" className="hover:text-white transition-colors">Contact</a>
           <a href="#" className="hover:text-white transition-colors">Resume</a>
+          <p className="hover:text-white cursor-pointer transition-colors" onClick={()=>openApplication('game')}>Game</p>
+          
         </div>
         <div className="ml-auto flex items-center space-x-4">
           {/* Placeholder for system icons */}
           <span className="text-gray-400">🔍</span>
           <span className="text-gray-400">🌐</span>
-          <span className="text-gray-400">🔋</span>
+          <span className="text-gray-400" >🔋</span>
           <span className="text-gray-400">🔊</span>
           <span className="text-gray-400">Wi-Fi</span>
           <span className="text-gray-400" onClick={autoArrange}>A</span>
           <span className="text-gray-400">⌘</span>
-          <span className="text-gray-400">04:00</span>
-          {/* <span className="text-gray-400">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span> */}
+          <span className="text-gray-400" suppressHydrationWarning>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
       </div>
 {/* <CustomCursor /> */}
@@ -626,7 +633,7 @@ const autoArrange = () => {
 
 
       {/* Sticky Note */}
-      <StickyNote initialX={50} initialY={50} desktopRef={desktopRef} />
+      <StickyNote initialX={1100} initialY={200} desktopRef={desktopRef} />
 
       {/* Render open windows */}
       {openWindows.map((win) => (

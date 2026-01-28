@@ -4,7 +4,7 @@ import FuturisticPortfolio from "./modelviewr";
 import { useState, useEffect } from 'react';
 
 const PortfolioView = () => {
-  const [dekstopView, setdekstopViewRaw] = useState(false);
+  const [dekstopView, setdekstopViewRaw] = useState(true);
 
   // wrapper that prints stacktrace to find the caller
   const setdekstopView = (v: boolean) => {

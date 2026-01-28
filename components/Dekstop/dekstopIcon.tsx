@@ -21,6 +21,12 @@ export function DesktopIcon({ name, icon: IconComponent, initialX, initialY, onD
   const dragOffset = useRef({ x: 0, y: 0 })
   const iconRef = useRef<HTMLDivElement>(null)
 
+  // Update position when initialX or initialY change (e.g., from auto arrange)
+  useEffect(() => {
+    setX(initialX)
+    setY(initialY)
+  }, [initialX, initialY])
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent desktop drag
     if (iconRef.current) {
