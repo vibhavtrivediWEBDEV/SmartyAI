@@ -1,1 +1,2 @@
 *.glb filter=lfs diff=lfs merge=lfs -text
+public/assets/gaming_room.glb filter=lfs diff=lfs merge=lfs -text
