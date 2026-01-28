@@ -79,7 +79,7 @@ export default function NCERTQuestionAgent({
     
     // Determine which API endpoint to use based on subject
     const endpoint = subject.toLowerCase() === "physics" 
-      ? "/api/ncert/fetchPhysicsQuestion"
+      ? "/api/ncert/fetchNCERTQuestion"
       : "/api/ncert/fetchNCERTQuestion";
     
     let payload;

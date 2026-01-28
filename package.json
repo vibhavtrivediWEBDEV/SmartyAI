@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@ai-sdk/google": "^1.1.25",
-    "@clerk/nextjs": "^6.19.1",
     "@google/genai": "^1.17.0",
     "@gsap/react": "^2.1.2",
     "@hookform/resolvers": "^4.1.3",
