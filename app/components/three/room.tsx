@@ -21,6 +21,9 @@
 
 //   return <primitive object={scene} scale={1} position={[0, 0, 0]} rotation={[0, Math.PI, 0]} />
 // }
+
+
+
 import { useGLTF } from "@react-three/drei";
 import { useEffect } from "react";
 import * as THREE from "three";
@@ -49,7 +52,7 @@ export function Room() {
         console.log("  Visible:", child.visible);
         console.log("  Geometry vertices:", child.geometry.attributes.position.count);
         
-        child.material.side = THREE.FrontSide;
+        child.material.side = THREE.DoubleSide;
         child.castShadow = false;
         child.receiveShadow = true;
         child.visible = true; // Force visible
