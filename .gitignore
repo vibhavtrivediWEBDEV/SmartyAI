@@ -46,6 +46,7 @@ next-env.d.ts
 
 # Allow ONLY the gaming room model
 !public/assets/gaming_room.glb
+!public/assets/strurtwalking.glb
 
 *.gltf
 *.bin
