@@ -311,24 +311,26 @@ useEffect(() => {
   
   
 
-  const openFileDetailsWindow = (file: ProjectFile) => {
-    const newWindow: WindowState = {
-      id: `file-details-${file.name}-${Date.now()}`,
-      title: `File: ${file.name}`,
-      // subtitle: file.type,
-      icon: "/icons/file.png", // Generic file icon for details window
-      component: <FileDetailsViewer file={file} />,
-      x: Math.random() * 150 + 100, // Random position for new window
-      y: Math.random() * 100 + 100,
-      width: 700,
-      height: 500,
-      isMinimized: false,
-      zIndex: nextZIndex,
-    }
+ const openFileDetailsWindow = (file: any) => {
+  console.log("Project ID:", file.projectId) // ✅ now accessible
 
-    setOpenWindows((prev) => [...prev, newWindow])
-    setNextZIndex((prev) => prev + 1)
+  const newWindow: WindowState = {
+    id: `file-details-${file.name}-${Date.now()}`,
+    title: `File: ${file.name}`,
+    icon: "/icons/file.png",
+    component: <FileDetailsViewer file={file} projectId={file.projectId} />,
+    x: Math.random() * 150 + 100,
+    y: Math.random() * 100 + 100,
+    width: 700,
+    height: 500,
+    isMinimized: false,
+    zIndex: nextZIndex,
   }
+
+  setOpenWindows((prev) => [...prev, newWindow])
+  setNextZIndex((prev) => prev + 1)
+}
+
 
   const closeWindow = (id: string) => {
     setOpenWindows((prev) => prev.filter((win) => win.id !== id));

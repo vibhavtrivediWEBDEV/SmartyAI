@@ -38,7 +38,14 @@ interface ProjectFile {
   url?: string
 }
 
+
+interface OpenFile extends ProjectFile {
+  projectId: string
+}
+
+
 interface ProjectExplorerWindowProps {
+
   onOpenFile: (file: ProjectFile) => void
   onDataChange?: () => void
 }
@@ -359,11 +366,12 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
   const handleFileClick = useCallback(
     (file: ProjectFile, event: React.MouseEvent) => {
       if (renamingItem === file.id) return
+// console.log("click-project",selectedCategory)
+     if (event.detail === 2) {
+onOpenFile({ ...file, projectId: selectedCategory } as OpenFile)
+  return
+}
 
-      if (event.detail === 2) {
-        onOpenFile(file)
-        return
-      }
 
       if (isCommandPressed) {
         setSelectedItems((prev) =>
@@ -373,7 +381,7 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
         setSelectedItems([file.id])
       }
     },
-    [onOpenFile, isCommandPressed, setSelectedItems, renamingItem]
+    [onOpenFile, isCommandPressed,selectedCategory, setSelectedItems, renamingItem]
   )
 
 const handleContextMenu = useCallback(
@@ -389,7 +397,8 @@ const handleContextMenu = useCallback(
       {
         label: "Open",
         icon: <FolderOpen className="h-4 w-4" />,
-        action: () => onOpenFile(file),
+        action: () => onOpenFile({ ...file, projectId: selectedCategory } as OpenFile),
+
       },
       { label: "---", disabled: true },
       {
