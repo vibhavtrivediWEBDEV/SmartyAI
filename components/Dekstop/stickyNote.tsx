@@ -100,7 +100,7 @@ export function StickyNote({ initialX, initialY, desktopRef }: StickyNoteProps) 
       </div>
 
       {/* Scrollable list */}
-      <div className=" overflow-y-auto pr-2 space-y-2 scrollbar-thin scrollbar-thumb-yellow-400 scrollbar-track-transparent">
+      <div className="max-h-72 overflow-y-auto pr-2 space-y-2 scrollbar-thin scrollbar-thumb-yellow-400 scrollbar-track-transparent hiddenscrollbar">
         {features.map((feature) => (
           <div
             key={feature.id}

@@ -107,6 +107,13 @@ export function Desktop() {
   }, []);
 
 
+  // Right after your existing GSAP useEffect
+useEffect(() => {
+  if (desktopRef.current) {
+    autoArrange();
+  }
+}, []); // Runs once on mount
+
 
   const openApplication = useCallback(
     (appName: string, initialX?: number, initialY?: number ,commandToRun?: string ,arg?:any) => {
@@ -490,7 +497,7 @@ const autoArrange = () => {
 {/*  */}
 
  <KeyboardWrapper
-        initialX={200}
+        initialX={500}
         initialY={400}
         desktopRef={desktopRef}
       />
@@ -633,7 +640,7 @@ const autoArrange = () => {
 
 
       {/* Sticky Note */}
-      <StickyNote initialX={1100} initialY={200} desktopRef={desktopRef} />
+      <StickyNote initialX={1000} initialY={30} desktopRef={desktopRef} />
 
       {/* Render open windows */}
       {openWindows.map((win) => (

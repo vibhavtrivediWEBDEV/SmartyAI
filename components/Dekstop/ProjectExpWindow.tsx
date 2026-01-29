@@ -32,7 +32,7 @@ interface ProjectFile {
   children?: ProjectFile[]
   createdAt?: Date
   updatedAt?: Date
-  // Legacy fields for compatibility
+  files?: ProjectFile[]
   content?: string
   src?: string
   url?: string
@@ -43,14 +43,30 @@ interface ProjectExplorerWindowProps {
   onDataChange?: () => void
 }
 
+const FILE_EXTENSIONS = {
+  text: [".txt", ".md", ".doc", ".docx", ".pdf"],
+  image: [".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp", ".bmp"],
+  video: [".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv"],
+  audio: [".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a"],
+  code: [".js", ".ts", ".jsx", ".tsx", ".html", ".css", ".py", ".java", ".cpp"],
+  spreadsheet: [".xlsx", ".xls", ".csv", ".ods"],
+  archive: [".zip", ".rar", ".7z", ".tar", ".gz"],
+}
+
 export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplorerWindowProps) {
   const [projects, setProjects] = useState<ProjectFile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string>("")
-  // Added state for rename functionality
   const [renamingItem, setRenamingItem] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState("")
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
+  const [fileCreationDialog, setFileCreationDialog] = useState<{
+    isOpen: boolean
+    fileName: string
+    fileType: string
+    parentId: string
+  } | null>(null)
 
   const {
     selectedItems,
@@ -75,7 +91,7 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
       setProjects(result.data || [])
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch projects")
-      console.error("Error fetching projects:", err)
+      console.error("[v0] Error fetching projects:", err)
     } finally {
       setLoading(false)
     }
@@ -84,24 +100,55 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
   const createProject = useCallback(
     async (name: string, type: "folder" | "file", parentId?: string) => {
       try {
-        const response = await fetch("/api/Projects", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, type, parentId }),
-        })
+        console.log("[v0] Creating:", name, "Type:", type, "ParentId:", parentId)
 
-        if (!response.ok) throw new Error("Failed to create project")
+    if (type === "file" && parentId) {
+  const response = await fetch(`/api/Projects/${parentId}/files`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name,
+      type: "document", // IMPORTANT (match seed)
+      content: "",
+    }),
+  })
 
-        const result = await response.json()
-        setProjects((prev) => [...prev, result.data])
-        onDataChange?.()
-        return result.data
+  if (!response.ok) throw new Error("Failed to create file")
+
+  const result = await response.json()
+
+  setProjects(prev =>
+    prev.map(p =>
+      p.id === parentId
+        ? { ...p, files: [...(p.files || []), result.data] }
+        : p
+    )
+  )
+
+  onDataChange?.()
+  return result.data
+}
+ else {
+          // Creating a folder at root level
+          const response = await fetch("/api/Projects", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, type, parentId: parentId || null }),
+          })
+
+          if (!response.ok) throw new Error("Failed to create project")
+
+          const result = await response.json()
+          setProjects((prev) => [...prev, result.data])
+          onDataChange?.()
+          return result.data
+        }
       } catch (err) {
-        console.error("Error creating project:", err)
+        console.error("[v0] Error creating project:", err)
         throw err
       }
     },
-    [onDataChange,fetchProjects],
+    [projects, onDataChange]
   )
 
   const deleteProject = useCallback(
@@ -120,11 +167,11 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
         setProjects((prev) => prev.filter((p) => p.id !== id))
         onDataChange?.()
       } catch (err) {
-        console.error("Error deleting project:", err)
+        console.error("[v0] Error deleting project:", err)
         throw err
       }
     },
-    [onDataChange],
+    [onDataChange]
   )
 
   const copyProjectsToDatabase = useCallback(
@@ -143,14 +190,13 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
         onDataChange?.()
         return result.data
       } catch (err) {
-        console.error("Error copying projects:", err)
+        console.error("[v0] Error copying projects:", err)
         throw err
       }
     },
-    [onDataChange],
+    [onDataChange]
   )
 
-  // Added rename functionality
   const renameProject = useCallback(
     async (id: string, newName: string) => {
       try {
@@ -162,19 +208,17 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
 
         if (!response.ok) throw new Error("Failed to rename project")
 
-        const result = await response.json()
         setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, name: newName } : p)))
-        onDataChange?.() // Notify parent component of data change
-        return result.data
+        onDataChange?.()
+        return
       } catch (err) {
-        console.error("Error renaming project:", err)
+        console.error("[v0] Error renaming project:", err)
         throw err
       }
     },
-    [onDataChange],
+    [onDataChange]
   )
 
-  // Added file upload functionality
   const uploadFile = useCallback(
     async (file: File, parentId?: string) => {
       try {
@@ -194,14 +238,13 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
         onDataChange?.()
         return result.data
       } catch (err) {
-        console.error("Error uploading file:", err)
+        console.error("[v0] Error uploading file:", err)
         throw err
       }
     },
-    [onDataChange],
+    [onDataChange]
   )
 
-  // Added drag and drop handlers
   const handleDragStart = useCallback((e: React.DragEvent, file: ProjectFile) => {
     e.dataTransfer.setData("application/json", JSON.stringify(file))
     e.dataTransfer.effectAllowed = "move"
@@ -218,7 +261,6 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
       try {
         const fileData = JSON.parse(e.dataTransfer.getData("application/json"))
 
-        // Move file to new parent
         const response = await fetch(`/api/Projects/${fileData.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -230,15 +272,27 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
         await fetchProjects()
         onDataChange?.()
       } catch (err) {
-        console.error("Error moving file:", err)
+        console.error("[v0] Error moving file:", err)
       }
     },
-    [fetchProjects, onDataChange],
+    [fetchProjects, onDataChange]
   )
+
+  const toggleFolderExpand = useCallback((folderId: string) => {
+    setExpandedFolders((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(folderId)) {
+        newSet.delete(folderId)
+      } else {
+        newSet.add(folderId)
+      }
+      return newSet
+    })
+  }, [])
 
   useEffect(() => {
     fetchProjects()
-  }, [fetchProjects,createProject])
+  }, [fetchProjects])
 
   useEffect(() => {
     if (projects.length > 0 && !selectedCategory) {
@@ -246,21 +300,12 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
       if (firstProject) {
         setSelectedCategory(firstProject.id)
         setCurrentTargetLocation(firstProject.id)
-        console.log("Auto-selected first project:", firstProject.id)
       }
     }
   }, [projects, selectedCategory, setCurrentTargetLocation])
 
   const rootProjects = projects.filter((p) => !p.parentId)
   const currentProject = projects.find((p) => p.id === selectedCategory)
-  // console.log("selectedCategory",projects,selectedCategory)
-  const currentFiles = projects.find((p) => p.id === selectedCategory) // every time it must be in ZERO index
-  console.log("currentFiles",currentFiles?.files)
-
-
-
-
-  
 
   const getFileIcon = (file: ProjectFile) => {
     const iconSize = 28
@@ -269,7 +314,6 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
       return <FolderIcon size={iconSize} className="text-blue-500" />
     }
 
-    // Determine file type by extension
     const extension = file.name.split(".").pop()?.toLowerCase()
 
     switch (extension) {
@@ -312,171 +356,192 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
     }
   }
 
-  // Enhanced file click handler with rename support
   const handleFileClick = useCallback(
     (file: ProjectFile, event: React.MouseEvent) => {
-      if (renamingItem === file.id) return // Don't handle clicks during rename
+      if (renamingItem === file.id) return
 
       if (event.detail === 2) {
-        // Double click - open file
         onOpenFile(file)
         return
       }
 
-      // Single click - handle selection
       if (isCommandPressed) {
-        // Cmd+click for multiple selection
-        setSelectedItems((prev) => (prev.includes(file.id) ? prev.filter((id) => id !== file.id) : [...prev, file.id]))
+        setSelectedItems((prev) =>
+          prev.includes(file.id) ? prev.filter((id) => id !== file.id) : [...prev, file.id]
+        )
       } else {
-        // Regular click - select only this file
         setSelectedItems([file.id])
       }
     },
-    [onOpenFile, isCommandPressed, setSelectedItems, renamingItem],
+    [onOpenFile, isCommandPressed, setSelectedItems, renamingItem]
   )
 
-  // Enhanced context menu with rename functionality
-  const handleContextMenu = useCallback(
-    (file: ProjectFile, event: React.MouseEvent) => {
-      event.preventDefault()
+const handleContextMenu = useCallback(
+  (file: ProjectFile, event: React.MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
 
-      // Select the file if not already selected
-      if (!selectedItems.includes(file.id)) {
-        setSelectedItems([file.id])
-      }
+    if (!selectedItems.includes(file.id)) {
+      setSelectedItems([file.id])
+    }
 
-      const contextMenuItems = [
-        {
-          label: "Open",
-          icon: <FolderOpen className="h-4 w-4" />,
-          action: () => onOpenFile(file),
-          shortcut: "Enter",
-        },
-        { label: "---", disabled: true },
-        {
-          label: "Copy",
-          icon: <Copy className="h-4 w-4" />,
-          action: () => {
-            const items = selectedItems.map((id) => {
-              const fileData = projects.find((p) => p.id === id)
-              return {
-                id,
-                name: fileData?.name || "",
-                type: fileData?.type === "folder" ? ("folder" as const) : ("file" as const),
-                data: fileData,
-                operation: "copy" as const,
-                source: selectedCategory,
-              }
-            })
-            copyItems(items)
-          },
-          shortcut: "⌘C",
-        },
-        {
-          label: "Cut",
-          icon: <Scissors className="h-4 w-4" />,
-          action: () => {
-            const items = selectedItems.map((id) => {
-              const fileData = projects.find((p) => p.id === id)
-              return {
-                id,
-                name: fileData?.name || "",
-                type: fileData?.type === "folder" ? ("folder" as const) : ("file" as const),
-                data: fileData,
-                operation: "cut" as const,
-                source: selectedCategory,
-              }
-            })
-            cutItems(items)
-          },
-          shortcut: "⌘X",
-        },
-        {
-          label: "Paste",
-          icon: <ClipboardPaste className="h-4 w-4" />,
-          action: async () => {
-            try {
-              const sourceIds = clipboardItems.map((item) => item.id)
-              await copyProjectsToDatabase(sourceIds, selectedCategory)
-              const pastedItems = pasteItems(selectedCategory)
-              console.log(`Pasted ${pastedItems.length} items to database`)
-              await fetchProjects()   // <-- refetch data here to refresh UI
-
-              onDataChange?.()
-            } catch (err) {
-              console.error("Failed to paste items:", err)
+    const contextMenuItems = [
+      {
+        label: "Open",
+        icon: <FolderOpen className="h-4 w-4" />,
+        action: () => onOpenFile(file),
+      },
+      { label: "---", disabled: true },
+      {
+        label: "Copy",
+        icon: <Copy className="h-4 w-4" />,
+        action: () => {
+          const items = selectedItems.map((id) => {
+            const fileData = projects.find((p) => p.id === id)
+            return {
+              id,
+              name: fileData?.name || "",
+              type: fileData?.type === "folder" ? "folder" : "file",
+              data: fileData,
+              operation: "copy" as const,
+              source: selectedCategory,
             }
-          },
-          shortcut: "⌘V",
-          disabled: clipboardItems.length === 0,
+          })
+          copyItems(items)
         },
-        { label: "---", disabled: true },
-        {
-          label: "Delete",
-          icon: <Trash2 className="h-4 w-4" />,
-          action: async () => {
-            try {
-              for (const itemId of selectedItems) {
-                await deleteProject(itemId)
-              }
-              setSelectedItems([])
-              onDataChange?.()
-            } catch (err) {
-              console.error("Failed to delete items:", err)
+      },
+      {
+        label: "Cut",
+        icon: <Scissors className="h-4 w-4" />,
+        action: () => {
+          const items = selectedItems.map((id) => {
+            const fileData = projects.find((p) => p.id === id)
+            return {
+              id,
+              name: fileData?.name || "",
+              type: fileData?.type === "folder" ? "folder" : "file",
+              data: fileData,
+              operation: "cut" as const,
+              source: selectedCategory,
             }
-          },
-          shortcut: "Del",
+          })
+          cutItems(items)
         },
-        {
-          label: "Rename",
-          icon: <Edit3 className="h-4 w-4" />,
-          action: () => {
-            setRenamingItem(file.id)
-            setRenameValue(file.name)
-          },
-          shortcut: "F2",
-          disabled: selectedItems.length > 1,
+      },
+      {
+        label: "Paste",
+        icon: <ClipboardPaste className="h-4 w-4" />,
+        action: async () => {
+          const sourceIds = clipboardItems.map((item) => item.id)
+          await copyProjectsToDatabase(sourceIds, selectedCategory)
+          pasteItems(selectedCategory)
+          await fetchProjects()
+          onDataChange?.()
         },
-        {
-          label: "New Folder",
-          icon: <Plus className="h-4 w-4" />,
-          action: async () => {
-            try {
-              const name = prompt("Enter folder name:")
-              if (name) {
-                await createProject(name, "folder", selectedCategory)
-                onDataChange?.()
-              }
-            } catch (err) {
-              console.error("Failed to create folder:", err)
-            }
-          },
-          shortcut: "⌘⇧N",
+        disabled: clipboardItems.length === 0,
+      },
+      { label: "---", disabled: true },
+      {
+        label: "Rename",
+        icon: <Edit3 className="h-4 w-4" />,
+        action: () => {
+          setRenamingItem(file.id)
+          setRenameValue(file.name)
         },
-      ]
+        disabled: selectedItems.length > 1,
+      },
+      {
+        label: "Delete",
+        icon: <Trash2 className="h-4 w-4" />,
+        action: async () => {
+          for (const id of selectedItems) {
+            await deleteProject(id)
+          }
+          setSelectedItems([])
+          onDataChange?.()
+        },
+      },
+    ]
 
-      showContextMenu(event.clientX, event.clientY, contextMenuItems)
-    },
-    [
-      selectedItems,
-      setSelectedItems,
-      onOpenFile,
-      copyItems,
-      cutItems,
-      pasteItems,
-      showContextMenu,
-      clipboardItems,
-      selectedCategory,
-      projects,
-      copyProjectsToDatabase,
-      deleteProject,
-      createProject,
-      onDataChange,
-      fetchProjects
-    ],
-  )
+    showContextMenu(event.clientX, event.clientY, contextMenuItems)
+  },
+  [
+    selectedItems,
+    projects,
+    clipboardItems,
+    selectedCategory,
+    onOpenFile,
+    copyItems,
+    cutItems,
+    pasteItems,
+    showContextMenu,
+    copyProjectsToDatabase,
+    deleteProject,
+    fetchProjects,
+    onDataChange,
+  ]
+)
 
-  // Added rename input handlers
+const handleBlankAreaContextMenu = useCallback(
+  (event: React.MouseEvent) => {
+    event.preventDefault()
+
+    setSelectedItems([])
+
+    const contextMenuItems = [
+      {
+        label: "New Folder",
+        icon: <Plus className="h-4 w-4" />,
+        action: async () => {
+          const name = prompt("Enter folder name:")
+          if (!name) return
+          await createProject(name, "folder", selectedCategory)
+          onDataChange?.()
+        },
+      },
+      {
+        label: "New File",
+        icon: <Plus className="h-4 w-4" />,
+        action: () => {
+          setFileCreationDialog({
+            isOpen: true,
+            fileName: "",
+            fileType: "text",
+            parentId: selectedCategory,
+          })
+        },
+      },
+      { label: "---", disabled: true },
+      {
+        label: "Paste",
+        icon: <ClipboardPaste className="h-4 w-4" />,
+        action: async () => {
+          const sourceIds = clipboardItems.map((i) => i.id)
+          await copyProjectsToDatabase(sourceIds, selectedCategory)
+          pasteItems(selectedCategory)
+          await fetchProjects()
+          onDataChange?.()
+        },
+        disabled: clipboardItems.length === 0,
+      },
+    ]
+
+    showContextMenu(event.clientX, event.clientY, contextMenuItems)
+  },
+  [
+    clipboardItems,
+    selectedCategory,
+    createProject,
+    copyProjectsToDatabase,
+    pasteItems,
+    fetchProjects,
+    onDataChange,
+  ]
+)
+
+
+
+
   const handleRenameSubmit = useCallback(async () => {
     if (renamingItem && renameValue.trim()) {
       try {
@@ -484,7 +549,7 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
         setRenamingItem(null)
         setRenameValue("")
       } catch (err) {
-        console.error("Failed to rename:", err)
+        console.error("[v0] Failed to rename:", err)
       }
     }
   }, [renamingItem, renameValue, renameProject])
@@ -504,54 +569,56 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
         handleRenameCancel()
       }
     },
-    [handleRenameSubmit, handleRenameCancel],
+    [handleRenameSubmit, handleRenameCancel]
   )
 
   const handleCategorySelect = useCallback(
     (categoryId: string) => {
       setSelectedCategory(categoryId)
       setCurrentTargetLocation(categoryId)
-      console.log("Category selected - updating targetLocation to:", categoryId)
     },
-    [setCurrentTargetLocation],
+    [setCurrentTargetLocation]
   )
 
-// project menu
-
-const handleProjectedMenu =(event:React.MouseEvent,id:Number)=>{
-  
-
-  const contextMenuItems = [
-    
-    {
-      label: "Delete",
-      icon: <Trash2 className="h-4 w-4" />,
-      action: async () => {
-        try {
-          await deleteProject(id)
-       
-          onDataChange?.()
-        } catch (err) {
-          console.error("Failed to delete items:", err)
-        }
+  const handleProjectContextMenu = (event: React.MouseEvent, id: string) => {
+    const contextMenuItems = [
+      {
+        label: "Delete",
+        icon: <Trash2 className="h-4 w-4" />,
+        action: async () => {
+          try {
+            await deleteProject(id)
+            onDataChange?.()
+          } catch (err) {
+            console.error("[v0] Failed to delete project:", err)
+          }
+        },
+        shortcut: "Del",
       },
-      shortcut: "Del",
-    },
-   
-  ]
+    ]
 
-  showContextMenu(event.clientX, event.clientY, contextMenuItems)
-}
+    showContextMenu(event.clientX, event.clientY, contextMenuItems)
+  }
 
+  const handleEmptyFolderContextMenu = (event: React.MouseEvent, parentId: string) => {
+    event.preventDefault()
+    const contextMenuItems = [
+      {
+        label: "New File",
+        icon: <Plus className="h-4 w-4" />,
+        action: () => {
+          setFileCreationDialog({
+            isOpen: true,
+            fileName: "",
+            fileType: "text",
+            parentId: parentId,
+          })
+        },
+      },
+    ]
 
-  // if (loading) {
-  //   return (
-  //     <div className="flex items-center justify-center w-full h-full bg-white">
-  //       <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-  //       <span className="ml-2 text-gray-600">Loading projects...</span>
-  //     </div>
-  //   )
-  // }
+    showContextMenu(event.clientX, event.clientY, contextMenuItems)
+  }
 
   if (error) {
     return (
@@ -568,20 +635,17 @@ const handleProjectedMenu =(event:React.MouseEvent,id:Number)=>{
     )
   }
 
-
-  
-
   return (
-    <div className="flex w-full h-full bg-gray-100 text-gray-800 rounded overflow- text-xs leading-tight">
+    <div className="flex w-full h-full bg-gray-100 text-gray-800 rounded overflow-hidden text-xs leading-tight">
       {/* Sidebar */}
-      <div className="w-48 h-screen  bg-gray-200 border-r border-gray-300 p-2 overflow-y-auto ">
+      <div className="w-48 h-screen bg-gray-200 border-r border-gray-300 p-2 overflow-y-auto">
         <h3 className="text-[10px] font-semibold text-gray-500 uppercase mb-1">Projects</h3>
         <ul className="space-y-0.5">
           {rootProjects.map((project) => (
             <li key={project.id}>
               <button
                 onClick={() => handleCategorySelect(project.id)}
-                onContextMenu={(e)=>handleProjectedMenu( e ,project.id)}
+                onContextMenu={(e) => handleProjectContextMenu(e, project.id)}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, project.id)}
                 className={`flex items-center w-full text-left px-2 py-1 rounded transition-colors
@@ -597,16 +661,15 @@ const handleProjectedMenu =(event:React.MouseEvent,id:Number)=>{
       {/* Content Area */}
       <div
         className="flex-1 p-2 overflow-y-auto bg-white"
+          onContextMenu={handleBlankAreaContextMenu}
         onDragOver={handleDragOver}
         onDrop={(e) => handleDrop(e, selectedCategory)}
       >
-        {/* {JSON.stringify(currentFiles)} */}
         {currentProject ? (
           <>
             <h2 className="text-sm font-bold text-gray-700 mb-2 truncate">{currentProject.name}</h2>
             <div className="grid grid-cols-3 gap-2">
-              {/* {JSON.stringify(currentFiles?.children)} */}
-              {currentFiles?.files?.map((file) => {
+              {currentProject.files?.map((file) => {
                 const isSelected = selectedItems.includes(file.id)
                 const isCut = clipboardItems.some((item) => item.id === file.id && item.operation === "cut")
                 const isRenaming = renamingItem === file.id
@@ -653,13 +716,111 @@ const handleProjectedMenu =(event:React.MouseEvent,id:Number)=>{
                 )
               })}
             </div>
+            {(!currentProject.files || currentProject.files.length === 0) && (
+              <div
+                className="flex items-center justify-center h-32 text-gray-400 text-sm cursor-context-menu"
+                onContextMenu={(e) => handleEmptyFolderContextMenu(e, selectedCategory)}
+              >
+                Right-click to add files and folders
+              </div>
+            )}
           </>
         ) : (
-          <div className="flex items-center justify-center h-full text-gray-500 text-xs">
-            Select a project from the sidebar.
-          </div>
+          <div className="flex items-center justify-center h-full text-gray-400">No project selected</div>
         )}
       </div>
+
+      {/* File Creation Dialog */}
+      {fileCreationDialog?.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-4 w-96">
+            <h3 className="text-sm font-bold mb-4">Create New File</h3>
+
+            <div className="space-y-4">
+              {/* File Name Input */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">File Name</label>
+                <input
+                  type="text"
+                  value={fileCreationDialog.fileName}
+                  onChange={(e) =>
+                    setFileCreationDialog({
+                      ...fileCreationDialog,
+                      fileName: e.target.value,
+                    })
+                  }
+                  placeholder="Enter file name"
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-xs focus:outline-none focus:border-blue-500"
+                  autoFocus
+                />
+              </div>
+
+              {/* File Type Selection */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">File Type</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.entries(FILE_EXTENSIONS).map(([type]) => (
+                    <button
+                      key={type}
+                      onClick={() =>
+                        setFileCreationDialog({
+                          ...fileCreationDialog,
+                          fileType: type,
+                        })
+                      }
+                      className={`px-3 py-2 rounded text-xs border transition-colors capitalize ${
+                        fileCreationDialog.fileType === type
+                          ? "bg-blue-100 border-blue-500 text-blue-700 font-medium"
+                          : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100"
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Extension Preview */}
+              <div className="bg-gray-50 p-2 rounded text-xs">
+                <span className="text-gray-600">File will be: </span>
+                <span className="font-mono font-medium text-gray-900">
+                  {fileCreationDialog.fileName || "filename"}
+                  {FILE_EXTENSIONS[fileCreationDialog.fileType as keyof typeof FILE_EXTENSIONS]?.[0] || ".file"}
+                </span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={async () => {
+                  if (fileCreationDialog.fileName.trim()) {
+                    try {
+                      const ext =
+                        FILE_EXTENSIONS[fileCreationDialog.fileType as keyof typeof FILE_EXTENSIONS]?.[0] || ""
+                      const fullName = `${fileCreationDialog.fileName.trim()}${ext}`
+                      await createProject(fullName, "file", fileCreationDialog.parentId)
+                      setFileCreationDialog(null)
+                      onDataChange?.()
+                    } catch (err) {
+                      console.error("[v0] Failed to create file:", err)
+                    }
+                  }
+                }}
+                className="flex-1 px-3 py-2 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 font-medium"
+              >
+                Create
+              </button>
+              <button
+                onClick={() => setFileCreationDialog(null)}
+                className="flex-1 px-3 py-2 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
