@@ -1,7 +1,8 @@
+<img width="1915" height="1079" alt="image" src="https://github.com/user-attachments/assets/ab630feb-c6c0-4d77-b3bf-e0dd7f6612a7" />
 <div align="center">
   <br />
-    <a href="https://www.youtube.com/watch?v=8GK8R77Bd7g" target="_blank">
-      <img src="https://github.com/user-attachments/assets/1c0131c7-9f2d-4e3b-b47c-9679e76d8f9a" alt="Project Banner">
+    <a href="https://www.youtube.com/watch?v=" target="_blank">
+      <img src="[https://github.com/user-attachments/assets/1c0131c7-9f2d-4e3b-b47c-9679e76d8f9a](https://github.com/user-attachments/assets/ab630feb-c6c0-4d77-b3bf-e0dd7f6612a7)" alt="Project Banner">
     </a>
   <br />
   
@@ -12,7 +13,7 @@
     <img src="https://img.shields.io/badge/-Firebase-black?style=for-the-badge&logoColor=white&logo=firebase&color=DD2C00" alt="firebase" />
   </div>
 
-  <h3 align="center">smarty: A job interview preparation platform powered by Vapi AI Voice agents</h3>
+  <h3 align="center">smarty: vibhav mac OS</h3>
 
    <div align="center">
      Build this project step by step with our detailed tutorial on <a href="https://www.youtube.com/@javascriptmastery/videos" target="_blank"><b>JavaScript Mastery</b></a> YouTube. Join the JSM family!
@@ -124,7 +125,6 @@ FIREBASE_CLIENT_EMAIL=
 FIREBASE_PRIVATE_KEY=
 ```
 
-Replace the placeholder values with your actual **[Firebase](https://firebase.google.com/)**, **[Vapi](https://vapi.ai/?utm_source=youtube&utm_medium=video&utm_campaign=jsmastery_recruitingpractice&utm_content=paid_partner&utm_term=recruitingpractice)** credentials.
 
 **Running the Project**
 
@@ -716,6 +716,6 @@ Public assets used in the project can be found [here](https://drive.google.com/d
 Enjoyed creating this project? Dive deeper into our PRO courses for a richer learning adventure. They're packed with
 detailed explanations, cool features, and exercises to boost your skills. Give it a go!
 
-<a href="https://jsmastery.pro/next15" target="_blank">
+<a href="" target="_blank">
    <img src="https://github.com/user-attachments/assets/b8760e69-1f81-4a71-9108-ceeb1de36741" alt="Project Banner">
 </a>
