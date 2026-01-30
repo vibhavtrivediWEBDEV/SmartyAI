@@ -66,23 +66,35 @@ const [prevBounds, setPrevBounds] = useState<{
   useLayoutEffect(() => {
     if (windowRef.current) {
       const rect = windowRef.current.getBoundingClientRect()
+      // gsap.fromTo(
+      //   windowRef.current,
+      //   {
+      //     scale: 0.2,
+      //     opacity: 0,
+      //     x: 0,
+      //     y: window.innerHeight - rect.top - rect.height / 2 - 40,
+      //   },
+      //   {
+      //     scale: 1,
+      //     opacity: 1,
+      //     x: 0,
+      //     y: 0,
+      //     duration: 0.45,
+      //     ease: "power4.out",
+      //   }
+      // )
       gsap.fromTo(
-        windowRef.current,
-        {
-          scale: 0.2,
-          opacity: 0,
-          x: 0,
-          y: window.innerHeight - rect.top - rect.height / 2 - 40,
-        },
-        {
-          scale: 1,
-          opacity: 1,
-          x: 0,
-          y: 0,
-          duration: 0.45,
-          ease: "power4.out",
-        }
-      )
+  windowRef.current,
+  { scale: 0.96, opacity: 0 },
+  {
+    scale: 1,
+    opacity: 1,
+    duration: 0.35,
+    ease: "power3.out",
+    clearProps: "transform",
+  }
+)
+
     }
   }, [])
 
@@ -255,6 +267,7 @@ const [prevBounds, setPrevBounds] = useState<{
 
       }}
       onMouseDown={() => onFocus(id)} // Ensure clicking anywhere brings to front
+        // onPointerDownCapture={() => onFocus(id)}
     >
       {/* Title Bar */}
       <div
@@ -264,17 +277,17 @@ const [prevBounds, setPrevBounds] = useState<{
         <div className="flex space-x-2">
           <button
             onClick={handleClose}
-            className="window-control-button w-3 h-3 rounded-full bg-red-500 hover:bg-red-600"
+            className="window-control-button cursor-pointer w-3 h-3 rounded-full bg-red-500 hover:bg-red-600"
             aria-label="Close window"
           />
           <button
             onClick={() => onMinimize(id)}
-            className="window-control-button w-3 h-3 rounded-full bg-yellow-500 hover:bg-yellow-600"
+            className="window-control-button w-3 h-3 cursor-pointer rounded-full bg-yellow-500 hover:bg-yellow-600"
             aria-label="Minimize window"
           />
           <button
           onClick={handleMaximize}
-            className="window-control-button w-3 h-3 rounded-full bg-green-500 hover:bg-green-600"
+            className="window-control-button w-3 h-3 cursor-pointer rounded-full bg-green-500 hover:bg-green-600"
             aria-label="Maximize window"
           />
         </div>
@@ -288,7 +301,10 @@ const [prevBounds, setPrevBounds] = useState<{
       </div>
 
       {/* Window Content */}
-      <div className="flex-1 overflow-auto">{children}</div>
+      <div className="flex-1  scroll-smooth
+    overscroll-contain overflow-auto"   style={{
+    WebkitOverflowScrolling: "touch",
+  }}  >{children}</div>
 
       {/* Resize Handle */}
       <div

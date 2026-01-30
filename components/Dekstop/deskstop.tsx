@@ -31,6 +31,7 @@ import TextType from "./textAnimation"
 import KeyboardWrapper from "./keyboardWrapper"
 import CustomCursor from "../CustomCursor"
 import GamePage from "./Game"
+import Webpage from "./webpage"
 
 interface WindowState {
   id: string
@@ -185,6 +186,15 @@ useEffect(() => {
           title = "PDF Viewer";
           iconPath = "/icons/pdf.png";
           defaultWidth = 700;
+          defaultHeight = 600;
+          break;
+           case "website":
+          component = (
+            <Webpage />
+          );
+          title = "PDF Viewer";
+          iconPath = "/icons/pdf.png";
+          defaultWidth = 900;
           defaultHeight = 600;
           break;
         case "App Store":
@@ -535,7 +545,7 @@ const autoArrange = () => {
         <div className="ml-auto flex items-center space-x-4">
           {/* Placeholder for system icons */}
           <span className="text-gray-400">🔍</span>
-          <span className="text-gray-400">🌐</span>
+          <span className="text-gray-400" onClick={()=>openApplication('website')}>🌐</span>
           <span className="text-gray-400" >🔋</span>
           <span className="text-gray-400">🔊</span>
           <span className="text-gray-400">Wi-Fi</span>
@@ -566,64 +576,6 @@ const autoArrange = () => {
         </span> 
       
       </h1> */}
-
-      {/* Desktop Icons */}
-      {/* <DesktopIcon
-        name="Resume.pdf"
-        icon={<FileTextIcon />}
-        initialX={100}
-        initialY={400}
-        onDoubleClick={() =>  openApplication("Resume PDF", 150, 100,'resume')}
-        desktopRef={desktopRef}
-      />
-      <DesktopIcon
-        name="About Me"
-        icon={<FolderIcon />}
-        initialX={100}
-        initialY={550}
-        onDoubleClick={() => openApplication("About Me", 200, 150)}
-        desktopRef={desktopRef}
-      />
-      <DesktopIcon
-        name="ShowCraft"
-        icon={<FolderIcon />}
-        initialX={desktopRef.current ? desktopRef.current.offsetWidth - 200 : 1200}
-        initialY={100}
-        onDoubleClick={() => openApplication("Finder", 250, 100)}
-        desktopRef={desktopRef}
-      />
-      <DesktopIcon
-        name="SharpBuy"
-        icon={<FolderIcon />}
-        initialX={desktopRef.current ? desktopRef.current.offsetWidth - 200 : 1200}
-        initialY={200}
-        onDoubleClick={() => openApplication("Finder", 250, 100)}
-        desktopRef={desktopRef}
-      />
-      <DesktopIcon
-        name="Ponderiee"
-        icon={<FolderIcon />}
-        initialX={desktopRef.current ? desktopRef.current.offsetWidth - 200 : 1200}
-        initialY={300}
-        onDoubleClick={() => openApplication("Finder", 250, 100)}
-        desktopRef={desktopRef}
-      />
-      <DesktopIcon
-        name="Nirantara"
-        icon={<FolderIcon />}
-        initialX={desktopRef.current ? desktopRef.current.offsetWidth - 200 : 1200}
-        initialY={400}
-        onDoubleClick={() => openApplication("Finder", 250, 100)}
-        desktopRef={desktopRef}
-      />
-      <DesktopIcon
-        name="Don't Look"
-        icon={<Trash2Icon />}
-        initialX={desktopRef.current ? desktopRef.current.offsetWidth - 200 : 1300}
-        initialY={500}
-        onDoubleClick={() => openApplication("Don't Look", 300, 200)}
-        desktopRef={desktopRef}
-      /> */}
 
       {icons.map(icon => (
   <DesktopIcon
