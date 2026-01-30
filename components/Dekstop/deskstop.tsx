@@ -33,6 +33,11 @@ import GamePage from "./Game"
 import Webpage from "./webpage"
 import DotGrid from "../animationComponents/dotGrid"
 import { fetchGitHubRepositories, createFolderIconsFromRepositories } from "@/lib/github-data"
+import Vscode from "./VsCode"
+import Browser from "./chrome"
+import Spotify from "./spotify"
+import Maps from "./Maps"
+import Youtube from "./yt"
 
 interface WindowState {
   id: string
@@ -133,46 +138,44 @@ const [desktopBg, setDesktopBg] = useState("dot")
   }, []);
 
   // github folders
-   useEffect(() => {
-   async function loadGitHubData() {
-      // setLoading(true)
-      try {
-        const repos = await fetchGitHubRepositories(username)
-        const folderIcons = createFolderIconsFromRepositories(repos)
-        
-        // Convert folder icons to the icon item structure and prepend to existing icons
-        const repoFolders: IconItem[] = folderIcons.map(folder => ({
-          id: folder.id,
-          name: folder.name,
-          type: 'folder' as const,
-          icon: <FileTextIcon />,
-          x: folder.x,
-          y: folder.y,
-          folderColor: folder.color,
-          folderItems: folder.items,
-        }))
-
-        setIcons(prev => {
-          // Keep static icons (Resume, About Me, Trash)
-          const staticIcons = prev.filter(icon => icon.id < 10 || icon.id === 999)
-          // Insert repos between static icons and trash
-          const allIcons = [...staticIcons.slice(0, 2), ...repoFolders, ...staticIcons.slice(2)]
-          return allIcons
-        })
-      } catch (error) {
-        console.error('Failed to load GitHub data:', error)
-      } finally {
+ useEffect(() => {
+  async function loadGitHubData() {
+    try {
+      const repos = await fetchGitHubRepositories(username)
+      const folderIcons = createFolderIconsFromRepositories(repos)
       
-      }
+      // Convert folder icons to the icon item structure and prepend to existing icons
+      const repoFolders: IconItem[] = folderIcons.map(folder => ({
+        id: folder.id,
+        name: folder.name,
+        type: 'folder' as const,
+        icon: <FileTextIcon />,
+        x: folder.x,
+        y: folder.y,
+        folderColor: folder.color,
+        folderItems: folder.items,
+      }))
+
+      setIcons(prev => {
+        // Keep static icons (Resume, About Me, Trash)
+        const staticIcons = prev.filter(icon => icon.id < 10 || icon.id === 999)
+        // Insert repos between static icons and trash
+        const allIcons = [...staticIcons.slice(0, 2), ...repoFolders, ...staticIcons.slice(2)]
+        return allIcons
+      })
+
+      // Auto-arrange AFTER icons are set
+      // Use setTimeout to ensure state update is complete
+    
+      
+    } catch (error) {
+      console.error('Failed to load GitHub data:', error)
     }
-
-    loadGitHubData()
-    if (desktopRef.current) {
-  autoArrange();
   }
-       
-  }, [username])
 
+  loadGitHubData()
+  autoArrange()
+}, [username])
 
 
 
@@ -227,6 +230,41 @@ const [desktopBg, setDesktopBg] = useState("dot")
           defaultWidth = 700;
           defaultHeight = 550;
           break;
+          case "vscode":
+        component = <Vscode />;
+          title = "VS code";
+          iconPath = "/icons/ai.png";
+          defaultWidth = 900;
+          defaultHeight = 550;
+          break;
+           case "chrome":
+        component = <Browser isAppOpen={true} />;
+          title = "chrome";
+          iconPath = "/icons/ai.png";
+          defaultWidth = 1000;
+          defaultHeight = 550;
+          break;
+            case "Spotify":
+        component = <Spotify/>;
+          title = "spotify";
+          iconPath = "/icons/ai.png";
+          defaultWidth = 340;
+          defaultHeight = 250;
+          break; 
+             case "Maps":
+        component = <Maps/>;
+          title = "Google Map ";
+          iconPath = "/icons/ai.png";
+          defaultWidth = 1000;
+          defaultHeight = 700;
+          break; 
+             case "Youtube":
+        component = <Youtube/>;
+          title = "Youtube ";
+          iconPath = "/icons/ai.png";
+          defaultWidth = 1000;
+          defaultHeight = 700;
+          break;  
         case "Excel Editor":
           component = <ExcelEditor />;
           title = "Excel Editor";
@@ -463,15 +501,15 @@ const [desktopBg, setDesktopBg] = useState("dot")
     { name: "Messages", icon: <MailIcon /> }, // Using MailIcon for Messages
     { name: "Maps", icon: <SearchIcon /> }, // Using SearchIcon for Maps
     { name: "Photos", icon: <CameraIcon /> }, // Camera icon for Photos app
-    { name: "FaceTime", icon: <CameraIcon /> }, // Camera icon for FaceTime
+    { name: "chrome", icon: <CameraIcon /> }, // Camera icon for FaceTime
     { name: "Calendar", icon: <ListTodoIcon /> }, // Using ListTodoIcon for Calendar
-    { name: "Reminders", icon: <ListTodoIcon /> }, // Using ListTodoIcon for Reminders
+    { name: "Youtube", icon: <ListTodoIcon /> }, // Using ListTodoIcon for Reminders
     { name: "Notes", icon: <FileTextIcon /> }, // Using FileTextIcon for Notes
     { name: "Terminal", icon: <TerminalIcon /> },
     { name: "App Store", icon: <SearchIcon /> }, // Using SearchIcon for App Store
     { name: "Settings", icon: <ListTodoIcon /> }, // Using ListTodoIcon for Settings
     { name: "TV", icon: <SearchIcon /> }, // Using SearchIcon for TV
-    { name: "Music", icon: <SearchIcon /> }, // Using SearchIcon for Music
+    { name: "vscode", icon: <SearchIcon /> }, // Using SearchIcon for Music
     { name: "Spotify", icon: <SearchIcon /> }, // Using SearchIcon for Spotify
     { name: "Trash", icon: <Trash2Icon /> },
    
