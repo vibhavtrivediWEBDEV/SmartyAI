@@ -166,7 +166,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser to view the 
 
   --font-mona-sans: "Mona Sans", sans-serif;
 
-  --bg-pattern: url("/pattern.png");
+  /* --bg-pattern: url("/pattern.png"); */
 }
 
 :root {

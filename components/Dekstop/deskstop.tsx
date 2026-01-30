@@ -13,7 +13,7 @@ import { StickyNote } from "./stickyNote"
 import { ProjectExplorerWindow } from "./ProjectExpWindow"
 import { PhotosApp } from "./photosApp"
 import { gsap } from "gsap"
-import { FileTextIcon, FolderIcon, Trash2Icon, CameraIcon, TerminalIcon, BookIcon, SearchIcon, TableIcon, MailIcon, ListTodoIcon } from 'lucide-react' // Import Lucide icons
+import {  FolderIcon, Trash2Icon, CameraIcon, TerminalIcon, BookIcon, SearchIcon, TableIcon, MailIcon, ListTodoIcon, FileTextIcon } from 'lucide-react' // Import Lucide icons
 import { Dock } from "./dock"
 import { WavesDemo } from "./waveDemo.tsx"
 import Shuffle, { GooeyText } from "./textAnimation"
@@ -26,12 +26,13 @@ import CircularGallery from "./Gallery"
 import MotionGallary from "./motionGalary"
 import DomeGallery from "../animationComponents/gallery"
 import InfiniteMenu from "../animationComponents/newsGallery"
-import DotGrid from "../animationComponents/dotGrid"
 import TextType from "./textAnimation"
 import KeyboardWrapper from "./keyboardWrapper"
 import CustomCursor from "../CustomCursor"
 import GamePage from "./Game"
 import Webpage from "./webpage"
+import DotGrid from "../animationComponents/dotGrid"
+import { fetchGitHubRepositories, createFolderIconsFromRepositories } from "@/lib/github-data"
 
 interface WindowState {
   id: string
@@ -46,24 +47,48 @@ interface WindowState {
   zIndex: number
 }
 
+interface IconItem {
+  id: number
+  name: string
+  type: 'file' | 'folder' | 'trash'
+  x: number
+  y: number
+  icon?: React.ReactNode
+  folderColor?: string
+  folderItems?: Array<{ label: string; value: string; type: 'url' | 'text' }>
+}
+
 export function Desktop() {
+
+    const [username, setUsername] = useState('vibhavtrivediWEBDEV')
+
+
   const [openWindows, setOpenWindows] = useState<WindowState[]>([])
+const [desktopBg, setDesktopBg] = useState("dot")
   const [nextZIndex, setNextZIndex] = useState(1)
-  const desktopRef = useRef<HTMLDivElement>(null)
   const portfolioTextRef = useRef<HTMLHeadingElement>(null)
   const [commandToAutoRun, setCommandToAutoRun] = useState<{ command: string; args?: Record<string, any> } | null>(null)
 
+  const desktopRef = useRef<HTMLDivElement>(null)
 
 
-  const [icons, setIcons] = useState([
-  { id: 1, name: "Resume PDF", icon: <FileTextIcon />, x: 100, y: 400 },
-  { id: 2, name: "About Me", icon: <FolderIcon />, x: 100, y: 550 },
-  { id: 3, name: "ShowCraft", icon: <FolderIcon />, x: 1200, y: 100 },
-  { id: 4, name: "SharpBuy", icon: <FolderIcon />, x: 1200, y: 200 },
-  { id: 5, name: "Ponderiee", icon: <FolderIcon />, x: 1200, y: 300 },
-  { id: 6, name: "Nirantara", icon: <FolderIcon />, x: 1200, y: 400 },
-  { id: 7, name: "Don't Look", icon: <Trash2Icon />, x: 1300, y: 500 }
-]);
+//   const [icons, setIcons] = useState([
+//   { id: 1, name: "Resume PDF", icon: <FileTextIcon />, x: 100, y: 400 },
+//   { id: 2, name: "About Me", icon: <FolderIcon />, x: 100, y: 550 },
+//   { id: 3, name: "ShowCraft", icon: <FolderIcon />, x: 1200, y: 100 },
+//   { id: 4, name: "SharpBuy", icon: <FolderIcon />, x: 1200, y: 200 },
+//   { id: 5, name: "Ponderiee", icon: <FolderIcon />, x: 1200, y: 300 },
+//   { id: 6, name: "Nirantara", icon: <FolderIcon />, x: 1200, y: 400 },
+//   { id: 7, name: "Don't Look", icon: <Trash2Icon />, x: 1300, y: 500 }
+// ]);
+
+ const [icons, setIcons] = useState<IconItem[]>([
+    { id: 1, name: 'Resume PDF', folderColor: 'pink', type: 'file', icon: <FileTextIcon />, x: 100, y: 400 },
+    { id: 2, name: 'About Me', type: 'folder', icon: <FileTextIcon />, x: 100, y: 550, folderColor: 'pink', folderItems: [] },
+    { id: 999, name: "Don't Look", folderColor: 'pink', type: 'trash', icon: <Trash2Icon />, x: 1300, y: 500 },
+  ])
+
+
 
   // news items
 
@@ -107,14 +132,51 @@ export function Desktop() {
     }
   }, []);
 
+  // github folders
+   useEffect(() => {
+   async function loadGitHubData() {
+      // setLoading(true)
+      try {
+        const repos = await fetchGitHubRepositories(username)
+        const folderIcons = createFolderIconsFromRepositories(repos)
+        
+        // Convert folder icons to the icon item structure and prepend to existing icons
+        const repoFolders: IconItem[] = folderIcons.map(folder => ({
+          id: folder.id,
+          name: folder.name,
+          type: 'folder' as const,
+          icon: <FileTextIcon />,
+          x: folder.x,
+          y: folder.y,
+          folderColor: folder.color,
+          folderItems: folder.items,
+        }))
 
-  // Right after your existing GSAP useEffect
-useEffect(() => {
-  if (desktopRef.current) {
-    autoArrange();
+        setIcons(prev => {
+          // Keep static icons (Resume, About Me, Trash)
+          const staticIcons = prev.filter(icon => icon.id < 10 || icon.id === 999)
+          // Insert repos between static icons and trash
+          const allIcons = [...staticIcons.slice(0, 2), ...repoFolders, ...staticIcons.slice(2)]
+          return allIcons
+        })
+      } catch (error) {
+        console.error('Failed to load GitHub data:', error)
+      } finally {
+      
+      }
+    }
+
+    loadGitHubData()
+    if (desktopRef.current) {
+  autoArrange();
   }
-}, []); // Runs once on mount
+       
+  }, [username])
 
+
+
+
+  
 
   const openApplication = useCallback(
     (appName: string, initialX?: number, initialY?: number ,commandToRun?: string ,arg?:any) => {
@@ -526,7 +588,9 @@ const autoArrange = () => {
       //   backgroundSize: '40px 40px',
       // }}
     >
-          <WavesDemo /> 
+        {desktopBg === "dot" && <DotGrid />}
+{desktopBg === "wave" && <WavesDemo />}
+
           {/* <KeyboardWrapper
         initialX={50}
         initialY={50}
@@ -542,7 +606,7 @@ const autoArrange = () => {
           <p className="hover:text-white cursor-pointer transition-colors" onClick={()=>openApplication('game')}>Game</p>
           
         </div>
-        <div className="ml-auto flex items-center space-x-4">
+        <div className="ml-auto flex items-center cursor-pointer space-x-4">
           {/* Placeholder for system icons */}
           <span className="text-gray-400">🔍</span>
           <span className="text-gray-400" onClick={()=>openApplication('website')}>🌐</span>
@@ -550,7 +614,9 @@ const autoArrange = () => {
           <span className="text-gray-400">🔊</span>
           <span className="text-gray-400">Wi-Fi</span>
           <span className="text-gray-400" onClick={autoArrange}>A</span>
-          <span className="text-gray-400">⌘</span>
+          <span className="text-gray-400" onClick={() =>
+    setDesktopBg(prev => (prev === "dot" ? "wave" : "dot"))
+  }>⌘</span>
           <span className="text-gray-400" suppressHydrationWarning>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
       </div>
@@ -578,18 +644,31 @@ const autoArrange = () => {
       </h1> */}
 
       {icons.map(icon => (
+  // <DesktopIcon
+  //   key={icon.id}
+  //   name={icon.name}
+  //   icon={icon.icon}
+  //   initialX={icon.x}
+  //   initialY={icon.y}
+  //   onPositionChange={(x,y) =>
+  //     updateIconPosition(icon.id, x, y)
+  //   }
+  //   onDoubleClick={() => openApplication(icon.name)}
+  //   desktopRef={desktopRef}
+  // />
+
   <DesktopIcon
-    key={icon.id}
-    name={icon.name}
-    icon={icon.icon}
-    initialX={icon.x}
-    initialY={icon.y}
-    onPositionChange={(x,y) =>
-      updateIconPosition(icon.id, x, y)
-    }
-    onDoubleClick={() => openApplication(icon.name)}
-    desktopRef={desktopRef}
-  />
+              key={icon.id}
+              name={icon.name}
+              icon={icon.icon}
+              initialX={icon.x}
+              initialY={icon.y}
+              onPositionChange={(x, y) => updateIconPosition(icon.id, x, y)}
+              onDoubleClick={() => openApplication(icon.name)}
+              desktopRef={desktopRef}
+              folderColor={icon.folderColor}
+              folderItems={icon.folderItems}
+            />
 ))}
 
 

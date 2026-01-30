@@ -51,10 +51,10 @@ function hexToRgb(hex: string) {
 }
 
 const DotGrid: React.FC<DotGridProps> = ({
-  dotSize = 16,
+  dotSize = 3,
   gap = 32,
-  baseColor = '#5227FF',
-  activeColor = '#5227FF',
+  baseColor = '#dbd9e2',
+  activeColor = '#b2afc0',
   proximity = 150,
   speedTrigger = 100,
   shockRadius = 250,
