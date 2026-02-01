@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VS Code Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            background: #1e1e1e;
+            color: #cccccc;
+        }
+
+        /* Window Header */
+        .window-header {
+            height: 32px;
+            background: rgba(37, 37, 38, 0.95);
+            backdrop-filter: blur(30px);
+            border-bottom: 1px solid #2d2d30;
+            display: flex;
+            align-items: center;
+            padding: 0 12px;
+            -webkit-app-region: drag;
+        }
+
+        .traffic-lights {
+            display: flex;
+            gap: 8px;
+            margin-right: 16px;
+        }
+
+        .traffic-light {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s;
+        }
+
+        .traffic-light.red {
+            background: #ff5f57;
+        }
+
+        .traffic-light.yellow {
+            background: #ffbd2e;
+        }
+
+        .traffic-light.green {
+            background: #28c840;
+        }
+
+        .traffic-light:hover svg {
+            opacity: 1;
+        }
+
+        .traffic-light svg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .window-title {
+            flex: 1;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 500;
+            color: #cccccc;
+        }
+
+        /* Main Container */
+        .vscode-container {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 32px);
+        }
+
+        /* Menu Bar */
+        .menu-bar {
+            height: 35px;
+            background: #323233;
+            border-bottom: 1px solid #2d2d30;
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            justify-content: space-between;
+        }
+
+        .menu-items {
+            display: flex;
+            gap: 20px;
+            font-size: 13px;
+        }
+
+        .menu-item {
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .menu-item:hover {
+            background: #3e3e42;
+        }
+
+        .reload-btn {
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: background 0.2s;
+        }
+
+        .reload-btn:hover {
+            background: #1177bb;
+        }
+
+        /* Main Content */
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Activity Bar */
+        .activity-bar {
+            width: 48px;
+            background: #333333;
+            border-right: 1px solid #2d2d30;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 8px 0;
+        }
+
+        .activity-icon {
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            position: relative;
+            color: #858585;
+            transition: color 0.2s;
+        }
+
+        .activity-icon:hover {
+            color: #cccccc;
+        }
+
+        .activity-icon.active {
+            color: #ffffff;
+        }
+
+        .activity-icon.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #007acc;
+        }
+
+        .activity-spacer {
+            flex: 1;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 250px;
+            background: #252526;
+            border-right: 1px solid #2d2d30;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #cccccc;
+            font-weight: 600;
+        }
+
+        .sidebar-header-left {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .sidebar-header-right {
+            display: flex;
+            gap: 4px;
+        }
+
+        .sidebar-icon-btn {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border-radius: 4px;
+            color: #cccccc;
+            transition: background 0.2s;
+        }
+
+        .sidebar-icon-btn:hover {
+            background: #3e3e42;
+        }
+
+        .file-explorer {
+            flex: 1;
+            overflow-y: auto;
+            font-size: 13px;
+        }
+
+        .folder {
+            padding: 4px 8px;
+        }
+
+        .folder-header {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+
+        .folder-header:hover {
+            background: #2a2d2e;
+        }
+
+        .folder-content {
+            padding-left: 16px;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin: 1px 0;
+            transition: background 0.2s;
+        }
+
+        .file-item:hover {
+            background: #2a2d2e;
+        }
+
+        .file-item.active {
+            background: #37373d;
+        }
+
+        .file-icon {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+
+        /* Editor Area */
+        .editor-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #1e1e1e;
+        }
+
+        .tabs-bar {
+            height: 35px;
+            background: #252526;
+            border-bottom: 1px solid #2d2d30;
+            display: flex;
+            overflow-x: auto;
+        }
+
+        .tab {
+            min-width: 120px;
+            max-width: 200px;
+            height: 35px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 12px;
+            cursor: pointer;
+            border-right: 1px solid #2d2d30;
+            background: #2d2d2d;
+            color: #969696;
+            font-size: 13px;
+            transition: background 0.2s;
+            position: relative;
+        }
+
+        .tab:hover {
+            background: #323233;
+        }
+
+        .tab.active {
+            background: #1e1e1e;
+            color: #ffffff;
+            border-top: 2px solid #007acc;
+        }
+
+        .tab-close {
+            margin-left: auto;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            opacity: 0;
+            transition: opacity 0.2s, background 0.2s;
+        }
+
+        .tab:hover .tab-close,
+        .tab.modified .tab-close {
+            opacity: 1;
+        }
+
+        .tab-close:hover {
+            background: #3e3e42;
+        }
+
+        .tab.modified .tab-close::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #007acc;
+            display: block;
+        }
+
+        .tab.modified:hover .tab-close::before {
+            display: none;
+        }
+
+        /* Editor Content */
+        .editor-content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .line-numbers {
+            width: 50px;
+            background: #1e1e1e;
+            padding: 16px 0;
+            text-align: right;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            color: #858585;
+            user-select: none;
+            border-right: 1px solid #2d2d30;
+        }
+
+        .line-number {
+            padding: 0 12px;
+            line-height: 19px;
+            height: 19px;
+        }
+
+        .line-number.active {
+            color: #cccccc;
+        }
+
+        .code-area {
+            flex: 1;
+            overflow: auto;
+            padding: 16px;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 19px;
+            background: #1e1e1e;
+        }
+
+        .code-line {
+            min-height: 19px;
+            white-space: pre;
+        }
+
+        .code-line.active {
+            background: #282828;
+        }
+
+        /* Syntax Highlighting */
+        .tag {
+            color: #569cd6;
+        }
+
+        .attr-name {
+            color: #9cdcfe;
+        }
+
+        .attr-value {
+            color: #ce9178;
+        }
+
+        .doctype {
+            color: #808080;
+        }
+
+        .comment {
+            color: #6a9955;
+        }
+
+        .text {
+            color: #d4d4d4;
+        }
+
+        .keyword {
+            color: #c586c0;
+        }
+
+        .string {
+            color: #ce9178;
+        }
+
+        /* Status Bar */
+        .status-bar {
+            height: 22px;
+            background: #007acc;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 12px;
+            font-size: 12px;
+            color: #ffffff;
+        }
+
+        .status-left,
+        .status-right {
+            display: flex;
+            gap: 16px;
+        }
+
+        .status-item {
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .status-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Minimap */
+        .minimap {
+            width: 80px;
+            background: #1e1e1e;
+            border-left: 1px solid #2d2d30;
+            overflow: hidden;
+        }
+
+        .minimap-content {
+            padding: 4px;
+            font-size: 2px;
+            line-height: 3px;
+            color: #858585;
+            font-family: monospace;
+        }
+
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1e1e1e;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #424242;
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4e4e4e;
+        }
+
+        /* Icons */
+        svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .new-file-input {
+            background: #3c3c3c;
+            border: 1px solid #007acc;
+            color: #cccccc;
+            padding: 2px 8px;
+            font-size: 13px;
+            outline: none;
+            border-radius: 2px;
+            margin: 4px 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Window Header -->
+    <div class="window-header">
+        <div class="traffic-lights">
+            <div class="traffic-light red">
+                <svg viewBox="0 0 12 12">
+                    <path d="M2 2 L10 10 M10 2 L2 10" stroke="#4d0000" stroke-width="1.5" fill="none" opacity="0.7" />
+                </svg>
+            </div>
+            <div class="traffic-light yellow">
+                <svg viewBox="0 0 12 12">
+                    <path d="M2 6 L10 6" stroke="#5a4200" stroke-width="1.5" fill="none" opacity="0.7" />
+                </svg>
+            </div>
+            <div class="traffic-light green">
+                <svg viewBox="0 0 12 12">
+                    <path d="M2 2 L4 2 L4 10 L2 10 M8 2 L10 2 L10 10 L8 10" stroke="#004d00" stroke-width="1.5"
+                        fill="none" opacity="0.7" />
+                </svg>
+            </div>
+        </div>
+        <div class="window-title">VS Code</div>
+    </div>
+
+    <div class="vscode-container">
+        <!-- Menu Bar -->
+        <div class="menu-bar">
+            <div class="menu-items">
+                <div class="menu-item">File</div>
+                <div class="menu-item">Edit</div>
+                <div class="menu-item">Selection</div>
+                <div class="menu-item">View</div>
+                <div class="menu-item">Go</div>
+                <div class="menu-item">Run</div>
+                <div class="menu-item">Terminal</div>
+                <div class="menu-item">Help</div>
+            </div>
+            <button class="reload-btn">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path
+                        d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5" />
+                </svg>
+                Reload Editor
+            </button>
+        </div>
+
+        <div class="main-content">
+            <!-- Activity Bar -->
+            <div class="activity-bar">
+                <div class="activity-icon active" title="Explorer">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                    </svg>
+                </div>
+                <div class="activity-icon" title="Search">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.35-4.35" />
+                    </svg>
+                </div>
+                <div class="activity-icon" title="Source Control">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <line x1="6" y1="3" x2="6" y2="15" />
+                        <circle cx="18" cy="6" r="3" />
+                        <circle cx="6" cy="18" r="3" />
+                        <path d="M18 9a9 9 0 0 1-9 9" />
+                    </svg>
+                </div>
+                <div class="activity-icon" title="Run and Debug">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                </div>
+                <div class="activity-icon" title="Extensions">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <rect x="3" y="3" width="7" height="7" />
+                        <rect x="14" y="3" width="7" height="7" />
+                        <rect x="14" y="14" width="7" height="7" />
+                        <rect x="3" y="14" width="7" height="7" />
+                    </svg>
+                </div>
+                <div class="activity-spacer"></div>
+                <div class="activity-icon" title="Accounts">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                    </svg>
+                </div>
+                <div class="activity-icon" title="Settings">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="3" />
+                        <path
+                            d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24" />
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <div class="sidebar-header-left">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="m6 9 6 6 6-6" />
+                        </svg>
+                        <span>EXPLORER</span>
+                    </div>
+                    <div class="sidebar-header-right">
+                        <div class="sidebar-icon-btn" title="New File">
+                            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                                <line x1="12" y1="18" x2="12" y2="12" />
+                                <line x1="9" y1="15" x2="15" y2="15" />
+                            </svg>
+                        </div>
+                        <div class="sidebar-icon-btn" title="New Folder">
+                            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                                <line x1="12" y1="11" x2="12" y2="17" />
+                                <line x1="9" y1="14" x2="15" y2="14" />
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+                <div class="file-explorer">
+                    <div class="folder">
+                        <div class="folder-header">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="m6 9 6 6 6-6" />
+                            </svg>
+                            <span>MY-PROJECT</span>
+                        </div>
+                        <div class="folder-content">
+                            <div class="file-item active">
+                                <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="#e44d26"
+                                    stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <polyline points="14 2 14 8 20 8" />
+                                </svg>
+                                <span>index.html</span>
+                            </div>
+                            <div class="file-item">
+                                <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="#f7df1e"
+                                    stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <polyline points="14 2 14 8 20 8" />
+                                </svg>
+                                <span>script.js</span>
+                            </div>
+                            <div class="file-item">
+                                <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="#2965f1"
+                                    stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <polyline points="14 2 14 8 20 8" />
+                                </svg>
+                                <span>styles.css</span>
+                            </div>
+                            <div class="file-item">
+                                <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="#cccccc"
+                                    stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <polyline points="14 2 14 8 20 8" />
+                                </svg>
+                                <span>README.md</span>
+                            </div>
+                            <div class="file-item">
+                                <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="#61dafb"
+                                    stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <polyline points="14 2 14 8 20 8" />
+                                </svg>
+                                <span>App.jsx</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Editor Area -->
+            <div class="editor-area">
+                <div class="tabs-bar">
+                    <div class="tab active modified">
+                        <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="#e44d26" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                        </svg>
+                        <span>index.html</span>
+                        <div class="tab-close">
+                            <svg viewBox="0 0 16 16" fill="currentColor">
+                                <path
+                                    d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z" />
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="tab">
+                        <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="#f7df1e" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                        </svg>
+                        <span>script.js</span>
+                        <div class="tab-close">
+                            <svg viewBox="0 0 16 16" fill="currentColor">
+                                <path
+                                    d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z" />
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="tab">
+                        <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="#2965f1" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                        </svg>
+                        <span>styles.css</span>
+                        <div class="tab-close">
+                            <svg viewBox="0 0 16 16" fill="currentColor">
+                                <path
+                                    d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z" />
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="editor-content">
+                    <div class="line-numbers">
+                        <div class="line-number">1</div>
+                        <div class="line-number">2</div>
+                        <div class="line-number">3</div>
+                        <div class="line-number">4</div>
+                        <div class="line-number">5</div>
+                        <div class="line-number">6</div>
+                        <div class="line-number">7</div>
+                        <div class="line-number active">8</div>
+                        <div class="line-number">9</div>
+                        <div class="line-number">10</div>
+                        <div class="line-number">11</div>
+                        <div class="line-number">12</div>
+                        <div class="line-number">13</div>
+                        <div class="line-number">14</div>
+                        <div class="line-number">15</div>
+                        <div class="line-number">16</div>
+                        <div class="line-number">17</div>
+                    </div>
+                    <div class="code-area">
+                        <div class="code-line"><span class="doctype">&lt;!DOCTYPE html&gt;</span></div>
+                        <div class="code-line"><span class="tag">&lt;html</span> <span
+                                class="attr-name">lang</span>=<span class="attr-value">"en"</span><span
+                                class="tag">&gt;</span></div>
+                        <div class="code-line"><span class="tag">&lt;head&gt;</span></div>
+                        <div class="code-line"> <span class="tag">&lt;meta</span> <span
+                                class="attr-name">charset</span>=<span class="attr-value">"UTF-8"</span><span
+                                class="tag">&gt;</span></div>
+                        <div class="code-line"> <span class="tag">&lt;meta</span> <span
+                                class="attr-name">name</span>=<span class="attr-value">"viewport"</span> <span
+                                class="attr-name">content</span>=<span class="attr-value">"width=device-width,
+                                initial-scale=1.0"</span><span class="tag">&gt;</span></div>
+                        <div class="code-line"> <span class="tag">&lt;title&gt;</span><span class="text">Web-OSX by
+                                Hexa</span><span class="tag">&lt;/title&gt;</span></div>
+                        <div class="code-line"> <span class="tag">&lt;link</span> <span
+                                class="attr-name">rel</span>=<span class="attr-value">"stylesheet"</span> <span
+                                class="attr-name">href</span>=<span class="attr-value">"styles.css"</span><span
+                                class="tag">&gt;</span></div>
+                        <div class="code-line active"><span class="tag">&lt;/head&gt;</span></div>
+                        <div class="code-line"><span class="tag">&lt;body&gt;</span></div>
+                        <div class="code-line"> <span class="tag">&lt;div</span> <span
+                                class="attr-name">class</span>=<span class="attr-value">"container"</span><span
+                                class="tag">&gt;</span></div>
+                        <div class="code-line"> <span class="tag">&lt;h1&gt;</span><span class="text">Hey My name is
+                                Hexa!</span><span class="tag">&lt;/h1&gt;</span></div>
+                        <div class="code-line"> <span class="tag">&lt;p&gt;</span><span class="text">Welcome to the
+                                vscode inside the web-osx</span><span class="tag">&lt;/p&gt;</span></div>
+                        <div class="code-line"> <span class="tag">&lt;button</span> <span
+                                class="attr-name">id</span>=<span class="attr-value">"changeColorBtn"</span><span
+                                class="tag">&gt;</span><span class="text">Change Color</span><span
+                                class="tag">&lt;/button&gt;</span></div>
+                        <div class="code-line"> <span class="tag">&lt;/div&gt;</span></div>
+                        <div class="code-line"> <span class="tag">&lt;script</span> <span
+                                class="attr-name">src</span>=<span class="attr-value">"script.js"</span><span
+                                class="tag">&gt;&lt;/script&gt;</span></div>
+                        <div class="code-line"><span class="tag">&lt;/body&gt;</span></div>
+                        <div class="code-line"><span class="tag">&lt;/html&gt;</span></div>
+                    </div>
+                    <div class="minimap">
+                        <div class="minimap-content">
+                            &lt;!DOCTYPE html&gt;<br>
+                            &lt;html lang="en"&gt;<br>
+                            &lt;head&gt;<br>
+                            &lt;meta charset="UTF-8"&gt;<br>
+                            &lt;meta name="viewport"&gt;<br>
+                            &lt;title&gt;Web-OSX&lt;/title&gt;<br>
+                            &lt;link rel="stylesheet"&gt;<br>
+                            &lt;/head&gt;<br>
+                            &lt;body&gt;<br>
+                            &lt;div class="container"&gt;<br>
+                            &lt;h1&gt;Hexa&lt;/h1&gt;<br>
+                            &lt;p&gt;Welcome&lt;/p&gt;<br>
+                            &lt;button&gt;Change&lt;/button&gt;<br>
+                            &lt;/div&gt;<br>
+                            &lt;script&gt;&lt;/script&gt;<br>
+                            &lt;/body&gt;<br>
+                            &lt;/html&gt;
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-left">
+                <div class="status-item">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"
+                        style="margin-right: 4px; vertical-align: middle;">
+                        <path
+                            d="M8 1l2.163 4.279L15 6.089l-3.5 3.408.827 4.81L8 12.202l-4.326 2.105.826-4.81-3.5-3.408 4.837-.81L8 1z" />
+                    </svg>
+                    main
+                </div>
+                <div class="status-item">⚠ 0 🔴 0</div>
+            </div>
+            <div class="status-right">
+                <div class="status-item">UTF-8</div>
+                <div class="status-item">LF</div>
+                <div class="status-item">HTML</div>
+                <div class="status-item">Ln 8, Col 8</div>
+                <div class="status-item">Spaces: 2</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Add interactive functionality
+        document.querySelectorAll('.file-item').forEach(item => {
+            item.addEventListener('click', function () {
+                document.querySelectorAll('.file-item').forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', function (e) {
+                if (!e.target.closest('.tab-close')) {
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                }
+            });
+        });
+
+        document.querySelectorAll('.tab-close').forEach(close => {
+            close.addEventListener('click', function (e) {
+                e.stopPropagation();
+                this.closest('.tab').remove();
+            });
+        });
+
+        document.querySelectorAll('.activity-icon').forEach(icon => {
+            icon.addEventListener('click', function () {
+                document.querySelectorAll('.activity-icon').forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        // Simulate typing effect on code lines
+        document.querySelectorAll('.code-line').forEach((line, index) => {
+            line.addEventListener('click', function () {
+                document.querySelectorAll('.code-line').forEach(l => l.classList.remove('active'));
+                document.querySelectorAll('.line-number').forEach(l => l.classList.remove('active'));
+                this.classList.add('active');
+                document.querySelectorAll('.line-number')[index].classList.add('active');
+            });
+        });
+
+        // Reload button
+        document.querySelector('.reload-btn').addEventListener('click', function () {
+            location.reload();
+        });
+    </script>
+</body>
+
+</html>

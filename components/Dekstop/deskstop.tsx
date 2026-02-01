@@ -1,6 +1,6 @@
 "use client"
 
-import  {   useRef, useEffect, useState, useCallback } from "react"
+import { useRef, useEffect, useState, useCallback } from "react"
 import { Window } from "./window"
 import { TerminalUI } from "@/app/components/terminal/terminalUI"
 import { ScienceBook } from "@/app/components/terminal/ai-book"
@@ -13,7 +13,7 @@ import { StickyNote } from "./stickyNote"
 import { ProjectExplorerWindow } from "./ProjectExpWindow"
 import { PhotosApp } from "./photosApp"
 import { gsap } from "gsap"
-import {  FolderIcon, Trash2Icon, CameraIcon, TerminalIcon, BookIcon, SearchIcon, TableIcon, MailIcon, ListTodoIcon, FileTextIcon } from 'lucide-react' // Import Lucide icons
+import { FolderIcon, Trash2Icon, CameraIcon, TerminalIcon, BookIcon, SearchIcon, TableIcon, MailIcon, ListTodoIcon, FileTextIcon } from 'lucide-react' // Import Lucide icons
 import { Dock } from "./dock"
 import { WavesDemo } from "./waveDemo.tsx"
 import Shuffle, { GooeyText } from "./textAnimation"
@@ -38,6 +38,8 @@ import Browser from "./chrome"
 import Spotify from "./spotify"
 import Maps from "./Maps"
 import Youtube from "./yt"
+import SettingsPanel from "./Settings"
+import { useSettings } from "@/app/context/settingContext"
 
 interface WindowState {
   id: string
@@ -64,40 +66,43 @@ interface IconItem {
 }
 
 export function Desktop() {
+  const { settings } = useSettings()
 
-    const [username, setUsername] = useState('vibhavtrivediWEBDEV')
-
+  const [username, setUsername] = useState('vibhavtrivediWEBDEV')
 
   const [openWindows, setOpenWindows] = useState<WindowState[]>([])
-const [desktopBg, setDesktopBg] = useState("dot")
+  const [desktopBg, setDesktopBg] = useState("dot")
   const [nextZIndex, setNextZIndex] = useState(1)
   const portfolioTextRef = useRef<HTMLHeadingElement>(null)
   const [commandToAutoRun, setCommandToAutoRun] = useState<{ command: string; args?: Record<string, any> } | null>(null)
 
   const desktopRef = useRef<HTMLDivElement>(null)
 
+  const [backgroundImage, setBackgroundImage] = useState('https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1200&h=800&fit=crop')
+  const [themeColor, setThemeColor] = useState('240 5.9% 10%')
 
-//   const [icons, setIcons] = useState([
-//   { id: 1, name: "Resume PDF", icon: <FileTextIcon />, x: 100, y: 400 },
-//   { id: 2, name: "About Me", icon: <FolderIcon />, x: 100, y: 550 },
-//   { id: 3, name: "ShowCraft", icon: <FolderIcon />, x: 1200, y: 100 },
-//   { id: 4, name: "SharpBuy", icon: <FolderIcon />, x: 1200, y: 200 },
-//   { id: 5, name: "Ponderiee", icon: <FolderIcon />, x: 1200, y: 300 },
-//   { id: 6, name: "Nirantara", icon: <FolderIcon />, x: 1200, y: 400 },
-//   { id: 7, name: "Don't Look", icon: <Trash2Icon />, x: 1300, y: 500 }
-// ]);
 
- const [icons, setIcons] = useState<IconItem[]>([
-    { id: 1, name: 'Resume PDF', folderColor: 'pink', type: 'file', icon: <FileTextIcon />, x: 100, y: 400 },
-    { id: 2, name: 'About Me', type: 'folder', icon: <FileTextIcon />, x: 100, y: 550, folderColor: 'pink', folderItems: [] },
-    { id: 999, name: "Don't Look", folderColor: 'pink', type: 'trash', icon: <Trash2Icon />, x: 1300, y: 500 },
+  //   const [icons, setIcons] = useState([
+  //   { id: 1, name: "Resume PDF", icon: <FileTextIcon />, x: 100, y: 400 },
+  //   { id: 2, name: "About Me", icon: <FolderIcon />, x: 100, y: 550 },
+  //   { id: 3, name: "ShowCraft", icon: <FolderIcon />, x: 1200, y: 100 },
+  //   { id: 4, name: "SharpBuy", icon: <FolderIcon />, x: 1200, y: 200 },
+  //   { id: 5, name: "Ponderiee", icon: <FolderIcon />, x: 1200, y: 300 },
+  //   { id: 6, name: "Nirantara", icon: <FolderIcon />, x: 1200, y: 400 },
+  //   { id: 7, name: "Don't Look", icon: <Trash2Icon />, x: 1300, y: 500 }
+  // ]);
+
+  const [icons, setIcons] = useState<IconItem[]>([
+    // { id: 1, name: 'Resume PDF', folderColor: 'red', type: 'file', icon: <FileTextIcon />, x: 100, y: 400 },
+    // { id: 2, name: 'About Me', type: 'folder', icon: <FileTextIcon />, x: 100, y: 550, folderColor: 'red', folderItems: [] },
+    // { id: 999, name: "Don't Look", folderColor: 'red', type: 'trash', icon: <Trash2Icon />, x: 1300, y: 500 },
   ])
 
 
 
   // news items
 
-  
+
   const news = [
     {
       image: 'https://picsum.photos/300/300?grayscale',
@@ -124,7 +129,7 @@ const [desktopBg, setDesktopBg] = useState("dot")
       description: 'This is pretty cool, right?'
     }
   ];
-  
+
 
   useEffect(() => {
     // GSAP animation for "welcome to my portfolio."
@@ -137,70 +142,95 @@ const [desktopBg, setDesktopBg] = useState("dot")
     }
   }, []);
 
+  useEffect(() => {
+    if (!desktopRef.current || icons.length === 0) return;
+
+    const paddingX = 80;
+    const paddingY = 80;
+    const colGap = 150;
+    const rowGap = 130;
+
+    const maxRows = Math.floor(
+      (desktopRef.current.offsetHeight - paddingY - 100) / rowGap
+    );
+
+    const arranged = icons.map((icon, index) => {
+      const col = Math.floor(index / maxRows);
+      const row = index % maxRows;
+
+      const x = paddingX + col * colGap;
+      const y = paddingY + row * rowGap;
+
+      return { ...icon, x, y };
+    });
+
+    setIcons(arranged);
+  }, [icons.length]); // Re-arrange whenever the number of icons changes
+
   // github folders
- useEffect(() => {
-  async function loadGitHubData() {
-    try {
-      const repos = await fetchGitHubRepositories(username)
-      const folderIcons = createFolderIconsFromRepositories(repos)
-      
-      // Convert folder icons to the icon item structure and prepend to existing icons
-      const repoFolders: IconItem[] = folderIcons.map(folder => ({
-        id: folder.id,
-        name: folder.name,
-        type: 'folder' as const,
-        icon: <FileTextIcon />,
-        x: folder.x,
-        y: folder.y,
-        folderColor: folder.color,
-        folderItems: folder.items,
-      }))
+  useEffect(() => {
+    async function loadGitHubData() {
+      try {
+        const repos = await fetchGitHubRepositories(username)
+        const folderIcons = createFolderIconsFromRepositories(repos)
 
-      setIcons(prev => {
-        // Keep static icons (Resume, About Me, Trash)
-        const staticIcons = prev.filter(icon => icon.id < 10 || icon.id === 999)
-        // Insert repos between static icons and trash
-        const allIcons = [...staticIcons.slice(0, 2), ...repoFolders, ...staticIcons.slice(2)]
-        return allIcons
-      })
+        // Convert folder icons to the icon item structure and prepend to existing icons
+        const repoFolders: IconItem[] = folderIcons.map(folder => ({
+          id: folder.id,
+          name: folder.name,
+          type: 'folder' as const,
+          icon: <FileTextIcon />,
+          x: folder.x,
+          y: folder.y,
+          folderColor: folder.color,
+          folderItems: folder.items,
+        }))
 
-      // Auto-arrange AFTER icons are set
-      // Use setTimeout to ensure state update is complete
-    
-      
-    } catch (error) {
-      console.error('Failed to load GitHub data:', error)
+        setIcons(prev => {
+          // Keep static icons (Resume, About Me, Trash)
+          const staticIcons = prev.filter(icon => icon.id < 10 || icon.id === 999)
+          // Insert repos between static icons and trash
+          const allIcons = [...staticIcons.slice(0, 2), ...repoFolders, ...staticIcons.slice(2)]
+          return allIcons
+        })
+
+        // Auto-arrange AFTER icons are set
+        // Use setTimeout to ensure state update is complete
+
+
+      } catch (error) {
+        console.error('Failed to load GitHub data:', error)
+      }
     }
-  }
 
-  loadGitHubData()
-  autoArrange()
-}, [username])
+    loadGitHubData()
 
+  }, [username])
 
 
-  
+
+
 
   const openApplication = useCallback(
-    (appName: string, initialX?: number, initialY?: number ,commandToRun?: string ,arg?:any) => {
+    (appName: string, initialX?: number, initialY?: number, commandToRun?: string, arg?: any) => {
       // alert(appName)
       let component: React.ReactNode | null = null;
       let title = "";
       let iconPath = "";
       let defaultWidth = 800;
       let defaultHeight = 500;
-  
+
       switch (appName) {
         case "Terminal":
           component = (
             <div className="" >
               <TerminalUI
-            key={`terminal-${Date.now()}`} // 👈 Force remount
+                key={`terminal-${Date.now()}`} // 👈 Force remount
 
-              autoRunCommand={commandToRun}
-              autoRunCommandArgs={arg} 
-              onCommandExecuted={() => setCommandToAutoRun(null)}
-            />
+                autoRunCommand={commandToRun}
+                autoRunCommandArgs={arg}
+                onCommandExecuted={() => setCommandToAutoRun(null)}
+              />
             </div>
           );
           title = "Terminal";
@@ -215,8 +245,8 @@ const [desktopBg, setDesktopBg] = useState("dot")
           defaultWidth = 700;
           defaultHeight = 600;
           break;
-         
-          case "game":
+
+        case "game":
           component = <GamePage />;
           title = "devil level";
           iconPath = "/icons/book.png";
@@ -230,41 +260,50 @@ const [desktopBg, setDesktopBg] = useState("dot")
           defaultWidth = 700;
           defaultHeight = 550;
           break;
-          case "vscode":
-        component = <Vscode />;
+        case "vscode":
+          component = <Vscode />;
           title = "VS code";
           iconPath = "/icons/ai.png";
           defaultWidth = 900;
           defaultHeight = 550;
           break;
-           case "chrome":
-        component = <Browser isAppOpen={true} />;
+        case "Settings":
+          component = <SettingsPanel
+
+          />;
+          title = "setting";
+          iconPath = "/icons/ai.png";
+          defaultWidth = 500;
+          defaultHeight = 250;
+          break;
+        case "chrome":
+          component = <Browser isAppOpen={true} />;
           title = "chrome";
           iconPath = "/icons/ai.png";
           defaultWidth = 1000;
           defaultHeight = 550;
           break;
-            case "Spotify":
-        component = <Spotify/>;
+        case "Spotify":
+          component = <Spotify />;
           title = "spotify";
           iconPath = "/icons/ai.png";
           defaultWidth = 340;
           defaultHeight = 250;
-          break; 
-             case "Maps":
-        component = <Maps/>;
+          break;
+        case "Maps":
+          component = <Maps />;
           title = "Google Map ";
           iconPath = "/icons/ai.png";
           defaultWidth = 1000;
           defaultHeight = 700;
-          break; 
-             case "Youtube":
-        component = <Youtube/>;
+          break;
+        case "Youtube":
+          component = <Youtube />;
           title = "Youtube ";
           iconPath = "/icons/ai.png";
           defaultWidth = 1000;
           defaultHeight = 700;
-          break;  
+          break;
         case "Excel Editor":
           component = <ExcelEditor />;
           title = "Excel Editor";
@@ -288,7 +327,7 @@ const [desktopBg, setDesktopBg] = useState("dot")
           defaultWidth = 700;
           defaultHeight = 600;
           break;
-           case "website":
+        case "website":
           component = (
             <Webpage />
           );
@@ -314,7 +353,7 @@ const [desktopBg, setDesktopBg] = useState("dot")
           );
           title = "Project Explorer";
           iconPath = "/icons/folder.png";
-          defaultWidth = 450;
+          defaultWidth = 850;
           defaultHeight = 350;
           break;
         case "Resume PDF":
@@ -327,7 +366,7 @@ const [desktopBg, setDesktopBg] = useState("dot")
         case "About Me":
           component = (
             <div className="p-4 text-gray-200">
-             Proficient in solving a wide range of problems in web front-end and back-end development, with 3.6 years of deep experience in JavaScript. Skilled in creating custom libraries and crafting CSS utility classes similar to Tailwind and material ui components.
+              Proficient in solving a wide range of problems in web front-end and back-end development, with 3.6 years of deep experience in JavaScript. Skilled in creating custom libraries and crafting CSS utility classes similar to Tailwind and material ui components.
             </div>
           );
           title = "About Me";
@@ -348,27 +387,27 @@ const [desktopBg, setDesktopBg] = useState("dot")
           break;
         case "Photos":
           component = <div style={{ width: '100vw', height: '100vh' }}>
-          <DomeGallery grayscale={false}/>
-        </div>;
+            <DomeGallery grayscale={false} />
+          </div>;
           title = "Photos";
           iconPath = "/icons/camera.png";
           defaultWidth = 900;
           defaultHeight = 650;
           break;
-          case "TV":
-            component = <div style={{ height: '600px', position: 'relative' }}>
-            <InfiniteMenu items={news}/>
+        case "TV":
+          component = <div style={{ height: '600px', position: 'relative' }}>
+            <InfiniteMenu items={news} />
           </div>;
-            title = "news";
-            iconPath = "/icons/camera.png";
-            defaultWidth = 900;
-            defaultHeight = 650;
-            break;
+          title = "news";
+          iconPath = "/icons/camera.png";
+          defaultWidth = 900;
+          defaultHeight = 650;
+          break;
         default:
           console.warn(`Application "${appName}" not found.`);
           return;
       }
-  
+
       const existingWindow = openWindows.find((win) => win.title === title);
       if (existingWindow) {
         setOpenWindows((prev) =>
@@ -381,7 +420,7 @@ const [desktopBg, setDesktopBg] = useState("dot")
         setNextZIndex((prev) => prev + 1);
         return;
       }
-  
+
       const newWindow: WindowState = {
         id: `window-${Date.now()}`,
         title,
@@ -400,46 +439,93 @@ const [desktopBg, setDesktopBg] = useState("dot")
         isMinimized: false,
         zIndex: nextZIndex,
       };
-  
+
       setOpenWindows((prev) => [...prev, newWindow]);
       setNextZIndex((prev) => prev + 1);
     },
     [
       commandToAutoRun
-      
+
     ]
   );
 
-  const runCommandInTerminal = useCallback(
-    (command: string , args:string) => {
-      console.log("execute command",command)
-      setCommandToAutoRun({command,args}) // Set the command to be run
-      openApplication("Terminal",150,150,command,args) // Open the terminal (it will pick up the command)
-    },
-    [openApplication,commandToAutoRun]
-  )
-  
-  
+  //git hub vs code 
 
- const openFileDetailsWindow = (file: any) => {
-  console.log("Project ID:", file.projectId) // ✅ now accessible
+  const openGithubApplication = (name: string) => {
+    const repo = icons.find(
+      icon => icon.name === name && icon.type === 'folder'
+    )
 
-  const newWindow: WindowState = {
-    id: `file-details-${file.name}-${Date.now()}`,
-    title: `File: ${file.name}`,
-    icon: "/icons/file.png",
-    component: <FileDetailsViewer file={file} projectId={file.projectId} />,
-    x: Math.random() * 150 + 100,
-    y: Math.random() * 100 + 100,
-    width: 700,
-    height: 500,
-    isMinimized: false,
-    zIndex: nextZIndex,
+    if (!repo || !repo.folderItems) return
+
+    const githubUrlItem = repo.folderItems.find(
+      item => item.type === 'url' && item.value.includes('github.com')
+    )
+
+    if (!githubUrlItem) return
+
+    // 🚀 CREATE WINDOW WITH IFRAME
+    const newWindow: WindowState = {
+      id: `github-${repo.name}-${Date.now()}`,
+      title: repo.name,
+      icon: "/icons/vscode.png", // optional
+      component: (
+        <div className="w-full overflow-auto h-screen">
+          <iframe
+            src={`https://github1s.com/${githubUrlItem.value.replace(
+              'https://github.com/',
+              ''
+            )}/blob/main`}
+            title={repo.name}
+            className="w-full h-full border-none"
+          />
+        </div>
+
+      ),
+      x: 120,
+      y: 80,
+      width: 1000,
+      height: 650,
+      isMinimized: false,
+      zIndex: nextZIndex,
+    }
+
+    setOpenWindows(prev => [...prev, newWindow])
+    setNextZIndex(prev => prev + 1)
   }
 
-  setOpenWindows((prev) => [...prev, newWindow])
-  setNextZIndex((prev) => prev + 1)
-}
+
+
+  const runCommandInTerminal = useCallback(
+    (command: string, args: string) => {
+      console.log("execute command", command)
+      setCommandToAutoRun({ command, args }) // Set the command to be run
+      openApplication("Terminal", 150, 150, command, args) // Open the terminal (it will pick up the command)
+    },
+    [openApplication, commandToAutoRun]
+  )
+
+
+
+  const openFileDetailsWindow = (file: any) => {
+    console.log("Project ID:", file.projectId) // ✅ now accessible
+
+    const newWindow: WindowState = {
+      id: `file-details-${file.name}-${Date.now()}`,
+      title: `File: ${file.name}`,
+      icon: "/icons/file.png",
+      component: <FileDetailsViewer file={file} projectId={file.projectId} />,
+      x: Math.random() * 150 + 100,
+      y: Math.random() * 100 + 100,
+      width: 700,
+      height: 500,
+      isMinimized: false,
+      zIndex: nextZIndex,
+    }
+
+    setOpenWindows((prev) => [...prev, newWindow])
+    setNextZIndex((prev) => prev + 1)
+  }
 
 
   const closeWindow = (id: string) => {
@@ -512,7 +598,7 @@ const [desktopBg, setDesktopBg] = useState("dot")
     { name: "vscode", icon: <SearchIcon /> }, // Using SearchIcon for Music
     { name: "Spotify", icon: <SearchIcon /> }, // Using SearchIcon for Spotify
     { name: "Trash", icon: <Trash2Icon /> },
-   
+
     // { name: "Science Book", icon: <BookIcon /> },
     // { name: "AI Search", icon: <SearchIcon /> },
     // { name: "Excel Editor", icon: <TableIcon /> },
@@ -524,10 +610,10 @@ const [desktopBg, setDesktopBg] = useState("dot")
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-         
+
       if (e.ctrlKey && e.shiftKey && e.key === 'N') {
         e.preventDefault();
-     
+
         const folderName = prompt('Enter folder name:');
         toast.success("CTRL + SHIFT + N")
         if (folderName) {
@@ -538,18 +624,18 @@ const [desktopBg, setDesktopBg] = useState("dot")
             body: JSON.stringify({
               name: folderName,
               type: 'folder',
-              parentId:  null
+              parentId: null
             })
           })
-          .then(response => response.json())
-          .then(data => {
-            // Refresh project explorer or update UI
-            toast.success(`Folder '${folderName}' created`);
-          });
+            .then(response => response.json())
+            .then(data => {
+              // Refresh project explorer or update UI
+              toast.success(`Folder '${folderName}' created`);
+            });
         }
       }
     };
-  
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
@@ -557,110 +643,160 @@ const [desktopBg, setDesktopBg] = useState("dot")
 
 
   // update icon posiiton 
-  const updateIconPosition = (id:any, x:number, y:number) => {
-  setIcons(prev =>
-    prev.map(i =>
-      i.id === id ? { ...i, x, y } : i
-    )
-  );
-};
+  const updateIconPosition = (id: any, x: number, y: number) => {
+    setIcons(prev =>
+      prev.map(i =>
+        i.id === id ? { ...i, x, y } : i
+      )
+    );
+  };
 
 
-const autoArrange = () => {
-  if (!desktopRef.current) return;
+  const autoArrange = () => {
+    if (!desktopRef.current) return;
 
-  const paddingX = 80;
-  const paddingY = 80;
-  const colGap = 150;
-  const rowGap = 130;
+    const paddingX = 80;
+    const paddingY = 80;
+    const colGap = 150;
+    const rowGap = 130;
 
-  const maxRows = Math.floor(
-    (desktopRef.current.offsetHeight - paddingY - 100) / rowGap
-  );
+    const maxRows = Math.floor(
+      (desktopRef.current.offsetHeight - paddingY - 100) / rowGap
+    );
 
-  const arranged = icons.map((icon, index) => {
-    const col = Math.floor(index / maxRows); // Column based on index
-    const row = index % maxRows;             // Row wraps around
+    const arranged = icons.map((icon, index) => {
+      const col = Math.floor(index / maxRows); // Column based on index
+      const row = index % maxRows;             // Row wraps around
 
-    const x = paddingX + col * colGap;
-    const y = paddingY + row * rowGap;
+      const x = paddingX + col * colGap;
+      const y = paddingY + row * rowGap;
 
-    return { ...icon, x, y };
-  });
+      return { ...icon, x, y };
+    });
 
-  setIcons(arranged);
-  toast.success("Icons auto-arranged!");
-};
+    setIcons(arranged);
+    toast.success("Icons auto-arranged!");
+  };
 
 
 
   return (
-   <>
-     <KeyboardProvider
-      onUndo={handleUndo}
-      onRedo={handleRedo}
-      onSave={handleSave}
-      onFind={handleFind}
-      onSelectAll={handleSelectAll}
-      onOpenApps={openApplication}
-      
-    >
-    <TerminalProvider openApplication={openApplication} runCommandInTerminal={runCommandInTerminal}>
-{/*  */}
+    <>
+      <KeyboardProvider
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onSave={handleSave}
+        onFind={handleFind}
+        onSelectAll={handleSelectAll}
+        onOpenApps={openApplication}
 
- <KeyboardWrapper
+      >
+        <TerminalProvider openApplication={openApplication} runCommandInTerminal={runCommandInTerminal}>
+          {/*  */}
+
+          {/* <KeyboardWrapper
         initialX={500}
         initialY={400}
         desktopRef={desktopRef}
-      />
+      /> */}
 
-      
-    <div
-      ref={desktopRef}
-      className="relative w-full h-screen  overflow-hidden"
-      // style={{
-      //   backgroundImage: `
-      //     linear-gradient(to right,rgb(0, 0, 0) 1px, transparent 1px),
-      //     linear-gradient(to bottom,rgb(28, 19, 56) 1px, transparent 1px)
-      //   `,
-      //   backgroundSize: '40px 40px',
-      // }}
-    >
-        {desktopBg === "dot" && <DotGrid />}
-{desktopBg === "wave" && <WavesDemo />}
 
-          {/* <KeyboardWrapper
+          <div
+            ref={desktopRef}
+            className="relative w-full h-screen  overflow-hidden "
+
+
+            style={{
+              backgroundColor: `hsl(${themeColor})`,
+              backgroundImage: backgroundImage ? `url('${settings.backgroundImage}')` : undefined,
+              backgroundSize: 'cover',
+
+              backgroundPosition: 'center',
+              backgroundAttachment: 'fixed',
+
+            }}
+          >
+            {desktopBg === "dot" && <DotGrid />}
+            {desktopBg === "wave" && <WavesDemo />}
+
+            {/* <KeyboardWrapper
         initialX={50}
         initialY={50}
         desktopRef={desktopRef}
       /> */}
 
-      {/* Top Bar */}
-      <div className="absolute top-0 left-0 right-0 h-8 bg-gray-700 bg-opacity-50 backdrop-blur-sm flex items-center px-4 text-gray-300 text-sm z-50">
-        <div className="flex space-x-4">
-          <span className="font-bold text-white">VIBHAV'S MAC</span>
-          <a href="#" className="hover:text-white transition-colors">Contact</a>
-          <a href="#" className="hover:text-white transition-colors">Resume</a>
-          <p className="hover:text-white cursor-pointer transition-colors" onClick={()=>openApplication('game')}>Game</p>
-          
-        </div>
-        <div className="ml-auto flex items-center cursor-pointer space-x-4">
-          {/* Placeholder for system icons */}
-          <span className="text-gray-400">🔍</span>
-          <span className="text-gray-400" onClick={()=>openApplication('website')}>🌐</span>
-          <span className="text-gray-400" >🔋</span>
-          <span className="text-gray-400">🔊</span>
-          <span className="text-gray-400">Wi-Fi</span>
-          <span className="text-gray-400" onClick={autoArrange}>A</span>
-          <span className="text-gray-400" onClick={() =>
-    setDesktopBg(prev => (prev === "dot" ? "wave" : "dot"))
-  }>⌘</span>
-          <span className="text-gray-400" suppressHydrationWarning>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-        </div>
-      </div>
-{/* <CustomCursor /> */}
-      {/* Central Portfolio Text */}
-      {/* <h1
+            {/* Top Bar */}
+            {/* Top Bar - Responsive */}
+            <div
+              className="absolute top-0 left-0 right-0 bg-opacity-50 backdrop-blur-sm flex items-center px-2 md:px-4 text-gray-300 text-xs md:text-sm z-50 h-7 md:h-8"
+              style={{ background: "rgba(255, 255, 255, 0.15)" }}
+            >
+              {/* Left Section - Menu Items */}
+              <div className="flex space-x-2 md:space-x-4">
+                <span className="font-bold text-white text-xs md:text-sm">VIBHAV'S MAC</span>
+
+                {/* Hide menu items on small mobile, show on tablet+ */}
+                <div className="hidden sm:flex space-x-2 md:space-x-4">
+                  <a href="#" className="text-white transition-colors">Contact</a>
+                  <a href="#" className="text-white transition-colors">Resume</a>
+                  <p
+                    className="hover:text-white cursor-pointer transition-colors"
+                    onClick={() => openApplication('game')}
+                  >
+                    Game
+                  </p>
+                </div>
+
+                {/* Mobile menu icon (hamburger) - show only on mobile */}
+                <button
+                  className="sm:hidden hover:text-white transition-colors"
+                  onClick={() => {/* toggle mobile menu */ }}
+                >
+                  ☰
+                </button>
+              </div>
+
+              {/* Right Section - System Icons */}
+              <div className="ml-auto flex items-center cursor-pointer space-x-2 md:space-x-4">
+                {/* Show fewer icons on mobile */}
+                <span
+                  className="text-gray-400 hover:text-white transition-colors text-base md:text-sm"
+                  onClick={() => openApplication('website')}
+                >
+                  🌐
+                </span>
+
+                {/* Hide on small screens */}
+                <span className="text-gray-400 hidden xs:inline">🔋</span>
+                <span className="text-gray-400 hidden xs:inline">🔊</span>
+                <span className="text-gray-400 hidden sm:inline">Wi-Fi</span>
+
+                <span
+                  className="text-gray-400 hover:text-white transition-colors"
+                  onClick={autoArrange}
+                >
+                  A
+                </span>
+
+                <span
+                  className="text-gray-400 hover:text-white transition-colors"
+                  onClick={() => setDesktopBg(prev => (prev === "dot" ? "wave" : "dot"))}
+                >
+                  ⌘
+                </span>
+
+                {/* Always show time */}
+                <span
+                  className="text-gray-400 text-xs md:text-sm whitespace-nowrap"
+                  suppressHydrationWarning
+                >
+                  {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+            </div>
+            {/* <CustomCursor /> */}
+            {/* Central Portfolio Text */}
+            {/* <h1
         ref={portfolioTextRef}
         className="absolute top-50 left-1/2 -translate-x-1/2 -translate-y-1/2 text-9xl font-serif text-gray-800 opacity-0"
         // style={{ fontFamily: 'Georgia, serif' }}
@@ -681,87 +817,99 @@ const autoArrange = () => {
       
       </h1> */}
 
-      {icons.map(icon => (
-  // <DesktopIcon
-  //   key={icon.id}
-  //   name={icon.name}
-  //   icon={icon.icon}
-  //   initialX={icon.x}
-  //   initialY={icon.y}
-  //   onPositionChange={(x,y) =>
-  //     updateIconPosition(icon.id, x, y)
-  //   }
-  //   onDoubleClick={() => openApplication(icon.name)}
-  //   desktopRef={desktopRef}
-  // />
 
-  <DesktopIcon
-              key={icon.id}
-              name={icon.name}
-              icon={icon.icon}
-              initialX={icon.x}
-              initialY={icon.y}
-              onPositionChange={(x, y) => updateIconPosition(icon.id, x, y)}
-              onDoubleClick={() => openApplication(icon.name)}
-              desktopRef={desktopRef}
-              folderColor={icon.folderColor}
-              folderItems={icon.folderItems}
+
+
+            {icons?.slice(0, 7).map(icon => (
+              // <DesktopIcon
+              //   key={icon.id}
+              //   name={icon.name}
+              //   icon={icon.icon}
+              //   initialX={icon.x}
+              //   initialY={icon.y}
+              //   onPositionChange={(x,y) =>
+              //     updateIconPosition(icon.id, x, y)
+              //   }
+              //   onDoubleClick={() => openApplication(icon.name)}
+              //   desktopRef={desktopRef}
+              // />
+
+              <DesktopIcon
+                key={icon.id}
+                name={icon.name}
+                icon={icon.icon}
+                initialX={icon.x}
+                initialY={icon.y}
+                onPositionChange={(x, y) => updateIconPosition(icon.id, x, y)}
+                onDoubleClick={() => openGithubApplication(icon.name)}
+                desktopRef={desktopRef}
+                folderColor={settings.folderColor}
+                folderItems={icon.folderItems}
+                themeColor={themeColor}
+              />
+            ))}
+
+
+
+
+
+
+
+
+
+            {/* Sticky Note */}
+            {/* <StickyNote initialX={1000} initialY={30} desktopRef={desktopRef} /> */}
+
+            {/* Render open windows */}
+            {openWindows.map((win) => (
+              <Window
+                key={win.id}
+                id={win.id}
+                title={win.title}
+                icon={win.icon}
+                initialX={win.x}
+                initialY={win.y}
+                initialWidth={win.width}
+                initialHeight={win.height}
+                isMinimized={win.isMinimized}
+                zIndex={50 + win.zIndex}
+                onClose={closeWindow}
+                onMinimize={minimizeWindow}
+                onFocus={bringToFront}
+                desktopRef={desktopRef}
+                themeColor={themeColor}
+              >
+                {win.component}
+              </Window>
+            ))}
+
+            {/* Dock */}
+            {/* <Dock appIcons={dockAppIcons} onAppClick={openApplication} /> */}
+            <Dock
+              appIcons={dockAppIcons}
+              minappIcons={[
+                ...openWindows
+                  .filter(win => win.isMinimized) // only minimized windows
+                  .map(win => ({
+                    id: win.id,
+                    icon: win.icon,
+                    title: win.title,
+                    isMinimized: true,
+                  }))
+              ]}
+              onAppClick={openApplication}
+              onminAppClick={(id) => {
+                setOpenWindows(prev =>
+                  prev.map(win =>
+                    win.id === id ? { ...win, isMinimized: false } : win
+                  )
+                )
+              }}
             />
-))}
-
-
-      {/* Sticky Note */}
-      <StickyNote initialX={1000} initialY={30} desktopRef={desktopRef} />
-
-      {/* Render open windows */}
-      {openWindows.map((win) => (
-        <Window
-          key={win.id}
-          id={win.id}
-          title={win.title}
-          icon={win.icon}
-          initialX={win.x}
-          initialY={win.y}
-          initialWidth={win.width}
-          initialHeight={win.height}
-          isMinimized={win.isMinimized}
-          zIndex={50 + win.zIndex}
-          onClose={closeWindow}
-          onMinimize={minimizeWindow}
-          onFocus={bringToFront}
-          desktopRef={desktopRef}
-        >
-          {win.component}
-        </Window>
-      ))}
-
-      {/* Dock */}
-      {/* <Dock appIcons={dockAppIcons} onAppClick={openApplication} /> */}
-      <Dock 
-      appIcons={dockAppIcons}
-      minappIcons={[
-        ...openWindows
-        .filter(win => win.isMinimized) // only minimized windows
-        .map(win => ({
-          id: win.id,
-          icon: win.icon,
-          title: win.title,
-          isMinimized: true,
-        }))
-      ]} 
-      onAppClick={openApplication}
-      onminAppClick={(id) => {
-        setOpenWindows(prev =>
-          prev.map(win =>
-            win.id === id ? { ...win, isMinimized: false } : win
-          )
-        )
-      }}
-      />
-    </div>
-    </TerminalProvider>
-    </KeyboardProvider>
-   </>
+          </div>
+        </TerminalProvider>
+      </KeyboardProvider>
+    </>
   );
 }
 
