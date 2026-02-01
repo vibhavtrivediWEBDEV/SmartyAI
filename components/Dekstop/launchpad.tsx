@@ -19,43 +19,89 @@ export default function AppLaunchpad() {
   ]
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-transparent">
+    <div className="flex items-center justify-center min-h-screen bg-transparent w-full ">
       <div
         className="
           relative
           w-full
+          max-w-7xl
           aspect-[16/10]
-          rounded-xl
+          sm:aspect-[16/10]
+          md:aspect-[16/10]
+          h-screen
           overflow-hidden
           shadow-2xl
           border
           border-gray-300
-          bg-white bg-opacity-20
+           bg-opacity-20
           backdrop-brightness-110
         "
         style={{ backdropFilter: "blur(4px)" }}
       >
-        {/* Main App Grid */}
-        <div className="absolute inset-0 p-8 grid grid-cols-8 grid-rows-5 gap-y-2 gap-x-2 justify-items-center content-center">
+        {/* Main App Grid - Responsive */}
+        <div
+          className="
+            absolute inset-0 
+            p-4 sm:p-6 md:p-8 
+            grid 
+            h-screen
+            grid-cols-4 sm:grid-cols-6 md:grid-cols-7 lg:grid-cols-8
+            gap-3 sm:gap-4 md:gap-y-2 md:gap-x-2 
+            justify-items-center 
+            content-start sm:content-center
+            overflow-y-auto
+            scrollbar-hide
+          "
+        >
           {appIconsData.map((app, index) => (
             <div
               key={index}
-              className="flex flex-col items-center justify-center text-center group cursor-pointer"
+              className="
+                flex flex-col items-center justify-center text-center 
+                group cursor-pointer
+                w-full
+                active:scale-95 transition-transform
+              "
             >
-              <div className="relative w-16 h-16 mb-2 transition-transform duration-200 group-hover:scale-110">
+              {/* Icon - Responsive sizing */}
+              <div className="
+                relative 
+                w-12 h-12 
+                sm:w-14 sm:h-14 
+                md:w-16 md:h-16 
+                mb-1 sm:mb-2 
+                transition-transform duration-200 
+                group-hover:scale-110
+                touch-manipulation
+              ">
                 <Image
                   src={app.url || "/placeholder.svg"}
                   alt={`${app.name} icon`}
-                  width={84}
-                  height={84}
-                  className="rounded-xl"
+                  fill
+                  className="rounded-xl object-contain"
+                  sizes="(max-width: 640px) 48px, (max-width: 768px) 56px, 64px"
+                  priority
                 />
               </div>
-              <p className="text-xs text-black font-medium drop-shadow-sm">{app.name}</p>
+
+              {/* Label - Responsive text */}
+              <p className="
+                text-[10px] sm:text-xs md:text-xs 
+                text-black font-medium 
+                drop-shadow-sm 
+                line-clamp-2 
+                w-full 
+                px-1
+                leading-tight
+              ">
+                {app.name}
+              </p>
             </div>
           ))}
         </div>
       </div>
+
+
     </div>
   )
 }

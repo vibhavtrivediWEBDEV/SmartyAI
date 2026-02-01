@@ -9,6 +9,7 @@ import React, {
 } from "react"
 import { gsap } from "gsap"
 import { SearchIcon } from "lucide-react"
+import { useSettings } from "@/app/context/settingContext"
 
 interface WindowProps {
   id: string
@@ -24,6 +25,7 @@ interface WindowProps {
   onMinimize: (id: string) => void
   onFocus: (id: string) => void
   desktopRef: React.RefObject<HTMLDivElement>
+  themeColor: string
   children: React.ReactNode
 }
 
@@ -41,60 +43,67 @@ export function Window({
   onMinimize,
   onFocus,
   desktopRef,
+  themeColor,
   children,
 }: WindowProps) {
+
+
+  const { settings } = useSettings()
   const [x, setX] = useState(initialX)
   const [y, setY] = useState(initialY)
   const [width, setWidth] = useState(initialWidth)
   const [height, setHeight] = useState(initialHeight)
   const [isDragging, setIsDragging] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   const windowRef = useRef<HTMLDivElement>(null)
   const dragOffset = useRef({ x: 0, y: 0 })
   const resizeStart = useRef({ x: 0, y: 0, width: 0, height: 0 })
 
   const [isMaximized, setIsMaximized] = useState(false)
-const [prevBounds, setPrevBounds] = useState<{
-  x: number
-  y: number
-  width: number
-  height: number
-} | null>(null)
+  const [prevBounds, setPrevBounds] = useState<{
+    x: number
+    y: number
+    width: number
+    height: number
+  } | null>(null)
 
+  // Detect mobile viewport
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768
+      setIsMobile(mobile)
+
+      // Auto-maximize on mobile using full viewport
+      if (mobile && !isMaximized) {
+        setPrevBounds({ x, y, width, height })
+        setX(0)
+        setY(0)
+        setWidth(window.innerWidth)
+        setHeight(window.innerHeight)
+        setIsMaximized(true)
+      }
+    }
+
+    checkMobile()
+    window.addEventListener("resize", checkMobile)
+    return () => window.removeEventListener("resize", checkMobile)
+  }, [])
 
   // --- macOS-like Open Animation ---
   useLayoutEffect(() => {
     if (windowRef.current) {
-      const rect = windowRef.current.getBoundingClientRect()
-      // gsap.fromTo(
-      //   windowRef.current,
-      //   {
-      //     scale: 0.2,
-      //     opacity: 0,
-      //     x: 0,
-      //     y: window.innerHeight - rect.top - rect.height / 2 - 40,
-      //   },
-      //   {
-      //     scale: 1,
-      //     opacity: 1,
-      //     x: 0,
-      //     y: 0,
-      //     duration: 0.45,
-      //     ease: "power4.out",
-      //   }
-      // )
       gsap.fromTo(
-  windowRef.current,
-  { scale: 0.96, opacity: 0 },
-  {
-    scale: 1,
-    opacity: 1,
-    duration: 0.35,
-    ease: "power3.out",
-    clearProps: "transform",
-  }
-)
-
+        windowRef.current,
+        { scale: 0.96, opacity: 0 },
+        {
+          scale: 1,
+          opacity: 1,
+          duration: 0.35,
+          ease: "power3.out",
+          clearProps: "transform",
+        }
+      )
     }
   }, [])
 
@@ -114,66 +123,59 @@ const [prevBounds, setPrevBounds] = useState<{
     }
   }, [id, onClose])
 
-  // --- Click outside to minimize ---
-  // useEffect(() => {
-  //   const handleClickOutside = (e: MouseEvent) => {
-  //     if (windowRef.current && !windowRef.current.contains(e.target as Node)) {
-  //       onMinimize(id)
-  //     }
-  //   }
-  //   document.addEventListener("mousedown", handleClickOutside)
-  //   return () => {
-  //     document.removeEventListener("mousedown", handleClickOutside)
-  //   }
-  // }, [id, onMinimize])
-
-  // --- Dragging ---
+  // --- Dragging (disabled on mobile when maximized) ---
   const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
+    (e: React.MouseEvent | React.TouchEvent) => {
+      if (isMobile && isMaximized) return // Disable drag on mobile when maximized
+
       if (
         e.target instanceof HTMLElement &&
         e.target.closest(".window-control-button")
       )
         return
       if (windowRef.current) {
-        onFocus(id) // Bring this window to front
+        onFocus(id)
         setIsDragging(true)
+
+        const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
+        const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY
+
         dragOffset.current = {
-          x: e.clientX - windowRef.current.getBoundingClientRect().left,
-          y: e.clientY - windowRef.current.getBoundingClientRect().top,
+          x: clientX - windowRef.current.getBoundingClientRect().left,
+          y: clientY - windowRef.current.getBoundingClientRect().top,
         }
       }
     },
-    [id, onFocus]
+    [id, onFocus, isMobile, isMaximized]
   )
 
   const handleMouseMove = useCallback(
-    (e: MouseEvent) => {
+    (e: MouseEvent | TouchEvent) => {
       if (!desktopRef.current) return
 
       const desktopRect = desktopRef.current.getBoundingClientRect()
+      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
+      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY
 
-      if (isDragging) {
-        let newX = e.clientX - dragOffset.current.x
-        let newY = e.clientY - dragOffset.current.y
-        // Clamp position inside desktop bounds
+      if (isDragging && !isMobile) {
+        let newX = clientX - dragOffset.current.x
+        let newY = clientY - dragOffset.current.y
         newX = Math.max(0, Math.min(newX, desktopRect.width - width))
         newY = Math.max(0, Math.min(newY, desktopRect.height - height))
         setX(newX)
         setY(newY)
-      } else if (isResizing) {
+      } else if (isResizing && !isMobile) {
         let newWidth =
-          resizeStart.current.width + (e.clientX - resizeStart.current.x)
+          resizeStart.current.width + (clientX - resizeStart.current.x)
         let newHeight =
-          resizeStart.current.height + (e.clientY - resizeStart.current.y)
-        // Clamp size and keep window inside desktop bounds
+          resizeStart.current.height + (clientY - resizeStart.current.y)
         newWidth = Math.max(300, Math.min(newWidth, desktopRect.width - x))
         newHeight = Math.max(200, Math.min(newHeight, desktopRect.height - y))
         setWidth(newWidth)
         setHeight(newHeight)
       }
     },
-    [isDragging, isResizing, width, height, x, y, desktopRef]
+    [isDragging, isResizing, width, height, x, y, desktopRef, isMobile]
   )
 
   const handleMouseUp = useCallback(() => {
@@ -181,32 +183,36 @@ const [prevBounds, setPrevBounds] = useState<{
     setIsResizing(false)
   }, [])
 
-  // --- Resize Mouse Down ---
+  // --- Resize Mouse Down (disabled on mobile) ---
   const handleResizeMouseDown = useCallback(
-    (e: React.MouseEvent) => {
+    (e: React.MouseEvent | React.TouchEvent) => {
+      if (isMobile) return // Disable resize on mobile
+
       e.stopPropagation()
-      onFocus(id) // Bring to front on resize start
+      onFocus(id)
       setIsResizing(true)
+
+      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
+      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY
+
       resizeStart.current = {
-        x: e.clientX,
-        y: e.clientY,
+        x: clientX,
+        y: clientY,
         width,
         height,
       }
     },
-    [id, onFocus, width, height]
+    [id, onFocus, width, height, isMobile]
   )
 
-  // maximise 
-
+  // Maximize
   const handleMaximize = useCallback(() => {
     if (!desktopRef.current) return
-  
+
     const desktopRect = desktopRef.current.getBoundingClientRect()
-  
+
     if (isMaximized) {
-      // Restore to previous bounds
-      if (prevBounds) {
+      if (prevBounds && !isMobile) {
         setX(prevBounds.x)
         setY(prevBounds.y)
         setWidth(prevBounds.width)
@@ -214,103 +220,145 @@ const [prevBounds, setPrevBounds] = useState<{
       }
       setIsMaximized(false)
     } else {
-      // Save current bounds before maximizing
       setPrevBounds({ x, y, width, height })
-  
       setX(0)
       setY(0)
       setWidth(desktopRect.width)
       setHeight(desktopRect.height)
-  
       setIsMaximized(true)
     }
-  }, [isMaximized, x, y, width, height, desktopRef, prevBounds])
-  
+  }, [isMaximized, x, y, width, height, desktopRef, prevBounds, isMobile])
 
-  // --- Global Mouse Move/Up Listeners ---
+  // --- Global Mouse/Touch Move/Up Listeners ---
   useEffect(() => {
     if (isDragging || isResizing) {
       document.addEventListener("mousemove", handleMouseMove)
       document.addEventListener("mouseup", handleMouseUp)
+      document.addEventListener("touchmove", handleMouseMove)
+      document.addEventListener("touchend", handleMouseUp)
     } else {
       document.removeEventListener("mousemove", handleMouseMove)
       document.removeEventListener("mouseup", handleMouseUp)
+      document.removeEventListener("touchmove", handleMouseMove)
+      document.removeEventListener("touchend", handleMouseUp)
     }
     return () => {
       document.removeEventListener("mousemove", handleMouseMove)
       document.removeEventListener("mouseup", handleMouseUp)
+      document.removeEventListener("touchmove", handleMouseMove)
+      document.removeEventListener("touchend", handleMouseUp)
     }
   }, [isDragging, isResizing, handleMouseMove, handleMouseUp])
 
-  // if (isMinimized) return null
-
   if (isMinimized) {
-    return (
-      <div style={{ display: "none" }} /> // keep alive, but hidden
-    )
+    return <div style={{ display: "none" }} />
   }
-  
 
   return (
     <div
       ref={windowRef}
-      className="absolute bg-gray-800 rounded-lg shadow-2xl flex flex-col overflow-hidden border border-gray-700"
+      className={`shadow-2xl flex flex-col overflow-hidden backdrop-blur-2xl ${isMobile ? "fixed inset-0 rounded-none" : "absolute rounded-xl"
+        }`}
       style={{
-        left: x,
-        top: y,
-        width,
-        height,
+        ...(isMobile
+          ? {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: "100vw",
+            height: "100vh",
+          }
+          : {
+            left: x,
+            top: y,
+            width,
+            height,
+          }),
         zIndex,
         transformOrigin: "center center",
         userSelect: isDragging || isResizing ? "none" : "auto",
-        display: isMinimized ? "none" : "block", // 👈 hide window when minimized
-
+        display: isMinimized ? "none" : "block",
+        background: settings.darkMode ? `hsl(${themeColor})` : '',
+        border: "1px solid rgba(255, 255, 255, 0.2)",
       }}
-      onMouseDown={() => onFocus(id)} // Ensure clicking anywhere brings to front
-        // onPointerDownCapture={() => onFocus(id)}
+      onMouseDown={() => onFocus(id)}
+      onTouchStart={() => onFocus(id)}
     >
-      {/* Title Bar */}
+      {/* Title Bar - Responsive */}
       <div
-        className="flex items-center justify-between bg-gray-700 px-3 py-2 border-b border-gray-600 cursor-grab active:cursor-grabbing select-none"
+        className={`flex items-center justify-between px-3 cursor-grab active:cursor-grabbing select-none flex-shrink-0 backdrop-blur-xl ${isMobile ? "py-3 h-14" : "py-2 h-10"
+          }`}
+        style={{
+          background: "rgba(255, 255, 255, 0.1)",
+          borderBottom: "1px solid rgba(255, 255, 255, 0.15)",
+        }}
         onMouseDown={handleMouseDown}
+        onTouchStart={handleMouseDown}
       >
-        <div className="flex space-x-2">
+        <div className="flex items-center space-x-2 flex-shrink-0">
           <button
             onClick={handleClose}
-            className="window-control-button cursor-pointer w-3 h-3 rounded-full bg-red-500 hover:bg-red-600"
+            className={`window-control-button cursor-pointer rounded-full bg-red-500/90 hover:bg-red-600 flex-shrink-0 transition-colors backdrop-blur-sm ${isMobile ? "w-5 h-5" : "w-3 h-3"
+              }`}
             aria-label="Close window"
           />
           <button
             onClick={() => onMinimize(id)}
-            className="window-control-button w-3 h-3 cursor-pointer rounded-full bg-yellow-500 hover:bg-yellow-600"
+            className={`window-control-button cursor-pointer rounded-full bg-yellow-500/90 hover:bg-yellow-600 flex-shrink-0 transition-colors backdrop-blur-sm ${isMobile ? "w-5 h-5" : "w-3 h-3"
+              }`}
             aria-label="Minimize window"
           />
           <button
-          onClick={handleMaximize}
-            className="window-control-button w-3 h-3 cursor-pointer rounded-full bg-green-500 hover:bg-green-600"
+            onClick={handleMaximize}
+            className={`window-control-button cursor-pointer rounded-full bg-green-500/90 hover:bg-green-600 flex-shrink-0 transition-colors backdrop-blur-sm ${isMobile ? "w-5 h-5" : "w-3 h-3"
+              }`}
             aria-label="Maximize window"
           />
         </div>
 
-        <div className="flex items-center space-x-2 absolute left-1/2 -translate-x-1/2 pointer-events-none">
-          {icon && <SearchIcon size={12} />}
-          <span className="text-sm text-gray-200 font-semibold">{title}</span>
+        <div className="flex items-center space-x-2 absolute left-1/2 -translate-x-1/2 pointer-events-none flex-shrink-0">
+          {icon && (
+            <SearchIcon
+              size={isMobile ? 16 : 12}
+              className="text-white/90"
+            />
+          )}
+          <span
+            className={`font-semibold text-white/90 truncate drop-shadow-sm ${isMobile ? "text-base" : "text-sm"
+              }`}
+          >
+            {title}
+          </span>
         </div>
 
-        <div className="w-16" />
+        <div className="w-16 flex-shrink-0" />
       </div>
 
-      {/* Window Content */}
-      <div className="flex-1  scroll-smooth
-    overscroll-contain overflow-auto"   style={{
-    WebkitOverflowScrolling: "touch",
-  }}  >{children}</div>
-
-      {/* Resize Handle */}
+      {/* Window Content - Responsive */}
       <div
-        className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize"
-        onMouseDown={handleResizeMouseDown}
-      />
+        className="flex-1 overflow-auto scroll-smooth overscroll-contain"
+        style={{
+          WebkitOverflowScrolling: "touch",
+          minHeight: 0,
+          background: "transparent",
+        }}
+      >
+        {children}
+      </div>
+
+      {/* Resize Handle - Hidden on mobile */}
+      {!isMobile && (
+        <div
+          className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize opacity-0 hover:opacity-100 transition-opacity"
+          style={{
+            background:
+              "radial-gradient(circle at bottom right, rgba(255,255,255,0.3), transparent)",
+          }}
+          onMouseDown={handleResizeMouseDown}
+          onTouchStart={handleResizeMouseDown}
+        />
+      )}
     </div>
   )
 }

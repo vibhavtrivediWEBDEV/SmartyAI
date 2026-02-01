@@ -5,6 +5,7 @@ import type { LucideIcon } from 'lucide-react' // Import type for LucideIcon
 import Image from "next/image"
 import Folder from "../animationComponents/dekstopFolder"
 import type { RepositoryItem } from "@/lib/github-data"
+import { useSettings } from "@/app/context/settingContext"
 
 interface DesktopIconProps {
   name: string
@@ -18,12 +19,14 @@ interface DesktopIconProps {
   folderItems?: RepositoryItem[]
 }
 
-export function DesktopIcon({ name, icon: IconComponent, initialX, initialY, onDoubleClick, onPositionChange, desktopRef, folderColor = '#FF6B6B', folderItems = [] }: DesktopIconProps) {
+export function DesktopIcon({ name, icon: IconComponent, initialX, initialY, onDoubleClick, onPositionChange, desktopRef, folderColor = 'red', folderItems = [] }: DesktopIconProps) {
   const [x, setX] = useState(initialX)
   const [y, setY] = useState(initialY)
   const [isDragging, setIsDragging] = useState(false)
   const dragOffset = useRef({ x: 0, y: 0 })
   const iconRef = useRef<HTMLDivElement>(null)
+
+  const { settings } = useSettings();
 
   // Update position when initialX or initialY change (e.g., from auto arrange)
   useEffect(() => {
@@ -76,6 +79,8 @@ export function DesktopIcon({ name, icon: IconComponent, initialX, initialY, onD
     };
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
+  // const isMobile = window.innerWidth < 868
+
   return (
     <div
       ref={iconRef}
@@ -87,8 +92,9 @@ export function DesktopIcon({ name, icon: IconComponent, initialX, initialY, onD
       {typeof IconComponent === 'string' ? ( // Check if it's a string (image path)
         <Image src={IconComponent || "/placeholder.svg"} alt={name} width={64} height={64} className="mb-1" />
       ) : ( // Assume it's a ReactNode (Lucide icon or Folder)
-        <Folder 
-          color={folderColor} 
+        <Folder
+          color={folderColor}
+          size={(settings.fontSize / (30))}
           items={folderItems.map((item, idx) => (
             item.label === 'Description' ? (<></>
               // <div 
@@ -105,14 +111,14 @@ export function DesktopIcon({ name, icon: IconComponent, initialX, initialY, onD
               <div key={idx} className="w-full h-full p-3 overflow-y-auto text-xs flex flex-col">
                 <div className="font-semibold text-gray-700 break-words">{item.label}</div>
                 {item.type === 'url' ? (
-                  <a 
-                    href={item.value} 
-                    
-                    target="_blank" 
+                  <a
+                    href={item.value}
+
+                    target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-500 hover:underline break-all text-[10px] mt-1"
+                    className="text-blue-500 hover:underline break-all  mt-1"
                     onClick={(e) => e.stopPropagation()}
-                   
+
                   >
                     {item.value}
                   </a>
@@ -124,8 +130,8 @@ export function DesktopIcon({ name, icon: IconComponent, initialX, initialY, onD
           ))}
         />
       )}
-<span className="bg-gray-300 bg-opacity-70 px-2 py-0.5 rounded-md whitespace-nowrap">
-  {name.length > 12 ? name.substring(0, 12) + '...' : name}
-</span>    </div>
+      <span style={{ fontSize: settings.fontSize }} className="bg-gray-300 bg-opacity-70 px-2 py-0.5 rounded-md whitespace-nowrap">
+        {name.length > 12 ? name.substring(0, 12) + '...' : name}
+      </span>    </div>
   );
 }

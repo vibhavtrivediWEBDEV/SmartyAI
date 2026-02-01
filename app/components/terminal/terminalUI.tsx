@@ -71,7 +71,7 @@ export function TerminalUI({ autoRunCommand,autoRunCommandArgs, onCommandExecute
           setIsMinimized(false)
           setIsClosed(false)
         }}
-        className="fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg cursor-pointer hover:bg-gray-700 transition"
+        className="fixed bottom-4 right-4 bg-trans text-white px-4 py-2 rounded-full shadow-lg cursor-pointer hover:bg-gray-700 transition"
       >
         Open Terminal
       </div>
@@ -93,7 +93,7 @@ export function TerminalUI({ autoRunCommand,autoRunCommandArgs, onCommandExecute
             </div>
 
             {/* Input bar (UI unchanged) */}
-            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-700 bg-gray-900">
+            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-700 bg-">
 
               <TerminalInput
                 ref={inputRef}

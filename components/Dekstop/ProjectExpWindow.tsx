@@ -22,6 +22,7 @@ import {
   Edit3,
 } from "lucide-react"
 import { useKeyboard } from "@/app/context/keyBoardContext"
+import { useSettings } from "@/app/context/settingContext"
 
 interface ProjectFile {
   id: string
@@ -62,6 +63,10 @@ const FILE_EXTENSIONS = {
 
 export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplorerWindowProps) {
   const [projects, setProjects] = useState<ProjectFile[]>([])
+
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string>("")
@@ -74,6 +79,8 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
     fileType: string
     parentId: string
   } | null>(null)
+
+  const { settings } = useSettings()
 
   const {
     selectedItems,
@@ -109,33 +116,33 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
       try {
         console.log("[v0] Creating:", name, "Type:", type, "ParentId:", parentId)
 
-    if (type === "file" && parentId) {
-  const response = await fetch(`/api/Projects/${parentId}/files`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name,
-      type: "document", // IMPORTANT (match seed)
-      content: "",
-    }),
-  })
+        if (type === "file" && parentId) {
+          const response = await fetch(`/api/Projects/${parentId}/files`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name,
+              type: "document", // IMPORTANT (match seed)
+              content: "",
+            }),
+          })
 
-  if (!response.ok) throw new Error("Failed to create file")
+          if (!response.ok) throw new Error("Failed to create file")
 
-  const result = await response.json()
+          const result = await response.json()
 
-  setProjects(prev =>
-    prev.map(p =>
-      p.id === parentId
-        ? { ...p, files: [...(p.files || []), result.data] }
-        : p
-    )
-  )
+          setProjects(prev =>
+            prev.map(p =>
+              p.id === parentId
+                ? { ...p, files: [...(p.files || []), result.data] }
+                : p
+            )
+          )
 
-  onDataChange?.()
-  return result.data
-}
- else {
+          onDataChange?.()
+          return result.data
+        }
+        else {
           // Creating a folder at root level
           const response = await fetch("/api/Projects", {
             method: "POST",
@@ -329,7 +336,7 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
       case "docx":
       case "txt":
       case "md":
-        return <FileTextIcon size={iconSize} className="text-gray-500" />
+        return <FileTextIcon size={iconSize} className="text-gray-500 " />
       case "mp4":
       case "mov":
       case "avi":
@@ -366,11 +373,11 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
   const handleFileClick = useCallback(
     (file: ProjectFile, event: React.MouseEvent) => {
       if (renamingItem === file.id) return
-// console.log("click-project",selectedCategory)
-     if (event.detail === 2) {
-onOpenFile({ ...file, projectId: selectedCategory } as OpenFile)
-  return
-}
+      // console.log("click-project",selectedCategory)
+      if (event.detail === 2) {
+        onOpenFile({ ...file, projectId: selectedCategory } as OpenFile)
+        return
+      }
 
 
       if (isCommandPressed) {
@@ -381,172 +388,172 @@ onOpenFile({ ...file, projectId: selectedCategory } as OpenFile)
         setSelectedItems([file.id])
       }
     },
-    [onOpenFile, isCommandPressed,selectedCategory, setSelectedItems, renamingItem]
+    [onOpenFile, isCommandPressed, selectedCategory, setSelectedItems, renamingItem]
   )
 
-const handleContextMenu = useCallback(
-  (file: ProjectFile, event: React.MouseEvent) => {
-    event.preventDefault()
-    event.stopPropagation()
+  const handleContextMenu = useCallback(
+    (file: ProjectFile, event: React.MouseEvent) => {
+      event.preventDefault()
+      event.stopPropagation()
 
-    if (!selectedItems.includes(file.id)) {
-      setSelectedItems([file.id])
-    }
+      if (!selectedItems.includes(file.id)) {
+        setSelectedItems([file.id])
+      }
 
-    const contextMenuItems = [
-      {
-        label: "Open",
-        icon: <FolderOpen className="h-4 w-4" />,
-        action: () => onOpenFile({ ...file, projectId: selectedCategory } as OpenFile),
+      const contextMenuItems = [
+        {
+          label: "Open",
+          icon: <FolderOpen className="h-4 w-4" />,
+          action: () => onOpenFile({ ...file, projectId: selectedCategory } as OpenFile),
 
-      },
-      { label: "---", disabled: true },
-      {
-        label: "Copy",
-        icon: <Copy className="h-4 w-4" />,
-        action: () => {
-          const items = selectedItems.map((id) => {
-            const fileData = projects.find((p) => p.id === id)
-            return {
-              id,
-              name: fileData?.name || "",
-              type: fileData?.type === "folder" ? "folder" : "file",
-              data: fileData,
-              operation: "copy" as const,
-              source: selectedCategory,
+        },
+        { label: "---", disabled: true },
+        {
+          label: "Copy",
+          icon: <Copy className="h-4 w-4" />,
+          action: () => {
+            const items = selectedItems.map((id) => {
+              const fileData = projects.find((p) => p.id === id)
+              return {
+                id,
+                name: fileData?.name || "",
+                type: fileData?.type === "folder" ? "folder" : "file",
+                data: fileData,
+                operation: "copy" as const,
+                source: selectedCategory,
+              }
+            })
+            copyItems(items)
+          },
+        },
+        {
+          label: "Cut",
+          icon: <Scissors className="h-4 w-4" />,
+          action: () => {
+            const items = selectedItems.map((id) => {
+              const fileData = projects.find((p) => p.id === id)
+              return {
+                id,
+                name: fileData?.name || "",
+                type: fileData?.type === "folder" ? "folder" : "file",
+                data: fileData,
+                operation: "cut" as const,
+                source: selectedCategory,
+              }
+            })
+            cutItems(items)
+          },
+        },
+        {
+          label: "Paste",
+          icon: <ClipboardPaste className="h-4 w-4" />,
+          action: async () => {
+            const sourceIds = clipboardItems.map((item) => item.id)
+            await copyProjectsToDatabase(sourceIds, selectedCategory)
+            pasteItems(selectedCategory)
+            await fetchProjects()
+            onDataChange?.()
+          },
+          disabled: clipboardItems.length === 0,
+        },
+        { label: "---", disabled: true },
+        {
+          label: "Rename",
+          icon: <Edit3 className="h-4 w-4" />,
+          action: () => {
+            setRenamingItem(file.id)
+            setRenameValue(file.name)
+          },
+          disabled: selectedItems.length > 1,
+        },
+        {
+          label: "Delete",
+          icon: <Trash2 className="h-4 w-4" />,
+          action: async () => {
+            for (const id of selectedItems) {
+              await deleteProject(id)
             }
-          })
-          copyItems(items)
+            setSelectedItems([])
+            onDataChange?.()
+          },
         },
-      },
-      {
-        label: "Cut",
-        icon: <Scissors className="h-4 w-4" />,
-        action: () => {
-          const items = selectedItems.map((id) => {
-            const fileData = projects.find((p) => p.id === id)
-            return {
-              id,
-              name: fileData?.name || "",
-              type: fileData?.type === "folder" ? "folder" : "file",
-              data: fileData,
-              operation: "cut" as const,
-              source: selectedCategory,
-            }
-          })
-          cutItems(items)
-        },
-      },
-      {
-        label: "Paste",
-        icon: <ClipboardPaste className="h-4 w-4" />,
-        action: async () => {
-          const sourceIds = clipboardItems.map((item) => item.id)
-          await copyProjectsToDatabase(sourceIds, selectedCategory)
-          pasteItems(selectedCategory)
-          await fetchProjects()
-          onDataChange?.()
-        },
-        disabled: clipboardItems.length === 0,
-      },
-      { label: "---", disabled: true },
-      {
-        label: "Rename",
-        icon: <Edit3 className="h-4 w-4" />,
-        action: () => {
-          setRenamingItem(file.id)
-          setRenameValue(file.name)
-        },
-        disabled: selectedItems.length > 1,
-      },
-      {
-        label: "Delete",
-        icon: <Trash2 className="h-4 w-4" />,
-        action: async () => {
-          for (const id of selectedItems) {
-            await deleteProject(id)
-          }
-          setSelectedItems([])
-          onDataChange?.()
-        },
-      },
+      ]
+
+      showContextMenu(event.clientX, event.clientY, contextMenuItems)
+    },
+    [
+      selectedItems,
+      projects,
+      clipboardItems,
+      selectedCategory,
+      onOpenFile,
+      copyItems,
+      cutItems,
+      pasteItems,
+      showContextMenu,
+      copyProjectsToDatabase,
+      deleteProject,
+      fetchProjects,
+      onDataChange,
     ]
+  )
 
-    showContextMenu(event.clientX, event.clientY, contextMenuItems)
-  },
-  [
-    selectedItems,
-    projects,
-    clipboardItems,
-    selectedCategory,
-    onOpenFile,
-    copyItems,
-    cutItems,
-    pasteItems,
-    showContextMenu,
-    copyProjectsToDatabase,
-    deleteProject,
-    fetchProjects,
-    onDataChange,
-  ]
-)
+  const handleBlankAreaContextMenu = useCallback(
+    (event: React.MouseEvent) => {
+      event.preventDefault()
 
-const handleBlankAreaContextMenu = useCallback(
-  (event: React.MouseEvent) => {
-    event.preventDefault()
+      setSelectedItems([])
 
-    setSelectedItems([])
-
-    const contextMenuItems = [
-      {
-        label: "New Folder",
-        icon: <Plus className="h-4 w-4" />,
-        action: async () => {
-          const name = prompt("Enter folder name:")
-          if (!name) return
-          await createProject(name, "folder", selectedCategory)
-          onDataChange?.()
+      const contextMenuItems = [
+        {
+          label: "New Folder",
+          icon: <Plus className="h-4 w-4" />,
+          action: async () => {
+            const name = prompt("Enter folder name:")
+            if (!name) return
+            await createProject(name, "folder", selectedCategory)
+            onDataChange?.()
+          },
         },
-      },
-      {
-        label: "New File",
-        icon: <Plus className="h-4 w-4" />,
-        action: () => {
-          setFileCreationDialog({
-            isOpen: true,
-            fileName: "",
-            fileType: "text",
-            parentId: selectedCategory,
-          })
+        {
+          label: "New File",
+          icon: <Plus className="h-4 w-4" />,
+          action: () => {
+            setFileCreationDialog({
+              isOpen: true,
+              fileName: "",
+              fileType: "text",
+              parentId: selectedCategory,
+            })
+          },
         },
-      },
-      { label: "---", disabled: true },
-      {
-        label: "Paste",
-        icon: <ClipboardPaste className="h-4 w-4" />,
-        action: async () => {
-          const sourceIds = clipboardItems.map((i) => i.id)
-          await copyProjectsToDatabase(sourceIds, selectedCategory)
-          pasteItems(selectedCategory)
-          await fetchProjects()
-          onDataChange?.()
+        { label: "---", disabled: true },
+        {
+          label: "Paste",
+          icon: <ClipboardPaste className="h-4 w-4" />,
+          action: async () => {
+            const sourceIds = clipboardItems.map((i) => i.id)
+            await copyProjectsToDatabase(sourceIds, selectedCategory)
+            pasteItems(selectedCategory)
+            await fetchProjects()
+            onDataChange?.()
+          },
+          disabled: clipboardItems.length === 0,
         },
-        disabled: clipboardItems.length === 0,
-      },
+      ]
+
+      showContextMenu(event.clientX, event.clientY, contextMenuItems)
+    },
+    [
+      clipboardItems,
+      selectedCategory,
+      createProject,
+      copyProjectsToDatabase,
+      pasteItems,
+      fetchProjects,
+      onDataChange,
     ]
-
-    showContextMenu(event.clientX, event.clientY, contextMenuItems)
-  },
-  [
-    clipboardItems,
-    selectedCategory,
-    createProject,
-    copyProjectsToDatabase,
-    pasteItems,
-    fetchProjects,
-    onDataChange,
-  ]
-)
+  )
 
 
 
@@ -644,21 +651,235 @@ const handleBlankAreaContextMenu = useCallback(
     )
   }
 
+  // return (
+  //   <div className="flex w-full h-full bg-gray-100 text-gray-800 rounded overflow-hidden text-xs leading-tight">
+  //     {/* Sidebar */}
+  //     <div className="w-48 h-screen bg-gray-200 border-r border-gray-300 p-2 overflow-y-auto">
+  //       <h3 className="text-[10px] font-semibold text-gray-500 uppercase mb-1">Projects</h3>
+  //       <ul className="space-y-0.5">
+  //         {rootProjects.map((project) => (
+  //           <li key={project.id}>
+  //             <button
+  //               onClick={() => handleCategorySelect(project.id)}
+  //               onContextMenu={(e) => handleProjectContextMenu(e, project.id)}
+  //               onDragOver={handleDragOver}
+  //               onDrop={(e) => handleDrop(e, project.id)}
+  //               className={`flex items-center w-full text-left px-2 py-1 rounded transition-colors
+  //                 ${selectedCategory === project.id ? "bg-blue-500 text-white" : "hover:bg-gray-300 text-gray-700"}`}
+  //             >
+  //               <span className="truncate">{project.name}</span>
+  //             </button>
+  //           </li>
+  //         ))}
+  //       </ul>
+  //     </div>
+
+  //     {/* Content Area */}
+  //     <div
+  //       className="flex-1 p-2 overflow-y-auto bg-white"
+  //       onContextMenu={handleBlankAreaContextMenu}
+  //       onDragOver={handleDragOver}
+  //       onDrop={(e) => handleDrop(e, selectedCategory)}
+  //     >
+  //       {currentProject ? (
+  //         <>
+  //           <h2 className="text-sm font-bold text-gray-700 mb-2 truncate">{currentProject.name}</h2>
+  //           <div className="grid grid-cols-3 gap-2">
+  //             {currentProject.files?.map((file) => {
+  //               const isSelected = selectedItems.includes(file.id)
+  //               const isCut = clipboardItems.some((item) => item.id === file.id && item.operation === "cut")
+  //               const isRenaming = renamingItem === file.id
+
+  //               return (
+  //                 <div
+  //                   key={file.id}
+  //                   className={`flex flex-col items-center text-center p-1 rounded cursor-pointer transition-all duration-200
+  //                     ${isSelected
+  //                       ? "bg-blue-100 border-2 border-blue-400 shadow-sm"
+  //                       : "hover:bg-gray-100 border-2 border-transparent"
+  //                     }
+  //                     ${isCut ? "opacity-50" : ""}
+  //                   `}
+  //                   onClick={(e) => handleFileClick(file, e)}
+  //                   onContextMenu={(e) => handleContextMenu(file, e)}
+  //                   draggable={!isRenaming}
+  //                   onDragStart={(e) => handleDragStart(e, file)}
+  //                 >
+  //                   <div className={`transition-transform duration-200 ${isSelected ? "scale-105" : ""}`}>
+  //                     {getFileIcon(file)}
+  //                   </div>
+  //                   {isRenaming ? (
+  //                     <input
+  //                       type="text"
+  //                       value={renameValue}
+  //                       onChange={(e) => setRenameValue(e.target.value)}
+  //                       onKeyDown={handleRenameKeyDown}
+  //                       onBlur={handleRenameSubmit}
+  //                       className="text-[10px] mt-1 w-full text-center bg-white border border-blue-400 rounded px-1"
+  //                       autoFocus
+  //                     />
+  //                   ) : (
+  //                     <span
+  //                       className={`text-[10px] mt-1 truncate w-full transition-colors ${isSelected ? "text-blue-700 font-medium" : "text-gray-700"
+  //                         }`}
+  //                     >
+  //                       {file.name}
+  //                     </span>
+  //                   )}
+  //                 </div>
+  //               )
+  //             })}
+  //           </div>
+  //           {(!currentProject.files || currentProject.files.length === 0) && (
+  //             <div
+  //               className="flex items-center justify-center h-32 text-gray-400 text-sm cursor-context-menu"
+  //               onContextMenu={(e) => handleEmptyFolderContextMenu(e, selectedCategory)}
+  //             >
+  //               Right-click to add files and folders
+  //             </div>
+  //           )}
+  //         </>
+  //       ) : (
+  //         <div className="flex items-center justify-center h-full text-gray-400">No project selected</div>
+  //       )}
+  //     </div>
+
+  //     {/* File Creation Dialog */}
+  //     {fileCreationDialog?.isOpen && (
+  //       <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+  //         <div className="bg-white rounded-lg shadow-lg p-4 w-96">
+  //           <h3 className="text-sm font-bold mb-4">Create New File</h3>
+
+  //           <div className="space-y-4">
+  //             {/* File Name Input */}
+  //             <div>
+  //               <label className="block text-xs font-medium text-gray-700 mb-1">File Name</label>
+  //               <input
+  //                 type="text"
+  //                 value={fileCreationDialog.fileName}
+  //                 onChange={(e) =>
+  //                   setFileCreationDialog({
+  //                     ...fileCreationDialog,
+  //                     fileName: e.target.value,
+  //                   })
+  //                 }
+  //                 placeholder="Enter file name"
+  //                 className="w-full px-3 py-2 border border-gray-300 rounded text-xs focus:outline-none focus:border-blue-500"
+  //                 autoFocus
+  //               />
+  //             </div>
+
+  //             {/* File Type Selection */}
+  //             <div>
+  //               <label className="block text-xs font-medium text-gray-700 mb-2">File Type</label>
+  //               <div className="grid grid-cols-2 gap-2">
+  //                 {Object.entries(FILE_EXTENSIONS).map(([type]) => (
+  //                   <button
+  //                     key={type}
+  //                     onClick={() =>
+  //                       setFileCreationDialog({
+  //                         ...fileCreationDialog,
+  //                         fileType: type,
+  //                       })
+  //                     }
+  //                     className={`px-3 py-2 rounded text-xs border transition-colors capitalize ${fileCreationDialog.fileType === type
+  //                         ? "bg-blue-100 border-blue-500 text-blue-700 font-medium"
+  //                         : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100"
+  //                       }`}
+  //                   >
+  //                     {type}
+  //                   </button>
+  //                 ))}
+  //               </div>
+  //             </div>
+
+  //             {/* Extension Preview */}
+  //             <div className="bg-gray-50 p-2 rounded text-xs">
+  //               <span className="text-gray-600">File will be: </span>
+  //               <span className="font-mono font-medium text-gray-900">
+  //                 {fileCreationDialog.fileName || "filename"}
+  //                 {FILE_EXTENSIONS[fileCreationDialog.fileType as keyof typeof FILE_EXTENSIONS]?.[0] || ".file"}
+  //               </span>
+  //             </div>
+  //           </div>
+
+  //           {/* Action Buttons */}
+  //           <div className="flex gap-2 mt-5">
+  //             <button
+  //               onClick={async () => {
+  //                 if (fileCreationDialog.fileName.trim()) {
+  //                   try {
+  //                     const ext =
+  //                       FILE_EXTENSIONS[fileCreationDialog.fileType as keyof typeof FILE_EXTENSIONS]?.[0] || ""
+  //                     const fullName = `${fileCreationDialog.fileName.trim()}${ext}`
+  //                     await createProject(fullName, "file", fileCreationDialog.parentId)
+  //                     setFileCreationDialog(null)
+  //                     onDataChange?.()
+  //                   } catch (err) {
+  //                     console.error("[v0] Failed to create file:", err)
+  //                   }
+  //                 }
+  //               }}
+  //               className="flex-1 px-3 py-2 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 font-medium"
+  //             >
+  //               Create
+  //             </button>
+  //             <button
+  //               onClick={() => setFileCreationDialog(null)}
+  //               className="flex-1 px-3 py-2 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+  //             >
+  //               Cancel
+  //             </button>
+  //           </div>
+  //         </div>
+  //       </div>
+  //     )}
+  //   </div>
+  // )
+
   return (
-    <div className="flex w-full h-full bg-gray-100 text-gray-800 rounded overflow-hidden text-xs leading-tight">
+    <div className="flex w-full h-screen  text-gray-800 overflow-hidden">
+      {/* Mobile Overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-30 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <div className="w-48 h-screen bg-gray-200 border-r border-gray-300 p-2 overflow-y-auto">
-        <h3 className="text-[10px] font-semibold text-gray-500 uppercase mb-1">Projects</h3>
+      <div
+        style={{ backgroundColor: settings.themeColor }}
+        className={`
+        fixed md:static z-40
+        top-0 left-0 h-full w-56 bg-gray-200
+         border-r border-gray-300 p-2
+        transform transition-transform duration-300
+        ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+        md:translate-x-0
+      `}
+      >
+        <h3 className="text-[10px] font-semibold text-gray-500 uppercase mb-2">
+          Projects
+        </h3>
+
         <ul className="space-y-0.5">
           {rootProjects.map((project) => (
             <li key={project.id}>
               <button
-                onClick={() => handleCategorySelect(project.id)}
+                style={{ backgroundColor: selectedCategory === project.id ? settings.folderColor : '' }}
+                onClick={() => {
+                  handleCategorySelect(project.id)
+                  setSidebarOpen(false)
+                }}
                 onContextMenu={(e) => handleProjectContextMenu(e, project.id)}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, project.id)}
-                className={`flex items-center w-full text-left px-2 py-1 rounded transition-colors
-                  ${selectedCategory === project.id ? "bg-blue-500 text-white" : "hover:bg-gray-300 text-gray-700"}`}
+                className={`w-full text-left px-2 py-1 rounded text-sm transition-colors
+                ${selectedCategory === project.id
+                    ? " text-white"
+                    : "text-gray-700 hover:bg-gray-300"
+                  }`}
               >
                 <span className="truncate">{project.name}</span>
               </button>
@@ -667,169 +888,89 @@ const handleBlankAreaContextMenu = useCallback(
         </ul>
       </div>
 
-      {/* Content Area */}
-      <div
-        className="flex-1 p-2 overflow-y-auto bg-white"
-          onContextMenu={handleBlankAreaContextMenu}
-        onDragOver={handleDragOver}
-        onDrop={(e) => handleDrop(e, selectedCategory)}
-      >
-        {currentProject ? (
-          <>
-            <h2 className="text-sm font-bold text-gray-700 mb-2 truncate">{currentProject.name}</h2>
-            <div className="grid grid-cols-3 gap-2">
-              {currentProject.files?.map((file) => {
-                const isSelected = selectedItems.includes(file.id)
-                const isCut = clipboardItems.some((item) => item.id === file.id && item.operation === "cut")
-                const isRenaming = renamingItem === file.id
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col ">
+        {/* Top Bar (Mobile) */}
+        <div style={{fontSize:settings.fontSize}} onClick={() => setSidebarOpen(true)} className="md:hidden flex items-center gap-2 px-3 py-2 border-b">
+          <button
 
-                return (
-                  <div
-                    key={file.id}
-                    className={`flex flex-col items-center text-center p-1 rounded cursor-pointer transition-all duration-200
-                      ${
-                        isSelected
-                          ? "bg-blue-100 border-2 border-blue-400 shadow-sm"
+            className="text-xl text-white font-bold"
+          >
+            ☰
+          </button>
+          <span className=" text-white font-semibold truncate">
+            {currentProject?.name || "Explorer"}
+          </span>
+        </div>
+
+        {/* Content Area */}
+        <div
+          className="flex-1  p-2 overflow-y-auto"
+          onContextMenu={handleBlankAreaContextMenu}
+          onDragOver={handleDragOver}
+          onDrop={(e) => handleDrop(e, selectedCategory)}
+        >
+          {currentProject ? (
+            <>
+              {/* Desktop Title */}
+              <h2 className="hidden md:block text-sm font-bold text-gray-700 mb-2 truncate">
+                {currentProject.name}
+              </h2>
+
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                {currentProject.files?.map((file) => {
+                  const isSelected = selectedItems.includes(file.id)
+                  const isCut = clipboardItems.some(
+                    (item) => item.id === file.id && item.operation === "cut"
+                  )
+                  const isRenaming = renamingItem === file.id
+
+                  return (
+                    <div
+                      key={file.id}
+
+                      className={`flex flex-col items-center text-center p-1 rounded cursor-pointer transition-all
+                      ${isSelected
+                          ? "bg-blue-100 border-2 border-blue-400"
                           : "hover:bg-gray-100 border-2 border-transparent"
-                      }
+                        }
                       ${isCut ? "opacity-50" : ""}
                     `}
-                    onClick={(e) => handleFileClick(file, e)}
-                    onContextMenu={(e) => handleContextMenu(file, e)}
-                    draggable={!isRenaming}
-                    onDragStart={(e) => handleDragStart(e, file)}
-                  >
-                    <div className={`transition-transform duration-200 ${isSelected ? "scale-105" : ""}`}>
-                      {getFileIcon(file)}
-                    </div>
-                    {isRenaming ? (
-                      <input
-                        type="text"
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onKeyDown={handleRenameKeyDown}
-                        onBlur={handleRenameSubmit}
-                        className="text-[10px] mt-1 w-full text-center bg-white border border-blue-400 rounded px-1"
-                        autoFocus
-                      />
-                    ) : (
-                      <span
-                        className={`text-[10px] mt-1 truncate w-full transition-colors ${
-                          isSelected ? "text-blue-700 font-medium" : "text-gray-700"
-                        }`}
-                      >
-                        {file.name}
-                      </span>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-            {(!currentProject.files || currentProject.files.length === 0) && (
-              <div
-                className="flex items-center justify-center h-32 text-gray-400 text-sm cursor-context-menu"
-                onContextMenu={(e) => handleEmptyFolderContextMenu(e, selectedCategory)}
-              >
-                Right-click to add files and folders
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-400">No project selected</div>
-        )}
-      </div>
-
-      {/* File Creation Dialog */}
-      {fileCreationDialog?.isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-4 w-96">
-            <h3 className="text-sm font-bold mb-4">Create New File</h3>
-
-            <div className="space-y-4">
-              {/* File Name Input */}
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">File Name</label>
-                <input
-                  type="text"
-                  value={fileCreationDialog.fileName}
-                  onChange={(e) =>
-                    setFileCreationDialog({
-                      ...fileCreationDialog,
-                      fileName: e.target.value,
-                    })
-                  }
-                  placeholder="Enter file name"
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-xs focus:outline-none focus:border-blue-500"
-                  autoFocus
-                />
-              </div>
-
-              {/* File Type Selection */}
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-2">File Type</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(FILE_EXTENSIONS).map(([type]) => (
-                    <button
-                      key={type}
-                      onClick={() =>
-                        setFileCreationDialog({
-                          ...fileCreationDialog,
-                          fileType: type,
-                        })
-                      }
-                      className={`px-3 py-2 rounded text-xs border transition-colors capitalize ${
-                        fileCreationDialog.fileType === type
-                          ? "bg-blue-100 border-blue-500 text-blue-700 font-medium"
-                          : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100"
-                      }`}
+                      onClick={(e) => handleFileClick(file, e)}
+                      onContextMenu={(e) => handleContextMenu(file, e)}
+                      draggable={!isRenaming}
+                      onDragStart={(e) => handleDragStart(e, file)}
                     >
-                      {type}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                      {getFileIcon(file)}
 
-              {/* Extension Preview */}
-              <div className="bg-gray-50 p-2 rounded text-xs">
-                <span className="text-gray-600">File will be: </span>
-                <span className="font-mono font-medium text-gray-900">
-                  {fileCreationDialog.fileName || "filename"}
-                  {FILE_EXTENSIONS[fileCreationDialog.fileType as keyof typeof FILE_EXTENSIONS]?.[0] || ".file"}
-                </span>
+                      {isRenaming ? (
+                        <input
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={handleRenameKeyDown}
+                          onBlur={handleRenameSubmit}
+                          className="text-[10px] mt-1 w-full text-center border rounded"
+                          autoFocus
+                        />
+                      ) : (
+                        <span style={{ color: settings.textColor }} className=" mt-1 truncate w-full">
+                          {file.name}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-center h-full text-gray-400">
+              No project selected
             </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-2 mt-5">
-              <button
-                onClick={async () => {
-                  if (fileCreationDialog.fileName.trim()) {
-                    try {
-                      const ext =
-                        FILE_EXTENSIONS[fileCreationDialog.fileType as keyof typeof FILE_EXTENSIONS]?.[0] || ""
-                      const fullName = `${fileCreationDialog.fileName.trim()}${ext}`
-                      await createProject(fullName, "file", fileCreationDialog.parentId)
-                      setFileCreationDialog(null)
-                      onDataChange?.()
-                    } catch (err) {
-                      console.error("[v0] Failed to create file:", err)
-                    }
-                  }
-                }}
-                className="flex-1 px-3 py-2 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 font-medium"
-              >
-                Create
-              </button>
-              <button
-                onClick={() => setFileCreationDialog(null)}
-                className="flex-1 px-3 py-2 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
+
+
 }
