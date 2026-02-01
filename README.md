@@ -12,7 +12,7 @@
     <img src="https://img.shields.io/badge/-Tailwind_CSS-black?style=for-the-badge&logoColor=white&logo=tailwindcss&color=06B6D4" alt="tailwindcss" />
     <img src="https://img.shields.io/badge/-Firebase-black?style=for-the-badge&logoColor=white&logo=firebase&color=DD2C00" alt="firebase" />
   </div>
-
+OPEN_API_KEY= sk_434534io5345u345iu3i4u5i34u5i3ui5ui34
   <h3 align="center">smarty: vibhav mac OS</h3>
 
    <div align="center">
