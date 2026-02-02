@@ -12,8 +12,8 @@ const monaSans = Mona_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Smarty",
-  description: "An AI-powered platform for preparing for mock interviews",
+  title: "Vibhav's Mac",
+  description: "An AI-powered Operationg System",
 };
 
 export default function RootLayout({
@@ -27,11 +27,11 @@ export default function RootLayout({
         <SettingsProvider >
           {children}
         </SettingsProvider>
-        
+
 
         <Toaster />
 
-        
+
       </body>
     </html>
   );
