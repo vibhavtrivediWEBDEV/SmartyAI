@@ -66,9 +66,9 @@ interface IconItem {
 }
 
 export function Desktop() {
-  const { settings } = useSettings()
+  const { settings, updateGithubProfile } = useSettings()
 
-  const [username, setUsername] = useState('vibhavtrivediWEBDEV')
+  // const [username, setUsername] = useState('vibhavtrivediWEBDEV')
 
   const [openWindows, setOpenWindows] = useState<WindowState[]>([])
   const [desktopBg, setDesktopBg] = useState("dot")
@@ -82,20 +82,20 @@ export function Desktop() {
   const [themeColor, setThemeColor] = useState('240 5.9% 10%')
 
 
-  //   const [icons, setIcons] = useState([
-  //   { id: 1, name: "Resume PDF", icon: <FileTextIcon />, x: 100, y: 400 },
-  //   { id: 2, name: "About Me", icon: <FolderIcon />, x: 100, y: 550 },
-  //   { id: 3, name: "ShowCraft", icon: <FolderIcon />, x: 1200, y: 100 },
-  //   { id: 4, name: "SharpBuy", icon: <FolderIcon />, x: 1200, y: 200 },
-  //   { id: 5, name: "Ponderiee", icon: <FolderIcon />, x: 1200, y: 300 },
-  //   { id: 6, name: "Nirantara", icon: <FolderIcon />, x: 1200, y: 400 },
-  //   { id: 7, name: "Don't Look", icon: <Trash2Icon />, x: 1300, y: 500 }
-  // ]);
+  const [icons, setIcons] = useState([
+    //   { id: 1, name: "Resume PDF", icon: <FileTextIcon />, x: 100, y: 400 },
+    //   { id: 2, name: "About Me", icon: <FolderIcon />, x: 100, y: 550 },
+    //   { id: 3, name: "ShowCraft", icon: <FolderIcon />, x: 1200, y: 100 },
+    //   { id: 4, name: "SharpBuy", icon: <FolderIcon />, x: 1200, y: 200 },
+    //   { id: 5, name: "Ponderiee", icon: <FolderIcon />, x: 1200, y: 300 },
+    //   { id: 6, name: "Nirantara", icon: <FolderIcon />, x: 1200, y: 400 },
+    //   { id: 7, name: "Don't Look", icon: <Trash2Icon />, x: 1300, y: 500 }
+  ]);
 
-  const [icons, setIcons] = useState<IconItem[]>([
-    // { id: 1, name: 'Resume PDF', folderColor: 'red', type: 'file', icon: <FileTextIcon />, x: 100, y: 400 },
-    // { id: 2, name: 'About Me', type: 'folder', icon: <FileTextIcon />, x: 100, y: 550, folderColor: 'red', folderItems: [] },
-    // { id: 999, name: "Don't Look", folderColor: 'red', type: 'trash', icon: <Trash2Icon />, x: 1300, y: 500 },
+  const [UserIcon, setuserIcons] = useState<IconItem[]>([
+    { id: 1, name: 'Resume PDF', folderColor: "pink", type: 'file', icon: <FileTextIcon />, x: 30, y: 50 },
+    { id: 2, name: 'About Me', type: 'folder', icon: <FileTextIcon />, x: 30, y: 150, folderColor: 'red', folderItems: [] },
+    { id: 999, name: "Don't Look", folderColor: 'red', type: 'trash', icon: <Trash2Icon />, x: 30, y: 250 },
   ])
 
 
@@ -170,33 +170,38 @@ export function Desktop() {
   // github folders
   useEffect(() => {
     async function loadGitHubData() {
+      // Only load if GitHub profile is set
+      if (!settings.githubProfile || settings.githubProfile.trim() === '') {
+        return
+      }
+
       try {
-        const repos = await fetchGitHubRepositories(username)
-        const folderIcons = createFolderIconsFromRepositories(repos)
+        if (!settings.githubProfile || settings.githubProfile.trim() === '') {
+          const repos = await fetchGitHubRepositories(settings.githubProfile)
 
-        // Convert folder icons to the icon item structure and prepend to existing icons
-        const repoFolders: IconItem[] = folderIcons.map(folder => ({
-          id: folder.id,
-          name: folder.name,
-          type: 'folder' as const,
-          icon: <FileTextIcon />,
-          x: folder.x,
-          y: folder.y,
-          folderColor: folder.color,
-          folderItems: folder.items,
-        }))
+          const folderIcons = createFolderIconsFromRepositories(repos)
 
-        setIcons(prev => {
-          // Keep static icons (Resume, About Me, Trash)
-          const staticIcons = prev.filter(icon => icon.id < 10 || icon.id === 999)
-          // Insert repos between static icons and trash
-          const allIcons = [...staticIcons.slice(0, 2), ...repoFolders, ...staticIcons.slice(2)]
-          return allIcons
-        })
+          // Convert folder icons to the icon item structure
+          const repoFolders: IconItem[] = folderIcons.map(folder => ({
+            id: folder.id,
+            name: folder.name,
+            type: 'folder' as const,
+            icon: <FileTextIcon />,
+            x: folder.x,
+            y: folder.y,
+            folderColor: folder.color,
+            folderItems: folder.items,
+          }))
 
-        // Auto-arrange AFTER icons are set
-        // Use setTimeout to ensure state update is complete
+          setIcons(prev => {
+            // Keep static icons (Resume, About Me, Trash)
+            const staticIcons = prev.filter(icon => icon.id < 10 || icon.id === 999)
+            // Insert repos between static icons and trash
+            const allIcons = [...staticIcons.slice(0, 2), ...repoFolders, ...staticIcons.slice(2)]
+            return allIcons
+          })
 
+        }
 
       } catch (error) {
         console.error('Failed to load GitHub data:', error)
@@ -205,7 +210,7 @@ export function Desktop() {
 
     loadGitHubData()
 
-  }, [username])
+  }, [settings.githubProfile]) // Watch for changes in githubProfile
 
 
 
@@ -708,7 +713,7 @@ export function Desktop() {
 
             style={{
               backgroundColor: `hsl(${themeColor})`,
-              backgroundImage: backgroundImage ? `url('${settings.backgroundImage}')` : undefined,
+              backgroundImage: backgroundImage ? `url('${settings.backgroundImage}')` : `url('https://4kwallpapers.com/images/walls/thumbs_3t/14776.jpg')`,
               backgroundSize: 'cover',
 
               backgroundPosition: 'center',
@@ -716,8 +721,8 @@ export function Desktop() {
 
             }}
           >
-            {desktopBg === "dot" && <DotGrid />}
-            {desktopBg === "wave" && <WavesDemo />}
+            {/* {desktopBg === "dot" && <DotGrid />}
+            {desktopBg === "wave" && <WavesDemo />} */}
 
             {/* <KeyboardWrapper
         initialX={50}
@@ -817,8 +822,19 @@ export function Desktop() {
       
       </h1> */}
 
-
-
+            {UserIcon.map((icon) => (<DesktopIcon
+              key={icon.id}
+              name={icon.name}
+              icon={icon.icon}
+              initialX={icon.x}
+              initialY={icon.y}
+              onPositionChange={(x, y) =>
+                updateIconPosition(icon.id, x, y)
+              }
+              folderColor={settings.folderColor}
+              onDoubleClick={() => openApplication(icon.name)}
+              desktopRef={desktopRef}
+            />))}
 
             {icons?.slice(0, 7).map(icon => (
               // <DesktopIcon

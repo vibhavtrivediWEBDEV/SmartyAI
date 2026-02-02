@@ -46,6 +46,9 @@ export async function fetchGitHubUser(username: string) {
     console.error('Error fetching GitHub user:', error);
     return null;
   }
+
+
+  
 }
 
 export async function fetchGitHubRepositories(username: string): Promise<Repository[]> {
