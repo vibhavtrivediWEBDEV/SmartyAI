@@ -7,6 +7,9 @@ import type { JSX } from "react/jsx-runtime"
 import { Rnd } from "react-rnd"
 import { handleCommand } from "@/lib/handleCommand"
 
+import { useTerminalAutocomplete } from "@/hooks/useTerminalAutoCompleteHook"
+import { useCommandHistory } from "@/hooks/useCommandHistory"
+
 interface HistoryEntry {
   type: "input" | "output"
   value: string | JSX.Element
@@ -18,7 +21,7 @@ interface TerminalUIProps {
   onCommandExecuted?: () => void // Callback to notify parent that command was executed
 }
 
-export function TerminalUI({ autoRunCommand,autoRunCommandArgs, onCommandExecuted }: TerminalUIProps) {
+export function TerminalUI({ autoRunCommand, autoRunCommandArgs, onCommandExecuted }: TerminalUIProps) {
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [currentInput, setCurrentInput] = useState("")
   const outputRef = useRef<HTMLDivElement>(null)
@@ -32,6 +35,46 @@ export function TerminalUI({ autoRunCommand,autoRunCommandArgs, onCommandExecute
   const [size, setSize] = useState({ width: 800, height: 500 })
   const [position, setPosition] = useState({ x: 100, y: 100 })
 
+  // Command history
+
+  const {
+    history: commandHistory,
+    addToHistory,
+    navigateHistory,
+  } = useCommandHistory()
+
+  // Autocomplete
+  const {
+    suggestions,
+    handleTabCompletion,
+    resetSuggestions,
+  } = useTerminalAutocomplete(commandHistory)
+
+
+  // Scroll to bottom on new output
+  useEffect(() => {
+    if (outputRef.current) {
+      outputRef.current.scrollTop = outputRef.current.scrollHeight
+    }
+  }, [history])
+
+  // Auto-run command
+  useEffect(() => {
+    if (autoRunCommand) {
+      handleCommand({
+        command: autoRunCommand,
+        history,
+        setHistory,
+        setCurrentInput,
+        parsedArgs: autoRunCommandArgs,
+      })
+      if (onCommandExecuted) {
+        onCommandExecuted()
+      }
+    }
+  }, [autoRunCommand, onCommandExecuted])
+
+
   // Scroll to bottom on new output
   useEffect(() => {
     if (outputRef.current) {
@@ -40,24 +83,38 @@ export function TerminalUI({ autoRunCommand,autoRunCommandArgs, onCommandExecute
   }, [history])
 
 
-    // Effect to handle auto-running commands
-    useEffect(() => {
-      console.log("terminalUI - autoRunCommand", autoRunCommand);
-      if (autoRunCommand) {
-        handleCommand({
-          command: autoRunCommand,
-          history,
-          setHistory,
-          setCurrentInput,
-          parsedArgs: autoRunCommandArgs, // Pass the parsedArgs here
+  // Effect to handle auto-running commands
+  useEffect(() => {
+    console.log("terminalUI - autoRunCommand", autoRunCommand);
+    if (autoRunCommand) {
+      handleCommand({
+        command: autoRunCommand,
+        history,
+        setHistory,
+        setCurrentInput,
+        parsedArgs: autoRunCommandArgs, // Pass the parsedArgs here
 
-        });
-        if (onCommandExecuted) {
-          onCommandExecuted();
-        }
+      });
+      if (onCommandExecuted) {
+        onCommandExecuted();
       }
-    }, [autoRunCommand, onCommandExecuted]);
-    
+    }
+  }, [autoRunCommand, onCommandExecuted]);
+
+
+  const handleCommandExecution = (cmd: string) => {
+    if (cmd.trim()) {
+      addToHistory(cmd)
+      resetSuggestions()
+    }
+
+    handleCommand({
+      command: cmd,
+      history,
+      setHistory,
+      setCurrentInput,
+    })
+  }
 
   // Auto-focus input
   useEffect(() => {
@@ -82,34 +139,38 @@ export function TerminalUI({ autoRunCommand,autoRunCommandArgs, onCommandExecute
       {reopenButton}
 
       <div className="flex flex-col h-screen ">
-            {/* Scrollable output */}
-            <div
-              ref={outputRef}
-              className="flex-1 overflow-y-auto p-4 text-sm scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900"
+        {/* Scrollable output */}
+        <div
+          ref={outputRef}
+          className="flex-1 overflow-y-auto p-4 text-sm scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900"
 
-              style={{ paddingBottom: "6rem" }} // reserve space for input
-            >
-              <TerminalOutput history={history} />
-            </div>
+          style={{ paddingBottom: "6rem" }} // reserve space for input
+        >
+          <TerminalOutput history={history} />
+        </div>
 
-            {/* Input bar (UI unchanged) */}
-            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-700 bg-">
+        {/* Input bar (UI unchanged) */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-700 bg-">
 
-              <TerminalInput
-                ref={inputRef}
-                onCommand={(cmd) =>
-                  handleCommand({
-                    command: cmd,
-                    history,
-                    setHistory,
-                    setCurrentInput,
-                  })
-                }
-                currentInput={currentInput}
-                onInputChange={setCurrentInput}
-              />
-            </div>
-          </div>
+          <TerminalInput
+            ref={inputRef}
+            onCommand={(cmd) =>
+              handleCommand({
+                command: cmd,
+                history,
+                setHistory,
+                setCurrentInput,
+              })
+            }
+            currentInput={currentInput}
+            onInputChange={setCurrentInput}
+            suggestions={suggestions}
+            onTabComplete={handleTabCompletion}
+            onHistoryNavigate={navigateHistory}
+
+          />
+        </div>
+      </div>
     </>
   )
 }

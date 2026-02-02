@@ -426,6 +426,7 @@ export function Desktop() {
         return;
       }
 
+      const z = nextZIndex + 1;
       const newWindow: WindowState = {
         id: `window-${Date.now()}`,
         title,
@@ -442,7 +443,7 @@ export function Desktop() {
         width: defaultWidth,
         height: defaultHeight,
         isMinimized: false,
-        zIndex: nextZIndex,
+        zIndex: z,
       };
 
       setOpenWindows((prev) => [...prev, newWindow]);
@@ -468,6 +469,7 @@ export function Desktop() {
     )
 
     if (!githubUrlItem) return
+    const z = nextZIndex + 1;
 
     // 🚀 CREATE WINDOW WITH IFRAME
     const newWindow: WindowState = {
@@ -492,7 +494,7 @@ export function Desktop() {
       width: 1000,
       height: 650,
       isMinimized: false,
-      zIndex: nextZIndex,
+      zIndex: z,
     }
 
     setOpenWindows(prev => [...prev, newWindow])
@@ -514,6 +516,7 @@ export function Desktop() {
 
   const openFileDetailsWindow = (file: any) => {
     console.log("Project ID:", file.projectId) // ✅ now accessible
+    const z = nextZIndex + 100;
 
     const newWindow: WindowState = {
       id: `file-details-${file.name}-${Date.now()}`,
@@ -525,7 +528,7 @@ export function Desktop() {
       width: 700,
       height: 500,
       isMinimized: false,
-      zIndex: nextZIndex,
+      zIndex: z,
     }
 
     setOpenWindows((prev) => [...prev, newWindow])
@@ -883,7 +886,7 @@ export function Desktop() {
                 id={win.id}
                 title={win.title}
                 icon={win.icon}
-                initialX={win.x}
+                initialX={(win.x)}
                 initialY={win.y}
                 initialWidth={win.width}
                 initialHeight={win.height}

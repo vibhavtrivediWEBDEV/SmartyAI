@@ -18,14 +18,14 @@ const PortfolioView = () => {
 
   return (
     <div>
-      
+
       {
-        dekstopView ?  
-        <Desktop setdekstopView={setdekstopView} />
-         : 
-         <p></p> // <FuturisticPortfolio setdekstopView={setdekstopView} />
+        dekstopView ?
+          <Desktop setdekstopView={setdekstopView} />
+          :
+          <p></p> // <FuturisticPortfolio setdekstopView={setdekstopView} />
       }
-      
+
     </div>
   )
 }
