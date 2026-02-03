@@ -14,10 +14,10 @@ import { useSettings } from '@/app/context/settingContext'
 type SettingTab = 'appearance' | 'wallpaper' | 'font' | 'advanced'
 
 const SIDEBAR_ITEMS = [
-  { id: 'appearance', label: 'Appearance', icon: Palette },
-  { id: 'wallpaper', label: 'Wallpaper', icon: Image },
-  { id: 'font', label: 'Font', icon: Type },
-  { id: 'advanced', label: 'Advanced', icon: SettingsIcon },
+  { id: 'appearance', label: 'Appearance', icon: Palette, clickId: "settings_sidebar_appearance" },
+  { id: 'wallpaper', label: 'Wallpaper', icon: Image, clickId: "settings_sidebar_wallpaper" },
+  { id: 'font', label: 'Font', icon: Type, clickId: "settings_sidebar_font" },
+  { id: 'advanced', label: 'Advanced', icon: SettingsIcon, clickId: "settings_sidebar_advanced" },
 ]
 
 const THEME_COLORS = [
@@ -145,6 +145,7 @@ export default function SettingsModal() {
                   </label>
                   <input
                     type="text"
+                    id="wallpaper_input"
                     placeholder="Search wallpapers..."
                     value={settings.wallpaperQuery}
                     onChange={(e) => updateWallpaperQuery(e.target.value)}
@@ -193,6 +194,7 @@ export default function SettingsModal() {
                 const IconComponent = item.icon
                 return (
                   <button
+                    id={item.clickId}
                     key={item.id}
                     style={{ fontSize: settings.fontSize }}
                     onClick={() => {
@@ -370,6 +372,7 @@ export default function SettingsModal() {
                             setSelectedBg(url)
                             onBackgroundChange(url)
                           }}
+                          id={`new_wallpaper_${idx}`}
                           className={`relative h-20 sm:h-24 md:h-28 rounded-lg overflow-hidden border-2 transition-all ${selectedBg === url
                             ? 'border-blue-500 shadow-lg ring-2 ring-blue-300'
                             : settings.darkMode

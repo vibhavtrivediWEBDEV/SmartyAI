@@ -23,7 +23,8 @@ import StartNewInterview from "@/app/components/terminal/StartInterview";
 import FeedbackInverview from "@/app/components/terminal/feedbackInterview";
 import CustomizableAgGrid from "@/components/Dekstop/AgGrid";
 import { DynamicAgGridConfigurator } from "@/components/Dekstop/dataTableViewer";
-import { useAIVoice } from "@/hooks/useAIVoice";
+// import { useAIVoice } from "@/hooks/useAIVoice";
+import { useElevenTTS } from "@/hooks/ElevenLabs";
 
 
 
@@ -52,7 +53,7 @@ export async function handleCommand({
   const trimmedCommand = command?.trim();
   setHistory((prev) => [...prev, { type: "input", value: trimmedCommand }]);
 
-  const {speak} = useAIVoice()
+  const { speak } = useElevenTTS()
 
   const [baseCommand, ...args] = trimmedCommand.toLowerCase().split(" ");
   let output: string | JSX.Element = "";
@@ -70,24 +71,24 @@ export async function handleCommand({
       output = <PinterestImageGrid />;
       break;
     case "interview":
-      output =   <SmartyInterview /> ;
+      output = <SmartyInterview />;
       break;
     case "newinterview":           // dynamic not direct
-        output =   <NewInterview /> ;
-        break;
-  case "startinterview":                                            // dynamic not direct
-          output =   <StartNewInterview id={parsedArgs} /> ;
-          break;    
+      output = <NewInterview />;
+      break;
+    case "startinterview":                                            // dynamic not direct
+      output = <StartNewInterview id={parsedArgs} />;
+      break;
 
-  case "feedback":
-    alert(parsedArgs)
-    output = <FeedbackInverview id={"9VKMpsv5X5lBe0vVzIig"} /> 
-       break  
+    case "feedback":
+      alert(parsedArgs)
+      output = <FeedbackInverview id={"9VKMpsv5X5lBe0vVzIig"} />
+      break
 
-  case "table": // New command for DataTableViewer
-       output = <DynamicAgGridConfigurator />
-       break
-        
+    case "table": // New command for DataTableViewer
+      output = <DynamicAgGridConfigurator />
+      break
+
     case "search":
       output = <AISearch />;
       break;
@@ -112,7 +113,7 @@ export async function handleCommand({
     case "ai-book":
       output = <ScienceBook name="vibhav" subject=" " messages={[]} status={null} />;
       break;
-  
+
     case "projects":
       output = (
         <ul className="list-disc list-inside">
@@ -125,7 +126,7 @@ export async function handleCommand({
       );
       break;
     case "resume":
-     
+
 
       output = <ResumeAnimation />;
       break;
@@ -197,42 +198,42 @@ export async function handleCommand({
           break;
       }
       break;
-      case "clear":
-        // Clear UI state
-        setHistory([]);
-        setCurrentInput("");
-      
-        try { await vapi.stop() } catch {}
-        return;
-      
+    case "clear":
+      // Clear UI state
+      setHistory([]);
+      setCurrentInput("");
+
+      try { await vapi.stop() } catch { }
+      return;
+
     case "help":
       output = (
         <div>
           <p className="mb-1">Available commands:</p>
           <ul className="list-disc list-inside space-y-1">
-        <li><span className="font-bold">name</span>: Displays my name.</li>
-        <li><span className="font-bold">title</span>: Displays my professional title.</li>
-        <li><span className="font-bold">image</span>: Shows Pinterest image grid.</li>
-        <li><span className="font-bold">interview</span>: Opens Smarty Interview interface.</li>
-        <li><span className="font-bold">newinterview</span>: Creates a new interview session.</li>
-        <li><span className="font-bold">startinterview [id]</span>: Starts interview with specific ID.</li>
-        <li><span className="font-bold">feedback [id]</span>: Opens feedback interview viewer.</li>
-        <li><span className="font-bold">table</span>: Opens dynamic AG Grid configurator.</li>
-        <li><span className="font-bold">search</span>: Opens AI Search interface.</li>
-        <li><span className="font-bold">excel</span>: Opens Excel editor.</li>
-        <li><span className="font-bold">mail</span>: Opens mail sender interface.</li>
-        <li><span className="font-bold">stocks</span>: Displays stock candlestick chart.</li>
-        <li><span className="font-bold">pdf [url]</span>: Opens PDF viewer with specified URL.</li>
-        <li><span className="font-bold">skills</span>: Lists my technical skills.</li>
-        <li><span className="font-bold">smarty</span>: Opens Smarty Teacher interface.</li>
-        <li><span className="font-bold">ai-book</span>: Opens AI Science Book.</li>
-        <li><span className="font-bold">projects</span>: Shows a list of my projects.</li>
-        <li><span className="font-bold">resume</span>: Displays animated resume.</li>
-        <li><span className="font-bold">contact</span>: Provides my contact information.</li>
-        <li><span className="font-bold">about [subcommand]</span>: Get info about me (name, title, skills, projects, contact).</li>
-        <li><span className="font-bold">clear</span>: Clears the terminal screen.</li>
-        <li><span className="font-bold">help</span>: Displays this help message.</li>
-      </ul>
+            <li><span className="font-bold">name</span>: Displays my name.</li>
+            <li><span className="font-bold">title</span>: Displays my professional title.</li>
+            <li><span className="font-bold">image</span>: Shows Pinterest image grid.</li>
+            <li><span className="font-bold">interview</span>: Opens Smarty Interview interface.</li>
+            <li><span className="font-bold">newinterview</span>: Creates a new interview session.</li>
+            <li><span className="font-bold">startinterview [id]</span>: Starts interview with specific ID.</li>
+            <li><span className="font-bold">feedback [id]</span>: Opens feedback interview viewer.</li>
+            <li><span className="font-bold">table</span>: Opens dynamic AG Grid configurator.</li>
+            <li><span className="font-bold">search</span>: Opens AI Search interface.</li>
+            <li><span className="font-bold">excel</span>: Opens Excel editor.</li>
+            <li><span className="font-bold">mail</span>: Opens mail sender interface.</li>
+            <li><span className="font-bold">stocks</span>: Displays stock candlestick chart.</li>
+            <li><span className="font-bold">pdf [url]</span>: Opens PDF viewer with specified URL.</li>
+            <li><span className="font-bold">skills</span>: Lists my technical skills.</li>
+            <li><span className="font-bold">smarty</span>: Opens Smarty Teacher interface.</li>
+            <li><span className="font-bold">ai-book</span>: Opens AI Science Book.</li>
+            <li><span className="font-bold">projects</span>: Shows a list of my projects.</li>
+            <li><span className="font-bold">resume</span>: Displays animated resume.</li>
+            <li><span className="font-bold">contact</span>: Provides my contact information.</li>
+            <li><span className="font-bold">about [subcommand]</span>: Get info about me (name, title, skills, projects, contact).</li>
+            <li><span className="font-bold">clear</span>: Clears the terminal screen.</li>
+            <li><span className="font-bold">help</span>: Displays this help message.</li>
+          </ul>
         </div>
       );
       break;
