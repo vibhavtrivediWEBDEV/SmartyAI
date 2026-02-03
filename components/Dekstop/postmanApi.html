@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Mini Postman</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #0f172a;
+            color: #e5e7eb;
+            padding: 20px
+        }
+
+        textarea {
+            width: 100%;
+            height: 120px;
+            background: #020617;
+            color: #38bdf8;
+            padding: 10px
+        }
+
+        button {
+            padding: 10px 16px;
+            margin: 10px 0;
+            background: #22c55e;
+            border: none;
+            cursor: pointer
+        }
+
+        pre {
+            background: #020617;
+            padding: 10px;
+            overflow: auto
+        }
+
+        .err {
+            color: #f87171
+        }
+
+        .ok {
+            color: #4ade80
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>🧪 Mini Postman (Paste cURL)</h2>
+
+    <textarea id="curl" placeholder="Paste curl here..."></textarea>
+    <button onclick="run()">RUN</button>
+
+    <h3>Request</h3>
+    <pre id="req"></pre>
+
+    <h3>Status</h3>
+    <pre id="status"></pre>
+
+    <h3>Response</h3>
+    <pre id="res"></pre>
+
+    <script>
+        function parseCurl(curl) {
+            curl = curl.replace(/\\\n/g, ' ')
+            const url = curl.match(/curl\s+['"]?([^'"\s]+)/)?.[1]
+            const method = curl.match(/-X\s+(\w+)/)?.[1] || 'GET'
+
+            const headers = {}
+                ;[...curl.matchAll(/-H\s+['"]([^:]+):\s*([^'"]+)/g)].forEach(m => {
+                    const name = m[1].toLowerCase()
+                    if (!name.startsWith('sec-') &&
+                        !['user-agent', 'referer', 'priority', 'accept-language'].includes(name)) {
+                        headers[m[1]] = m[2]
+                    }
+                })
+
+            const body = curl.match(/--data-raw\s+['"]([^'"]+)/)?.[1]
+
+            return { url, method, headers, body }
+        }
+
+        async function run() {
+            try {
+                const curl = document.getElementById('curl').value
+                const req = parseCurl(curl)
+
+                document.getElementById('req').textContent =
+                    JSON.stringify(req, null, 2)
+
+                const res = await fetch(req.url, {
+                    method: req.method,
+                    headers: req.headers,
+                    body: req.body
+                })
+
+                document.getElementById('status').textContent =
+                    `${res.status} ${res.statusText}`
+
+                const text = await res.text()
+                try {
+                    document.getElementById('res').textContent =
+                        JSON.stringify(JSON.parse(text), null, 2)
+                } catch {
+                    document.getElementById('res').textContent = text
+                }
+            } catch (e) {
+                document.getElementById('res').textContent = e.message
+                document.getElementById('res').className = 'err'
+            }
+        }
+    </script>
+
+</body>
+
+</html>

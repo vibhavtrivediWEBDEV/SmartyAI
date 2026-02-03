@@ -40,12 +40,18 @@ import Maps from "./Maps"
 import Youtube from "./yt"
 import SettingsPanel from "./Settings"
 import { useSettings } from "@/app/context/settingContext"
+import Calender from "./Calender"
+import { useCursorAutomation } from "@/hooks/useCursorAutomation"
+import { AutomationControlPanel } from "./AutomationControlPannel"
+import { FakeCursor } from "./FakeCursor"
+import { useElevenTTS } from "@/hooks/ElevenLabs"
 
 interface WindowState {
   id: string
   title: string
   icon: string // Path to icon image (for window title bar)
   // component: React.ReactNode
+  appName: string
   x: number
   y: number
   width: number
@@ -68,6 +74,8 @@ interface IconItem {
 export function Desktop() {
   const { settings, updateGithubProfile } = useSettings()
 
+  const { speak } = useElevenTTS()
+
   // const [username, setUsername] = useState('vibhavtrivediWEBDEV')
 
   const [openWindows, setOpenWindows] = useState<WindowState[]>([])
@@ -77,6 +85,8 @@ export function Desktop() {
   const [commandToAutoRun, setCommandToAutoRun] = useState<{ command: string; args?: Record<string, any> } | null>(null)
 
   const desktopRef = useRef<HTMLDivElement>(null)
+  const [showCursor, setShowCursor] = useState(true);
+
 
   const [backgroundImage, setBackgroundImage] = useState('https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1200&h=800&fit=crop')
   const [themeColor, setThemeColor] = useState('240 5.9% 10%')
@@ -93,12 +103,10 @@ export function Desktop() {
   ]);
 
   const [UserIcon, setuserIcons] = useState<IconItem[]>([
-    { id: 1, name: 'Resume PDF', folderColor: "pink", type: 'file', icon: <FileTextIcon />, x: 30, y: 50 },
-    { id: 2, name: 'About Me', type: 'folder', icon: <FileTextIcon />, x: 30, y: 150, folderColor: 'red', folderItems: [] },
-    { id: 999, name: "Don't Look", folderColor: 'red', type: 'trash', icon: <Trash2Icon />, x: 30, y: 250 },
+    { id: 1, name: 'Resume PDF', folderColor: "pink", type: 'file', icon: <FileTextIcon />, x: 1100, y: 50 },
+    { id: 2, name: 'About Me', type: 'folder', icon: <FileTextIcon />, x: 1100, y: 150, folderColor: 'red', folderItems: [] },
+    { id: 999, name: "Don't Look", folderColor: 'red', type: 'trash', icon: <Trash2Icon />, x: 1100, y: 250 },
   ])
-
-
 
   // news items
 
@@ -171,12 +179,22 @@ export function Desktop() {
   useEffect(() => {
     async function loadGitHubData() {
       // Only load if GitHub profile is set
-      if (!settings.githubProfile || settings.githubProfile.trim() === '') {
-        return
-      }
+      // if (!settings.githubProfile || settings.githubProfile.trim() === '') {
+      //   return
+      // }
 
       try {
-        if (!settings.githubProfile || settings.githubProfile.trim() === '') {
+        if (true) {
+          // wallpaper_input
+          // settings_sidebar_wallpaper
+          // new_wallpaper_1
+
+
+
+
+
+
+          // await automationAPI.openWindow('Terminal');
           const repos = await fetchGitHubRepositories(settings.githubProfile)
 
           const folderIcons = createFolderIconsFromRepositories(repos)
@@ -214,7 +232,33 @@ export function Desktop() {
 
 
 
+  const changeWallpaper = async () => {
+    await automationAPI.executeSequence([
+      { action: 'open', target: 'Settings', delay: 500 },
+      { action: 'close', target: 'settings', delay: 700 },
+      // { action: 'move', target: 'settings_sidebar_wallpaper', delay: 1000 },
+      // { action: 'click', target: 'settings_sidebar_wallpaper', delay: 1000 },
 
+      // { action: 'move', target: 'wallpaper_input', delay: 1600 },
+      // { action: 'click', target: 'wallpaper_input', delay: 1800 },
+      // {
+      //   action: 'type',
+      //   target: 'wallpaper_input',
+      //   params: {
+      //     text: 'hanuman',
+      //     options: { delay: 70, humanLike: true }
+      //   },
+      //   delay: 500
+      // },
+      // { action: 'maximize', target: 'Settings', delay: 1900 },
+      // { action: 'move', target: 'new_wallpaper_6', delay: 2000 },
+      // { action: 'click', target: 'new_wallpaper_6', delay: 2500 },
+      // { action: 'close', target: 'Settings', delay: 2800 },
+    ]);
+  }
+
+
+  let windowCounter = 0;
 
   const openApplication = useCallback(
     (appName: string, initialX?: number, initialY?: number, commandToRun?: string, arg?: any) => {
@@ -276,7 +320,7 @@ export function Desktop() {
           component = <SettingsPanel
 
           />;
-          title = "setting";
+          title = "Setting";
           iconPath = "/icons/ai.png";
           defaultWidth = 500;
           defaultHeight = 250;
@@ -294,6 +338,14 @@ export function Desktop() {
           iconPath = "/icons/ai.png";
           defaultWidth = 340;
           defaultHeight = 250;
+          break;
+
+        case "Calendar":
+          component = <Calender />;
+          title = "Calendar";
+          iconPath = "/icons/ai.png";
+          defaultWidth = 640;
+          defaultHeight = 500;
           break;
         case "Maps":
           component = <Maps />;
@@ -413,24 +465,38 @@ export function Desktop() {
           return;
       }
 
-      const existingWindow = openWindows.find((win) => win.title === title);
+
+      const existingWindow = openWindows.find(
+        (win) => win.appName === appName
+      );
+
       if (existingWindow) {
         setOpenWindows((prev) =>
           prev.map((win) =>
             win.id === existingWindow.id
-              ? { ...win, zIndex: nextZIndex, isMinimized: false }
+              ? {
+                ...win,
+                isMinimized: false,
+                isMaximized: true,     // 👈 maximize here
+                zIndex: nextZIndex
+              }
               : win
           )
         );
         setNextZIndex((prev) => prev + 1);
-        return;
+        return
+
       }
+
+
+      windowCounter += 1;
 
       const z = nextZIndex + 1;
       const newWindow: WindowState = {
-        id: `window-${Date.now()}`,
+        id: `window-${windowCounter}`,
         title,
         icon: iconPath,
+        appName: appName,
         component,
         x:
           initialX !== undefined
@@ -455,6 +521,35 @@ export function Desktop() {
     ]
   );
 
+
+
+  const automationAPI = useCursorAutomation(
+    openApplication,
+    openWindows,
+    setOpenWindows,
+    speak
+  );
+
+
+  useEffect(() => {
+    (window as any).automationAPI = automationAPI;
+    (window as any).debugAutomation = {
+      listWindows: () => automationAPI.getAllWindows(),
+      openApp: (name: string) => automationAPI.openWindow(name),
+      closeAll: () => {
+        automationAPI.getAllWindows().forEach(id => {
+          automationAPI.closeWindow(id);
+        });
+      },
+      testCommand: (cmd: string) => automationAPI.executeTextCommand(cmd)
+    };
+
+    console.log('🎮 Automation API ready!');
+    console.log('Try: window.debugAutomation.testCommand("open terminal")');
+    console.log('Or:  window.automationAPI.openWindow("Terminal")');
+  }, [automationAPI]);
+
+
   //git hub vs code 
 
   const openGithubApplication = (name: string) => {
@@ -473,9 +568,10 @@ export function Desktop() {
 
     // 🚀 CREATE WINDOW WITH IFRAME
     const newWindow: WindowState = {
-      id: `github-${repo.name}-${Date.now()}`,
+      id: `github-${repo.name}}`,
       title: repo.name,
       icon: "/icons/vscode.png", // optional
+
       component: (
         <div className="w-full overflow-auto h-screen">
           <iframe
@@ -753,6 +849,7 @@ export function Desktop() {
                   >
                     Game
                   </p>
+                  <p onClick={changeWallpaper}>wallpaper</p>
                 </div>
 
                 {/* Mobile menu icon (hamburger) - show only on mobile */}
@@ -803,6 +900,10 @@ export function Desktop() {
               </div>
             </div>
             {/* <CustomCursor /> */}
+
+            <FakeCursor visible={showCursor} color={settings.folderColor} />
+
+
             {/* Central Portfolio Text */}
             {/* <h1
         ref={portfolioTextRef}
@@ -901,6 +1002,14 @@ export function Desktop() {
                 {win.component}
               </Window>
             ))}
+
+
+            {/* // automation api  */}
+            <AutomationControlPanel
+              automationAPI={automationAPI}
+              openWindows={openWindows}
+            />
+
 
             {/* Dock */}
             {/* <Dock appIcons={dockAppIcons} onAppClick={openApplication} /> */}
