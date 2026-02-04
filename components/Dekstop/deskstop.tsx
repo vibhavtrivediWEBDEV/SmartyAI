@@ -45,6 +45,8 @@ import { useCursorAutomation } from "@/hooks/useCursorAutomation"
 import { AutomationControlPanel } from "./AutomationControlPannel"
 import { FakeCursor } from "./FakeCursor"
 import { useElevenTTS } from "@/hooks/ElevenLabs"
+import { resolveSequence } from "@/lib/helper/helper"
+import { VoiceControlButton } from "./VoiceControlButton"
 
 interface WindowState {
   id: string
@@ -72,7 +74,9 @@ interface IconItem {
 }
 
 export function Desktop() {
-  const { settings, updateGithubProfile } = useSettings()
+  const { settings, updateSettings, updateGithubProfile } = useSettings()
+
+
 
   const { speak } = useElevenTTS()
 
@@ -232,29 +236,64 @@ export function Desktop() {
 
 
 
-  const changeWallpaper = async () => {
-    await automationAPI.executeSequence([
-      { action: 'open', target: 'Settings', delay: 500 },
-      { action: 'maximize', target: 'Settings', delay: 700 },
-      { action: 'move', target: 'settings_sidebar_wallpaper', delay: 1000 },
-      { action: 'click', target: 'settings_sidebar_wallpaper', delay: 1000 },
+  // const changeWallpaper = async () => {
+  //   await automationAPI.executeSequence([
+  //     { action: 'open', target: 'Settings', delay: 500 },
+  //     { action: 'maximize', target: 'Settings', delay: 700 },
+  //     { action: 'move', target: 'settings_sidebar_wallpaper', delay: 1000 },
+  //     { action: 'click', target: 'settings_sidebar_wallpaper', delay: 1000 },
 
-      { action: 'move', target: 'wallpaper_input', delay: 1600 },
-      { action: 'click', target: 'wallpaper_input', delay: 1800 },
-      {
-        action: 'type',
-        target: 'wallpaper_input',
-        params: {
-          text: 'Rambaug palace india hd wallpaper',
-          options: { delay: 70, humanLike: true }
-        },
-        delay: 500
-      },
-      // { action: 'maximize', target: 'Settings', delay: 1900 },
-      { action: 'move', target: 'new_wallpaper_6', delay: 2000 },
-      { action: 'click', target: 'new_wallpaper_6', delay: 2500 },
-      { action: 'close', target: 'Settings', delay: 2800 },
-    ]);
+  //     { action: 'move', target: 'wallpaper_input', delay: 1600 },
+  //     { action: 'click', target: 'wallpaper_input', delay: 1800 },
+  //     {
+  //       action: 'type',
+  //       target: 'wallpaper_input',
+  //       params: {
+  //         text: 'Rambaug palace india hd wallpaper',
+  //         options: { delay: 70, humanLike: true }
+  //       },
+  //       delay: 500
+  //     },
+  //     // { action: 'maximize', target: 'Settings', delay: 1900 },
+  //     { action: 'move', target: 'new_wallpaper_6', delay: 2000 },
+  //     { action: 'click', target: 'new_wallpaper_6', delay: 2500 },
+  //     { action: 'close', target: 'Settings', delay: 2800 },
+  //   ]);
+  // }
+
+
+  const changeWallpaper = async () => {
+    const sequence = resolveSequence(
+      // 'settings.wallpaper.change',
+      // {
+      //   prompt: 'hanuman',
+      //   // wallpaperResultId: 'new_wallpaper_6'
+      //   // or random:
+      //   wallpaperResultId: `new_wallpaper_${Math.floor(Math.random() * 10)}`
+      // }
+
+
+      "settings.appearance.toggleDarkMode",
+      {}
+
+      // 'settings.appearance.folderColor',
+      // { hexColor: '#644AFB' }
+
+
+      // "settings.font.changeSize",
+      // { fontSize: 20 }
+
+
+
+
+      //  "settings.theme.selectPreset",
+      //             { themeButtonId: `theme_color_${index}` }
+
+    )
+
+
+    await automationAPI.executeSequence(sequence)
+    updateSettings({ fontSize: 20 })
   }
 
 
@@ -1009,6 +1048,13 @@ export function Desktop() {
             <AutomationControlPanel
               automationAPI={automationAPI}
               openWindows={openWindows}
+            />
+
+
+            <VoiceControlButton
+              openApplication={openApplication}
+              openWindows={openWindows}
+              setOpenWindows={setOpenWindows}
             />
 
 

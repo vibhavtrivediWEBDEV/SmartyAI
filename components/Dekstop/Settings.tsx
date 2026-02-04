@@ -252,7 +252,7 @@ export default function SettingsModal() {
                         <h3 className="font-semibold text-sm sm:text-base">Dark Mode</h3>
                         <p className="text-xs sm:text-sm opacity-70">Use dark theme for the interface</p>
                       </div>
-                      <button
+                      <button id="toggle_dark_mode"
                         onClick={() => updateSettings({ darkMode: !settings.darkMode })}
                         style={{ background: settings.darkMode ? '#3b3939' : '#ededed2e' }}
                         className="relative w-12 h-6 rounded-full transition-colors"
@@ -275,6 +275,7 @@ export default function SettingsModal() {
                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
                       <input
                         type="color"
+                        id="folder_color_picker"
                         value={settings.folderColor}
                         onChange={(e) => updateSettings({ folderColor: e.target.value })}
                         className="w-16 h-16 rounded-lg cursor-pointer border-2 border-gray-300"
@@ -301,6 +302,7 @@ export default function SettingsModal() {
                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
                       <input
                         type="color"
+                        id="text_color_picker"
                         value={settings.textColor}
                         onChange={(e) => updateSettings({ textColor: e.target.value })}
                         className="w-16 h-16 rounded-lg cursor-pointer border-2 border-gray-300"
@@ -434,6 +436,7 @@ export default function SettingsModal() {
                     </h3>
                     <input
                       type="range"
+                      id="font_size_slider"
                       min="12"
                       max="20"
                       value={settings.fontSize}
@@ -472,9 +475,10 @@ export default function SettingsModal() {
                     Preset Colors
                   </p>
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 sm:gap-4">
-                    {THEME_COLORS.map((color) => (
+                    {THEME_COLORS.map((color,) => (
                       <button
                         key={color.name}
+                        id={color.name}
                         onClick={() => updateSettings({ themeColor: color.value })}
                         className={`flex flex-col items-center gap-1 sm:gap-2 p-2 sm:p-3 rounded-lg transition-colors ${settings.darkMode ? 'hover:bg-zinc-700' : 'hover:bg-white'
                           }`}
@@ -504,6 +508,7 @@ export default function SettingsModal() {
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
                     <input
                       type="color"
+                      id="custom_theme_color"
                       value={customColor}
                       onChange={(e) => {
                         setCustomColor(e.target.value)

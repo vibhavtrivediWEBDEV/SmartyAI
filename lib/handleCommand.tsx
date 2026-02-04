@@ -53,7 +53,7 @@ export async function handleCommand({
   const trimmedCommand = command?.trim();
   setHistory((prev) => [...prev, { type: "input", value: trimmedCommand }]);
 
-  const { speak } = useElevenTTS()
+  // const { speak } = useElevenTTS()
 
   const [baseCommand, ...args] = trimmedCommand.toLowerCase().split(" ");
   let output: string | JSX.Element = "";
@@ -249,7 +249,7 @@ export async function handleCommand({
         });
         const data = await res.json();
         output = data.content || "Sorry, I couldn't generate a response.";
-        speak("Please check Your balance , Quota Exceeded")
+        // speak("Please check Your balance , Quota Exceeded")
       } catch (err) {
         output = "Error fetching response from Gemini.";
       }

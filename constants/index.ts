@@ -108,7 +108,7 @@ export const interviewer: CreateAssistantDTO = {
   },
   voice: {
     provider: "11labs",
-    voiceId: "zgqefOY5FPQ3bB7OZTVR", 
+    voiceId: "zgqefOY5FPQ3bB7OZTVR",
     model: "eleven_multilingual_v2",
     stability: 0.4,
     similarityBoost: 0.8,
@@ -170,7 +170,7 @@ export const ncertAssistant: CreateAssistantDTO = {
   },
   voice: {
     provider: "11labs",
-    voiceId: "zgqefOY5FPQ3bB7OZTVR", 
+    voiceId: "zgqefOY5FPQ3bB7OZTVR",
     model: "eleven_multilingual_v2",
     stability: 0.7,
     similarityBoost: 0.65,
@@ -228,12 +228,12 @@ export const teacher: CreateAssistantDTO = {
   },
   voice: {
     provider: "11labs",
-    voiceId: "zgqefOY5FPQ3bB7OZTVR", 
-    model: "eleven_multilingual_v2", 
-    stability: 0.7,        
-    similarityBoost: 0.65, 
-    speed: 1,          
-    style: 0.8,          
+    voiceId: "zgqefOY5FPQ3bB7OZTVR",
+    model: "eleven_multilingual_v2",
+    stability: 0.7,
+    similarityBoost: 0.65,
+    speed: 1,
+    style: 0.8,
     useSpeakerBoost: true,
   },
   model: {
@@ -357,7 +357,7 @@ export const teachingCovers = [
   "/pinterest.png",
   "/quora.png",
   "/reddit.png",
-  
+
 ];
 
 // Adding subject topics mapping for teaching
@@ -432,12 +432,12 @@ export const smartyAssistant: CreateAssistantDTO = {
   },
   voice: {
     provider: "11labs",
-    voiceId: "zgqefOY5FPQ3bB7OZTVR", 
+    voiceId: "zgqefOY5FPQ3bB7OZTVR",
     model: "eleven_multilingual_v2", // Support for Hindi
-    stability: 0.6,        
-    similarityBoost: 0.7, 
-    speed: 1,          
-    style: 0.9,          
+    stability: 0.6,
+    similarityBoost: 0.7,
+    speed: 1,
+    style: 0.9,
     useSpeakerBoost: true,
   },
   model: {
@@ -477,5 +477,60 @@ Important: Do NOT ask for chapter numbers, textbook references, or exercise numb
     ],
     temperature: 0.7, // Higher temperature for more creative responses
     maxTokens: 800,   // Increased token length for detailed explanations
+  },
+};
+
+
+
+export const desktopAssistant: CreateAssistantDTO = {
+  name: "Desktop Assistant",
+  firstMessage:
+    "Hello! I'm your desktop assistant. I can help you automate tasks like changing wallpaper, opening apps, managing windows, and more. Just tell me what you'd like to do!",
+  transcriber: {
+    provider: "deepgram",
+    model: "nova-2",
+    language: "en",
+  },
+  voice: {
+    provider: "11labs",
+    voiceId: "21m00Tcm4TlvDq8ikWAM", // Professional voice
+    model: "eleven_turbo_v2",
+    stability: 0.7,
+    similarityBoost: 0.8,
+    speed: 1.1,
+    useSpeakerBoost: true,
+  },
+  model: {
+    provider: "openai",
+    model: "gpt-4o-mini", // Faster, cheaper
+    messages: [
+      {
+    role: "system",
+content: `
+You are a desktop automation assistant.
+Your job is to respond with EXACT automation commands.
+
+Rules:
+- Always respond with "AUTOMATE: sequence.key" at start.
+- If the command requires variables, ask the user ONLY once for necessary info.
+
+Commands and variables:
+- Change wallpaper: 'settings.wallpaper.change', needs { prompt }
+- Toggle dark mode: 'settings.appearance.toggleDarkMode', no variables
+- Folder color: 'settings.appearance.folderColor', needs { hexColor }
+- Change font size: 'settings.font.changeSize', needs { fontSize }
+
+Example:
+User: "Change wallpaper to mountains"
+Assistant: "AUTOMATE: settings.wallpaper.change - Setting wallpaper to mountains"
+
+User: "Toggle dark mode"
+Assistant: "AUTOMATE: settings.appearance.toggleDarkMode - Toggling dark mode now"
+`
+,
+      },
+    ],
+    temperature: 0.3, // Low temperature for consistent command matching
+    maxTokens: 100,   // Short responses
   },
 };

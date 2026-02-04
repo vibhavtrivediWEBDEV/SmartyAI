@@ -1,0 +1,103 @@
+{
+  "settings.wallpaper.change": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+
+    { "action": "move", "target": "settings_sidebar_wallpaper", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_wallpaper", "delay": 1200 },
+
+    { "action": "move", "target": "wallpaper_input", "delay": 1500 },
+    { "action": "click", "target": "wallpaper_input", "delay": 1700 },
+
+    {
+      "action": "type",
+      "target": "wallpaper_input",
+      "params": {
+        "text": "{{prompt}}",
+        "options": { "delay": 70, "humanLike": true }
+      },
+      "delay": 300
+    },
+
+    { "action": "move", "target": "{{wallpaperResultId}}", "delay": 800 },
+    { "action": "click", "target": "{{wallpaperResultId}}", "delay": 1000 },
+
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.appearance.toggleDarkMode": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+
+    { "action": "move", "target": "settings_sidebar_appearance", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_appearance", "delay": 1200 },
+
+    { "action": "move", "target": "toggle_dark_mode", "delay": 1500 },
+    { "action": "click", "target": "toggle_dark_mode", "delay": 1700 },
+
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.appearance.changeTheme": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+
+    { "action": "move", "target": "settings_sidebar_appearance", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_appearance", "delay": 1200 },
+
+    { "action": "move", "target": "{{themeId}}", "delay": 1500 },
+    { "action": "click", "target": "{{themeId}}", "delay": 1700 },
+
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+   "settings.appearance.folderColor": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "click", "target": "folder_color_picker", "delay": 1200 },
+
+  {
+    "action": "type",
+    "target": "folder_color_picker",
+    "params": {
+      "value": "{{hexColor}}"
+    }
+  },
+
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.appearance.customThemeColor": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+
+    { "action": "move", "target": "settings_sidebar_appearance", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_appearance", "delay": 1200 },
+
+    {
+      "action": "type",
+      "target": "custom_theme_color",
+      "params": {
+        "text": "{{hexColor}}"
+      },
+      "delay": 300
+    },
+
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+ "settings.font.changeSize": [
+  { "action": "open", "target": "Settings", "delay": 500 },
+  { "action": "maximize", "target": "Settings", "delay": 700 },
+  { "action": "move", "target": "settings_sidebar_font", "delay": 1000 },
+  { "action": "click", "target": "settings_sidebar_font", "delay": 1200 },
+  {
+    "action": "setValue",
+    "target": "font_size_slider",
+    "params": { "value": "{{fontSize}}", "updateState": "{{updateState}}" },
+    "delay": 300
+  },
+  { "action": "close", "target": "Settings", "delay": 500 }
+]
+
+}
