@@ -235,25 +235,25 @@ export function Desktop() {
   const changeWallpaper = async () => {
     await automationAPI.executeSequence([
       { action: 'open', target: 'Settings', delay: 500 },
-      { action: 'close', target: 'settings', delay: 700 },
-      // { action: 'move', target: 'settings_sidebar_wallpaper', delay: 1000 },
-      // { action: 'click', target: 'settings_sidebar_wallpaper', delay: 1000 },
+      { action: 'maximize', target: 'Settings', delay: 700 },
+      { action: 'move', target: 'settings_sidebar_wallpaper', delay: 1000 },
+      { action: 'click', target: 'settings_sidebar_wallpaper', delay: 1000 },
 
-      // { action: 'move', target: 'wallpaper_input', delay: 1600 },
-      // { action: 'click', target: 'wallpaper_input', delay: 1800 },
-      // {
-      //   action: 'type',
-      //   target: 'wallpaper_input',
-      //   params: {
-      //     text: 'hanuman',
-      //     options: { delay: 70, humanLike: true }
-      //   },
-      //   delay: 500
-      // },
+      { action: 'move', target: 'wallpaper_input', delay: 1600 },
+      { action: 'click', target: 'wallpaper_input', delay: 1800 },
+      {
+        action: 'type',
+        target: 'wallpaper_input',
+        params: {
+          text: 'Rambaug palace india hd wallpaper',
+          options: { delay: 70, humanLike: true }
+        },
+        delay: 500
+      },
       // { action: 'maximize', target: 'Settings', delay: 1900 },
-      // { action: 'move', target: 'new_wallpaper_6', delay: 2000 },
-      // { action: 'click', target: 'new_wallpaper_6', delay: 2500 },
-      // { action: 'close', target: 'Settings', delay: 2800 },
+      { action: 'move', target: 'new_wallpaper_6', delay: 2000 },
+      { action: 'click', target: 'new_wallpaper_6', delay: 2500 },
+      { action: 'close', target: 'Settings', delay: 2800 },
     ]);
   }
 
@@ -987,6 +987,7 @@ export function Desktop() {
                 id={win.id}
                 title={win.title}
                 icon={win.icon}
+                appName={win.appName}
                 initialX={(win.x)}
                 initialY={win.y}
                 initialWidth={win.width}
