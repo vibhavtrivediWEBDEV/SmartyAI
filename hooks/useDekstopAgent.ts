@@ -7,6 +7,7 @@ import { useState, useEffect, useRef } from "react";
 import { vapi } from "@/lib/vapi.sdk";
 import { desktopAssistant } from "@/constants";
 import { useCursorAutomation } from "./useCursorAutomation";
+import desktopJson from "../data/dekstop.json";
 
 // JSON mapping for sequences
 import { resolveSequence } from "@/lib/helper/helper";
@@ -51,52 +52,89 @@ export function useVoiceAutomation({
     const lastUserText = useRef<string>("");
 
     // Extract sequence key and variables from Assistant's response
-    const extractCommandAndVariables = (text: string): { key: string | null, variables: Record<string, any> } => {
-        // Normalize: "dot" -> ".", remove extra spaces, case insensitive for specific keywords
-        let normalized = text
-            .replace(/\s+dot\s+/gi, '.')
-            .replace(/\s+vertical bar\s+/gi, '|')
-            .replace(/\s+pipe\s+/gi, '|')
-            .replace(/\s+dash\s+/gi, '-')
-            .trim();
+    // const extractCommandAndVariables = (text: string): { key: string | null, variables: Record<string, any> } => {
+    //     // Normalize: "dot" -> ".", remove extra spaces, case insensitive for specific keywords
+    //     let normalized = text
+    //         .replace(/\s+dot\s+/gi, '.')
+    //         .replace(/\s+vertical bar\s+/gi, '|')
+    //         .replace(/\s+pipe\s+/gi, '|')
+    //         .replace(/\s+dash\s+/gi, '-')
+    //         .trim();
 
-        // 1. Extract Key
-        // Matches: AUTOMATE: key | ... or just key | ...
-        const keyMatch = normalized.match(/(?:AUTOMATE:?\s*)?([a-z0-9]+\.[a-zA-Z0-9.]+)/i);
-        if (!keyMatch) return { key: null, variables: {} };
+    //     // 1. Extract Key
+    //     // Matches: AUTOMATE: key | ... or just key | ...
+    //     const keyMatch = normalized.match(/(?:AUTOMATE:?\s*)?([a-z0-9]+\.[a-zA-Z0-9.]+)/i);
+    //     if (!keyMatch) return { key: null, variables: {} };
 
-        let key = keyMatch[1];
+    //     let key = keyMatch[1];
 
-        // 🚨 Key Alias/Correction Map
-        const KEY_ALIASES: Record<string, string> = {
-            'settings.appearance.folder': 'settings.appearance.folderColor',
-            'settings.appearance.foldercolor': 'settings.appearance.folderColor',
-            'settings.wallpaper': 'settings.wallpaper.change',
-            'settings.theme': 'settings.appearance.changeTheme'
-        };
+    //     // 🚨 Key Alias/Correction Map
+    //     const KEY_ALIASES: Record<string, string> = {
+    //         'settings.appearance.folder': 'settings.appearance.folderColor',
+    //         'settings.appearance.foldercolor': 'settings.appearance.folderColor',
+    //         'settings.wallpaper': 'settings.wallpaper.change',
+    //         'settings.theme': 'settings.appearance.changeTheme'
+    //     };
 
-        if (KEY_ALIASES[key]) {
-            key = KEY_ALIASES[key];
-        }
+    //     if (KEY_ALIASES[key]) {
+    //         key = KEY_ALIASES[key];
+    //     }
+
+    //     const variables: Record<string, any> = {};
+
+    //     // 2. Extract Variables
+    //     // Look for content after the key, possibly separated by | or just spaces
+    //     // Example: "... change | prompt: nature"
+    //     const variableSection = normalized.substring(normalized.indexOf(key) + key.length);
+
+    //     // Strategy: Key-Value pairs like "prompt: nature" or "hexColor: red"
+    //     // Also handle "prompt nature" (loose)
+    //     const kvMatches = variableSection.matchAll(/([a-zA-Z]+)\s*[:=]\s*([^|]+)/g);
+    //     for (const match of kvMatches) {
+    //         const varKey = match[1].trim();
+    //         const varValue = match[2].trim();
+    //         variables[varKey] = varValue;
+    //     }
+
+    //     return { key, variables };
+    // };
+
+
+
+
+    function extractCommandAndVariables(text: string) {
+        // 1️⃣ Normalize "dot" → "."
+        const normalized = text.replace(/\s+dot\s+/gi, '.').trim();
+
+        // 2️⃣ Match exact JSON key
+        const keys = Object.keys(desktopJson);
+        const sequenceKey = keys.find(key => normalized.toLowerCase().includes(key.toLowerCase()));
 
         const variables: Record<string, any> = {};
 
-        // 2. Extract Variables
-        // Look for content after the key, possibly separated by | or just spaces
-        // Example: "... change | prompt: nature"
-        const variableSection = normalized.substring(normalized.indexOf(key) + key.length);
-
-        // Strategy: Key-Value pairs like "prompt: nature" or "hexColor: red"
-        // Also handle "prompt nature" (loose)
-        const kvMatches = variableSection.matchAll(/([a-zA-Z]+)\s*[:=]\s*([^|]+)/g);
-        for (const match of kvMatches) {
-            const varKey = match[1].trim();
-            const varValue = match[2].trim();
-            variables[varKey] = varValue;
+        if (sequenceKey) {
+            if (sequenceKey.includes('wallpaper')) {
+                const match = normalized.match(/(?:wallpaper|background|to)\s+(.+)/i);
+                variables.prompt = match ? match[1].trim() : undefined;
+                variables.wallpaperResultId = `new_wallpaper_${Math.floor(Math.random() * 10)}`;
+            }
+            if (sequenceKey.includes('folderColor')) {
+                const match = normalized.match(/#[0-9a-f]{6}|(?:red|blue|green|purple|orange|pink)/i);
+                const colorMap: Record<string, string> = {
+                    red: '#FF0000', blue: '#0000FF', green: '#00FF00',
+                    purple: '#800080', orange: '#FFA500', pink: '#FFC0CB'
+                };
+                variables.hexColor = match ? (match[0].startsWith('#') ? match[0] : colorMap[match[0].toLowerCase()]) : '#644AFB';
+            }
+            if (sequenceKey.includes('fontSize')) {
+                const numMatch = normalized.match(/\d+/);
+                if (numMatch) variables.fontSize = parseInt(numMatch[0]);
+            }
         }
 
-        return { key, variables };
-    };
+        return { key: sequenceKey, variables };
+    }
+
 
     // 3️⃣ Execute voice command
     const executeVoiceCommand = async (userTranscript: string, assistantResponse: string) => {
@@ -110,8 +148,11 @@ export function useVoiceAutomation({
         try {
             // addLog(`🤖 Processing: "${assistantResponse}"`);
 
+            console.log("assistantResponse", assistantResponse)
             // Extract from ASSISTANT response now
             const { key: sequenceKey, variables } = extractCommandAndVariables(assistantResponse);
+
+            console.log({ sequenceKey, variables })
 
             if (!sequenceKey) {
                 isProcessing.current = false;
@@ -175,6 +216,11 @@ export function useVoiceAutomation({
             await automation.executeSequence(actions);
 
             addLog(`✅ Sequence completed`);
+
+
+            // 3️⃣ End call automatically
+            addLog("📞 Ending call...");
+            vapi.stop();
 
         } catch (error) {
             addLog(`❌ Error: ${error}`);

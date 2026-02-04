@@ -326,6 +326,19 @@ export function Desktop() {
           defaultWidth = 500;
           defaultHeight = 300;
           break;
+
+
+        // case "Notes":
+        //   component = <AutomationControlPanel
+        //     automationAPI={automationAPI}
+        //     openWindows={openWindows}
+        //   />;
+        //   title = "Controlpannel";
+        //   iconPath = "/icons/book.png";
+        //   defaultWidth = 300;
+        //   defaultHeight = 600;
+        //   break;
+
         case "Science Book":
           component = <ScienceBook />;
           title = "Science Book";
@@ -888,7 +901,7 @@ export function Desktop() {
                   >
                     Game
                   </p>
-                  <p onClick={changeWallpaper}>wallpaper</p>
+                  {/* <p onClick={changeWallpaper}>wallpaper</p> */}
                 </div>
 
                 {/* Mobile menu icon (hamburger) - show only on mobile */}
