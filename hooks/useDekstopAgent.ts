@@ -39,9 +39,6 @@ export function useVoiceAutomation({
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [executionLog, setExecutionLog] = useState<string[]>([]);
 
-    const automation = useCursorAutomation(openApplication, openWindows, setOpenWindows);
-    const isProcessing = useRef(false);
-
     const addLog = (message: string) => {
         const timestamp = new Date().toLocaleTimeString();
         const logMessage = `[${timestamp}] ${message}`;
@@ -49,81 +46,135 @@ export function useVoiceAutomation({
         console.log(logMessage);
     };
 
-    // Extract sequence key
-    const   extractAutomationCommand = (text: string): string | null => {
-        const normalizedText = text.replace(/\s+dot\s+/gi, '.').trim();
-        const match = normalizedText.match(/(?:AUTOMATE:\s*)?([a-z]+\.[a-zA-Z0-9.]+)/i);
-        if (match) return match[1];
-        return null;
-    };
+    const automation = useCursorAutomation(openApplication, openWindows, setOpenWindows, (text) => addLog(`🔊 ${text}`));
+    const isProcessing = useRef(false);
+    const lastUserText = useRef<string>("");
 
-    // Extract variables
-    const extractVariables = (userText: string, sequenceKey: string): Record<string, any> => {
-        const lower = userText.toLowerCase();
-        const variables: Record<string, any> = {};
+    // Extract sequence key and variables from Assistant's response
+    const extractCommandAndVariables = (text: string): { key: string | null, variables: Record<string, any> } => {
+        // Normalize: "dot" -> ".", remove extra spaces, case insensitive for specific keywords
+        let normalized = text
+            .replace(/\s+dot\s+/gi, '.')
+            .replace(/\s+vertical bar\s+/gi, '|')
+            .replace(/\s+pipe\s+/gi, '|')
+            .replace(/\s+dash\s+/gi, '-')
+            .trim();
 
-        if (sequenceKey.includes('wallpaper')) {
-            const match = lower.match(/(?:wallpaper|background)(?:\s+to\s+|\s+)(.+)/);
-            if (match) {
-                variables.prompt = match[1].trim();
-                variables.wallpaperResultId = `new_wallpaper_${Math.floor(Math.random() * 10)}`;
-            }
-        } else if (sequenceKey.includes('folderColor')) {
-            const colorMatch = lower.match(/#[0-9a-f]{6}|(?:red|blue|green|purple|orange|pink)/i);
-            if (colorMatch) {
-                const colorMap: Record<string, string> = {
-                    red: '#FF0000', blue: '#0000FF', green: '#00FF00',
-                    purple: '#800080', orange: '#FFA500', pink: '#FFC0CB'
-                };
-                variables.hexColor = colorMatch[0].startsWith('#')
-                    ? colorMatch[0]
-                    : colorMap[colorMatch[0].toLowerCase()] || '#644AFB';
-            }
-        } else if (sequenceKey.includes('fontSize')) {
-            const numMatch = lower.match(/\d+/);
-            if (numMatch) variables.fontSize = parseInt(numMatch[0]);
+        // 1. Extract Key
+        // Matches: AUTOMATE: key | ... or just key | ...
+        const keyMatch = normalized.match(/(?:AUTOMATE:?\s*)?([a-z0-9]+\.[a-zA-Z0-9.]+)/i);
+        if (!keyMatch) return { key: null, variables: {} };
+
+        let key = keyMatch[1];
+
+        // 🚨 Key Alias/Correction Map
+        const KEY_ALIASES: Record<string, string> = {
+            'settings.appearance.folder': 'settings.appearance.folderColor',
+            'settings.appearance.foldercolor': 'settings.appearance.folderColor',
+            'settings.wallpaper': 'settings.wallpaper.change',
+            'settings.theme': 'settings.appearance.changeTheme'
+        };
+
+        if (KEY_ALIASES[key]) {
+            key = KEY_ALIASES[key];
         }
 
-        return variables;
+        const variables: Record<string, any> = {};
+
+        // 2. Extract Variables
+        // Look for content after the key, possibly separated by | or just spaces
+        // Example: "... change | prompt: nature"
+        const variableSection = normalized.substring(normalized.indexOf(key) + key.length);
+
+        // Strategy: Key-Value pairs like "prompt: nature" or "hexColor: red"
+        // Also handle "prompt nature" (loose)
+        const kvMatches = variableSection.matchAll(/([a-zA-Z]+)\s*[:=]\s*([^|]+)/g);
+        for (const match of kvMatches) {
+            const varKey = match[1].trim();
+            const varValue = match[2].trim();
+            variables[varKey] = varValue;
+        }
+
+        return { key, variables };
     };
 
     // 3️⃣ Execute voice command
     const executeVoiceCommand = async (userTranscript: string, assistantResponse: string) => {
         if (isProcessing.current) {
-            addLog("⏳ Already processing a command...");
+            // addLog("⏳ Already processing a command...");
             return;
         }
 
         isProcessing.current = true;
 
         try {
-            addLog(`🎤 User: "${userTranscript}"`);
-            addLog(`🤖 Assistant: "${assistantResponse}"`);
+            // addLog(`🤖 Processing: "${assistantResponse}"`);
 
-            console.log("assitantRES:", assistantResponse)
-
-            // Extract automation command
-            const sequenceKey = extractAutomationCommand(assistantResponse);
-
-            console.log("sequence", sequenceKey)
+            // Extract from ASSISTANT response now
+            const { key: sequenceKey, variables } = extractCommandAndVariables(assistantResponse);
 
             if (!sequenceKey) {
-                addLog("ℹ️ No automation command detected");
                 isProcessing.current = false;
                 return;
             }
 
-            // Extract variables
-            const variables = extractVariables(userTranscript, sequenceKey);
+            addLog(`🤖 automating: ${sequenceKey}`);
+
+            // --- Client-side Enhancement / Fallback Logic ---
+
+            // 1. Wallpaper: If prompt not found in assistant response, check user transcript
+            if (sequenceKey.includes('wallpaper')) {
+                if (!variables.prompt) {
+                    // Try to find "change to X" or "wallpaper X" in USER text
+                    const userMatch = userTranscript.match(/(?:to|wallpaper|background)\s+(.+)/i);
+                    if (userMatch) {
+                        variables.prompt = userMatch[1].trim();
+                    } else if (userTranscript) {
+                        // Desperate fallback: take the last word(s)
+                        variables.prompt = userTranscript;
+                    }
+                }
+                // Generate random ID
+                variables.wallpaperResultId = `new_wallpaper_${Math.floor(Math.random() * 10)}`;
+            }
+
+            // 2. Folder Color: Hex conversion
+            if (sequenceKey.includes('folderColor')) {
+                // Try assistant extracted value first, then user's
+                const colorSource = variables.hexColor || userTranscript;
+
+                const colorMatch = colorSource.match(/#[0-9a-f]{6}|(?:red|blue|green|purple|orange|pink)/i);
+                if (colorMatch) {
+                    const colorMap: Record<string, string> = {
+                        red: '#FF0000', blue: '#0000FF', green: '#00FF00',
+                        purple: '#800080', orange: '#FFA500', pink: '#FFC0CB'
+                    };
+                    variables.hexColor = colorMatch[0].startsWith('#')
+                        ? colorMatch[0]
+                        : colorMap[colorMatch[0].toLowerCase()] || '#644AFB';
+                }
+            }
+
+            // 3. Font Size: Parse number
+            if (sequenceKey.includes('fontSize')) {
+                const sizeSource = variables.fontSize || userTranscript;
+                const numMatch = String(sizeSource).match(/\d+/);
+                if (numMatch) variables.fontSize = parseInt(numMatch[0]);
+            }
+
 
             addLog(`🎯 Matched sequence: ${sequenceKey}`);
             addLog(`📝 Variables: ${JSON.stringify(variables)}`);
 
-            // 🔹 Resolve sequence (keep the function call, but do not execute, just log)
+            // 🔹 Resolve sequence
             const actions = resolveSequence(sequenceKey, variables);
-            console.log("🔹 RESOLVED ACTIONS (check here, not executed yet):", actions);
+            console.log("🔹 EXECUTING ACTIONS:", actions);
+            addLog(`⚡ Executing ${actions.length} actions...`);
 
-            addLog(`⚡ Actions ready (not executed)`);
+            // 🔥 ACTUALLY EXECUTE NOW
+            await automation.executeSequence(actions);
+
+            addLog(`✅ Sequence completed`);
 
         } catch (error) {
             addLog(`❌ Error: ${error}`);
@@ -135,24 +186,22 @@ export function useVoiceAutomation({
 
 
     useEffect(() => {
-        let userTranscript = "";
-
         const onCallStart = () => { setCallStatus(CallStatus.ACTIVE); addLog("📞 Voice assistant connected"); };
-        const onCallEnd = () => { setCallStatus(CallStatus.INACTIVE); addLog("📞 Voice assistant disconnected"); userTranscript = ""; };
+        const onCallEnd = () => { setCallStatus(CallStatus.INACTIVE); addLog("📞 Voice assistant disconnected"); lastUserText.current = ""; };
         const onMessage = (message: Message) => {
             if (message.type === "transcript" && message.transcriptType === "final") {
                 setLastTranscript(message.transcript);
 
                 if (message.role === "user") {
-                    userTranscript = message.transcript;
+                    lastUserText.current = message.transcript;
                     addLog(`🎤 "${message.transcript}"`);
                 } else if (message.role === "assistant") {
                     const fullAssistantText = message.transcript.trim();
                     addLog(`🤖 "${fullAssistantText}"`);
 
-                    if (userTranscript) {
-                        executeVoiceCommand(userTranscript, fullAssistantText);
-                        userTranscript = "";
+                    if (lastUserText.current) {
+                        executeVoiceCommand(lastUserText.current, fullAssistantText);
+                        // Do NOT clear user text here, as assistant might send multiple segments
                     }
                 }
             }

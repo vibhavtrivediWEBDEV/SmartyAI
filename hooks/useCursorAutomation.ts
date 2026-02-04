@@ -391,7 +391,7 @@ export function useCursorAutomation(
   ): Promise<boolean> => {
     try {
       log(`Opening window: ${appName}`, 'info');
-      speak(`${appName} Opening.`)
+      speak?.(`${appName} Opening.`)
 
       openApplication(appName, x, y);
 
@@ -417,7 +417,7 @@ export function useCursorAutomation(
         log(`Window ${appName} DOM element found after ${retries} retries`, 'success');
       }
 
-      speak(`${appName} Opened`)
+      speak?.(`${appName} Opened`)
       return true; // Always return true since openApplication was called
     } catch (error) {
       log(`Error opening window: ${error}`, 'error');
