@@ -11,7 +11,7 @@ interface CursorPosition {
 }
 
 interface AutomationCommand {
-  action: 'move' | 'click' | 'open' | 'close' | 'type' | 'minimize' | 'maximize' | 'focus';
+  action: 'move' | 'click' | 'open' | 'close' | 'type' | 'minimize' | 'maximize' | 'focus' | 'setValue';
   target?: string; // Window ID or element ID
   params?: any; // Additional parameters
   delay?: number; // Delay before execution
@@ -56,7 +56,7 @@ export function useCursorAutomation(
   openApplication: (appName: string, x?: number, y?: number, command?: string, arg?: any) => void,
   openWindows: any[],
   setOpenWindows: React.Dispatch<React.SetStateAction<any[]>>,
-  speak: (text: string) => void // ⬅️ NEW: Hindi TTS function
+  speak?: (text: string) => void // ⬅️ NEW: Hindi TTS function
 
 ): CursorAutomationAPI {
 
@@ -677,6 +677,24 @@ export function useCursorAutomation(
             );
           }
           break;
+        case 'setValue': {
+          if (!command.target || command.params?.value == null) return false
+
+          const el = document.getElementById(command.target) as HTMLInputElement | null
+          if (!el) return false
+
+          el.value = String(command.params.value)
+
+          // ✅ React controlled input ke liye
+          if (el.type === 'range' || el.type === 'color') {
+            const event = new Event('input', { bubbles: true })
+            el.dispatchEvent(event)
+          }
+
+          return true
+        }
+
+
 
         default:
           log(`Unknown action: ${command.action}`, 'error');
