@@ -15,6 +15,7 @@ interface WindowProps {
   id: string
   title: string
   icon: string
+  appName: string
   initialX: number
   initialY: number
   initialWidth: number
@@ -33,6 +34,7 @@ export function Window({
   id,
   title,
   icon,
+  appName,
   initialX,
   initialY,
   initialWidth,
@@ -260,6 +262,7 @@ export function Window({
       // 🎯 AUTOMATION: Main window container ID
       id={id}
       data-window-title={title}
+      data-window-app={appName}
       data-window-type="window"
       className={`shadow-2xl flex flex-col overflow-hidden backdrop-blur-2xl ${isMobile ? "fixed inset-0 rounded-none" : "absolute rounded-xl"
         }`}

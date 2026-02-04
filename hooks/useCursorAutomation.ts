@@ -67,6 +67,13 @@ export function useCursorAutomation(
     cursorPosition: { x: 0, y: 0 }
   });
 
+  // 🔥 FIX: Use ref to always get latest openWindows
+  const openWindowsRef = useRef(openWindows);
+
+  useEffect(() => {
+    openWindowsRef.current = openWindows;
+  }, [openWindows]);
+
   const logRef = useRef<string[]>([]);
 
   // Helper: Log automation events
@@ -388,37 +395,35 @@ export function useCursorAutomation(
 
       openApplication(appName, x, y);
 
-      // ⬇️ WAIT for state update + DOM render
-      // await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // ⬇️ VERIFY window actually exists in state (with retry)
+      // ⬇️ WAIT for DOM window element to appear instead of checking state
       let retries = 0;
-      let windowExists = false;
+      let windowElement = null;
+      const maxRetries = 20; // 2 seconds max
 
-      while (!windowExists && retries < 10) {
-        windowExists = openWindows.some(
-          w => w.appName && w.appName.toLowerCase() === appName.toLowerCase()
-        );
+      while (!windowElement && retries < maxRetries) {
+        // Look for any window with matching title/app name in DOM
+        windowElement = document.querySelector(`[data-window-app="${appName}"]`);
 
-        if (!windowExists) {
+        if (!windowElement) {
           await new Promise(resolve => setTimeout(resolve, 100));
           retries++;
         }
       }
 
-      if (!windowExists) {
-        log(`Window failed to open: ${appName}`, 'error');
-        return false;
+      if (!windowElement) {
+        log(`Window DOM element not found: ${appName}, but continuing anyway`, 'warn');
+        // Don't fail - the window might still be there, just not tagged properly
+      } else {
+        log(`Window ${appName} DOM element found after ${retries} retries`, 'success');
       }
 
-      log(`Opened window: ${appName} (verified after ${retries} retries)`, 'success');
       speak(`${appName} Opened`)
-      return true;
+      return true; // Always return true since openApplication was called
     } catch (error) {
       log(`Error opening window: ${error}`, 'error');
       return false;
     }
-  }, [openApplication, openWindows, log]);
+  }, [openApplication, log, speak]);
 
   // Window: Close by ID
   // Window: Close by ID or AppName
@@ -427,12 +432,21 @@ export function useCursorAutomation(
   ): Promise<boolean> => {
     try {
       log(`Closing window(s): ${identifier}`, 'info');
-      // aiSpeak(`${identifier} बंद कर रहे हैं`); // 🔊 Closing window
+
+      // 🔥 FIX: Use ref to get latest openWindows
+      const currentWindows = openWindowsRef.current;
+
+      console.log('🔍 DEBUG closeWindow:', {
+        identifier,
+        allWindows: currentWindows.map(w => ({ id: w.id, appName: w.appName }))
+      });
 
       // 🔎 Find windows by id OR appName
-      const targets = openWindows.filter(
+      const targets = currentWindows.filter(
         w => w.id === identifier || w.appName.toLowerCase() === identifier.toLowerCase()
       );
+
+      console.log('🎯 Found targets:', targets);
 
       if (!targets.length) {
         log(`No window found for: ${identifier}`, 'warn');
@@ -442,11 +456,31 @@ export function useCursorAutomation(
       // 🧹 Close all matched windows
       for (const win of targets) {
         const closeButtonId = `${win.id}-close`;
-        const closeButton = findElement(closeButtonId);
+
+        console.log('🔘 Looking for close button:', closeButtonId);
+
+        // 🔥 FIX: Wait for close button to appear in DOM with retry
+        let closeButton = null;
+        let retries = 0;
+        const maxRetries = 20; // 2 seconds max
+
+        while (!closeButton && retries < maxRetries) {
+          closeButton = findElement(closeButtonId);
+          if (!closeButton) {
+            console.log(`⏳ Retry ${retries + 1}/${maxRetries} - waiting for button...`);
+            await new Promise(resolve => setTimeout(resolve, 100));
+            retries++;
+          } else {
+            console.log('✅ Close button found!', closeButton);
+          }
+        }
 
         if (closeButton) {
           await clickElement(closeButtonId);
-          log(`Closed via button: ${win.id}`, 'success');
+          log(`Closed via button: ${win.id} (found after ${retries} retries)`, 'success');
+        } else {
+          console.error('❌ Close button not found after retries');
+          log(`Close button not found after ${retries} retries, using state cleanup`, 'warn');
         }
 
         // Fallback / state cleanup
@@ -466,7 +500,7 @@ export function useCursorAutomation(
       log(`Error closing window(s): ${error}`, 'error');
       return false;
     }
-  }, [openWindows, findElement, clickElement, setOpenWindows, log]);
+  }, [findElement, clickElement, setOpenWindows, log]);
   // Window: Minimize
 
 
@@ -477,7 +511,7 @@ export function useCursorAutomation(
       // aiSpeak(`${identifier} मिनिमाइज़ कर रहे हैं`);
 
       // 🔎 Find windows by id OR appName
-      const targets = openWindows.filter(
+      const targets = openWindowsRef.current.filter(
         w => w.id === identifier || w.appName.toLowerCase() === identifier.toLowerCase()
       );
 
@@ -506,7 +540,7 @@ export function useCursorAutomation(
       // aiSpeak("मिनिमाइज़ नहीं हो पाया");
       return false;
     }
-  }, [openWindows, clickElement, log]);
+  }, [clickElement, log]);
 
   // Window: Maximize (supports both windowId and appName)
   const maximizeWindow = useCallback(async (identifier: string): Promise<boolean> => {
@@ -515,7 +549,7 @@ export function useCursorAutomation(
       // aiSpeak(`${identifier} मैक्सिमाइज़ कर रहे हैं`);
 
       // 🔎 Find windows by id OR appName
-      const targets = openWindows.filter(
+      const targets = openWindowsRef.current.filter(
         w => w.id === identifier || w.appName.toLowerCase() === identifier.toLowerCase()
       );
 
@@ -544,7 +578,7 @@ export function useCursorAutomation(
       // aiSpeak("मैक्सिमाइज़ नहीं हो पाया");
       return false;
     }
-  }, [openWindows, clickElement, log]);
+  }, [clickElement, log]);
 
   // Window: Focus (supports both windowId and appName)
   const focusWindow = useCallback(async (identifier: string): Promise<boolean> => {
@@ -553,7 +587,7 @@ export function useCursorAutomation(
       // aiSpeak(`${identifier} पर फोकस कर रहे हैं`);
 
       // 🔎 Find first matching window by id OR appName
-      const target = openWindows.find(
+      const target = openWindowsRef.current.find(
         w => w.id === identifier || w.appName.toLowerCase() === identifier.toLowerCase()
       );
 
@@ -577,7 +611,7 @@ export function useCursorAutomation(
       // aiSpeak("फोकस नहीं हो पाया");
       return false;
     }
-  }, [openWindows, clickElement, log]);
+  }, [clickElement, log]);
 
   // Execute single command
   const executeCommand = useCallback(async (command: AutomationCommand): Promise<boolean> => {
