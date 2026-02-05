@@ -54,8 +54,8 @@ export interface CursorAutomationAPI {
 
 export function useCursorAutomation(
   openApplication: (appName: string, x?: number, y?: number, command?: string, arg?: any) => void,
-  openWindows: any[],
-  setOpenWindows: React.Dispatch<React.SetStateAction<any[]>>,
+  openWindows?: any[],
+  setOpenWindows?: React.Dispatch<React.SetStateAction<any[]>>,
   speak?: (text: string) => void // ⬅️ NEW: Hindi TTS function
 
 ): CursorAutomationAPI {

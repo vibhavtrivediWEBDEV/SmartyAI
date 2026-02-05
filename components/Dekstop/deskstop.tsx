@@ -59,6 +59,7 @@ interface WindowState {
   width: number
   height: number
   isMinimized: boolean
+  isMaximized: boolean
   zIndex: number
 }
 
@@ -367,6 +368,9 @@ export function Desktop() {
           iconPath = "/icons/ai.png";
           defaultWidth = 900;
           defaultHeight = 550;
+
+          // automationAPI.maximizeWindow("vscode")
+
           break;
         case "Settings":
           component = <SettingsPanel
@@ -475,7 +479,13 @@ export function Desktop() {
         case "About Me":
           component = (
             <div className="p-4 text-gray-200">
-              Proficient in solving a wide range of problems in web front-end and back-end development, with 3.6 years of deep experience in JavaScript. Skilled in creating custom libraries and crafting CSS utility classes similar to Tailwind and material ui components.
+              Hello, my name is Vibhav Trivedi, and I have around four years of experience as a full-stack developer. I mainly work with React, Node.js,three js MongoDB, Redux, and GraphQL. I’ve also work with Blockchain and Ai Automations in my projects.
+              <br /> <br />
+              Currently, I work as a Senior Developer at Applore Technologies, where I build large-scale, real-time applications. One of the main projects I worked on is SharpBuy, which is an AI-based supply chain platform for electronic parts between India and China. It allows buyers and sellers to communicate directly and place bids in real time using Socket.io.
+              <br /> <br />
+              Along with my professional work, I have built a personal project which is an AI-powered operating system with a macOS-like interface. It supports voice commands, has a built-in terminal, and allows users to manage files and applications. It also includes apps like YouTube, Spotify, and a calendar, and most actions can be performed using commands or voice without using the mouse or keyboard
+              <br /> <br />
+              I’ve also worked with Docker to containerize applications and set up CI/CD pipelines to make builds, testing, and deployments faster and more reliable.
             </div>
           );
           title = "About Me";
@@ -561,6 +571,8 @@ export function Desktop() {
         width: defaultWidth,
         height: defaultHeight,
         isMinimized: false,
+        isMaximized: appName === "vscode", // 👈 Add this line
+
         zIndex: z,
       };
 
@@ -893,8 +905,9 @@ export function Desktop() {
 
                 {/* Hide menu items on small mobile, show on tablet+ */}
                 <div className="hidden sm:flex space-x-2 md:space-x-4">
-                  <a href="#" className="text-white transition-colors">Contact</a>
-                  <a href="#" className="text-white transition-colors">Resume</a>
+
+                  <p className="hover:text-white cursor-pointer transition-colors" onClick={() => openApplication('Terminal', 200, 400, 'contact')}>  Contact </p>
+
                   <p
                     className="hover:text-white cursor-pointer transition-colors"
                     onClick={() => openApplication('game')}
@@ -1045,6 +1058,7 @@ export function Desktop() {
                 initialWidth={win.width}
                 initialHeight={win.height}
                 isMinimized={win.isMinimized}
+                isMaximized={win.isMaximized}
                 zIndex={50 + win.zIndex}
                 onClose={closeWindow}
                 onMinimize={minimizeWindow}

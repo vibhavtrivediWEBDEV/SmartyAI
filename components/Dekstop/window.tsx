@@ -21,6 +21,7 @@ interface WindowProps {
   initialWidth: number
   initialHeight: number
   isMinimized: boolean
+  isMaximized?: boolean
   zIndex: number
   onClose: (id: string) => void
   onMinimize: (id: string) => void
@@ -40,6 +41,7 @@ export function Window({
   initialWidth,
   initialHeight,
   isMinimized,
+  isMaximized: initialIsMaximized = false,
   zIndex,
   onClose,
   onMinimize,
@@ -62,7 +64,7 @@ export function Window({
   const dragOffset = useRef({ x: 0, y: 0 })
   const resizeStart = useRef({ x: 0, y: 0, width: 0, height: 0 })
 
-  const [isMaximized, setIsMaximized] = useState(false)
+  const [isMaximized, setIsMaximized] = useState(initialIsMaximized)
   const [prevBounds, setPrevBounds] = useState<{
     x: number
     y: number
@@ -207,6 +209,18 @@ export function Window({
     [id, onFocus, width, height, isMobile]
   )
 
+  // Handle initial maximize state
+  useEffect(() => {
+    if (initialIsMaximized && desktopRef.current && !isMobile) {
+      const desktopRect = desktopRef.current.getBoundingClientRect()
+      setPrevBounds({ x, y, width, height })
+      setX(0)
+      setY(0)
+      setWidth(desktopRect.width)
+      setHeight(desktopRect.height)
+    }
+  }, [initialIsMaximized, desktopRef])
+
   // Maximize
   const handleMaximize = useCallback(() => {
     if (!desktopRef.current) return
@@ -285,9 +299,15 @@ export function Window({
         zIndex,
         transformOrigin: "center center",
         userSelect: isDragging || isResizing ? "none" : "auto",
-        display: isMinimized ? "none" : "block",
+        display: isMinimized
+          ? "none"
+          : isMaximized
+            ? "flex"
+            : "block",
         background: settings.darkMode ? `hsl(${themeColor})` : '',
         border: "1px solid rgba(255, 255, 255, 0.2)",
+        maxHeight: isMobile ? "100vh" : height,  // 👈 Add maxHeight constraint
+        maxWidth: isMobile ? "100vw" : width,
       }}
       onMouseDown={() => onFocus(id)}
       onTouchStart={() => onFocus(id)}

@@ -23,7 +23,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="hi" className="dark">
-      <body className={`${monaSans.className} antialiased `}>
+      <body className={`${monaSans.className} antialiased no-scrollbar`}>
         <SettingsProvider >
           {children}
         </SettingsProvider>

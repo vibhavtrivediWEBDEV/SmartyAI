@@ -181,14 +181,12 @@ export async function handleCommand({
                 {commands.contact.email}
               </a>
               <br />
-              GitHub:{" "}
+              Phone:{" "}
               <a
-                href={commands.contact.github}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline text-blue-400"
+                href={commands.contact.phone}
+
               >
-                {commands.contact.github}
+                {commands.contact.phone}
               </a>
             </div>
           );
