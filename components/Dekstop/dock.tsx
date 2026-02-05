@@ -270,7 +270,7 @@ export function Dock({ appIcons, minappIcons, onAppClick, onminAppClick }: DockP
     <div
       className={`fixed left-1/2 -translate-x-1/2 bottom-0 mb-2 bg-opacity-70 backdrop-blur-md rounded-xl p-2 flex space-x-2 shadow-lg z-40 transform transition-all duration-300 ease-out
       ${isVisible ? "translate-y-0 opacity-100" : "translate-y-full opacity-0 pointer-events-none"}`}
-      style={{ background: "rgba(39, 31, 31, 0.62)" }}
+      style={{ background: "rgba(39, 31, 31, 0.62)", zIndex: 9999999 }}
     >
       {mergedIcons.map((app) => (
         <button

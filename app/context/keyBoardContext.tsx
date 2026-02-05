@@ -63,11 +63,11 @@ interface KeyboardProviderProps {
   onFind?: () => void
   onSelectAll?: () => void
   onOpenApps: (appName: string) => void
-  
-}  
+
+}
 
 
-export function KeyboardProvider({ children, onUndo, onRedo, onSave, onFind, onSelectAll ,onOpenApps}: KeyboardProviderProps) {
+export function KeyboardProvider({ children, onUndo, onRedo, onSave, onFind, onSelectAll, onOpenApps }: KeyboardProviderProps) {
   const [clipboardItems, setClipboardItems] = useState<ClipboardItem[]>([])
   const [selectedItems, setSelectedItems] = useState<string[]>([])
   const [pressedKeys, setPressedKeys] = useState<Set<string>>(new Set())
@@ -147,12 +147,12 @@ export function KeyboardProvider({ children, onUndo, onRedo, onSave, onFind, onS
 
   const pasteItems = useCallback(
     async (targetLocation?: string) => {
-      console.log("clip",clipboardItems)
+      console.log("clip", clipboardItems)
       if (clipboardItems.length === 0) {
         toast.error("Nothing to paste")
         return []
       }
-      
+
 
       try {
         const sourceIds = clipboardItems.map((item) => item.id)
@@ -212,11 +212,11 @@ export function KeyboardProvider({ children, onUndo, onRedo, onSave, onFind, onS
     setContextMenu(null)
   }, [])
 
-  const openTerminal = useCallback(() =>{
+  const openTerminal = useCallback(() => {
     alert("termial")
     // onOpenApps("Terminal",150,150,) 
 
-  },[])
+  }, [])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -252,12 +252,12 @@ export function KeyboardProvider({ children, onUndo, onRedo, onSave, onFind, onS
               cutItems(items)
             }
             break
-         
-             
+
+
           case "v":
-  event.preventDefault()
-  pasteItems()
-  break
+            event.preventDefault()
+            pasteItems()
+            break
 
           case "a":
             event.preventDefault()
@@ -279,11 +279,11 @@ export function KeyboardProvider({ children, onUndo, onRedo, onSave, onFind, onS
             onSave?.()
             toast.success("Saved")
             break
-             
-              case "l":
-                event.preventDefault()
-                onOpenApps("Terminal",390,200,"excel")
-               break  
+
+          case "l":
+            event.preventDefault()
+            onOpenApps("Terminal", 390, 200, "excel")
+            break
           case "f":
             event.preventDefault()
             onFind?.()
@@ -360,9 +360,8 @@ export function KeyboardProvider({ children, onUndo, onRedo, onSave, onFind, onS
           {contextMenu.items.map((item, index) => (
             <button
               key={index}
-              className={`flex items-center w-full text-left px-3 py-2 text-sm transition-colors ${
-                item.disabled ? "text-gray-500 cursor-not-allowed" : "text-gray-200 hover:bg-gray-700"
-              }`}
+              className={`flex items-center w-full text-left px-3 py-2 text-sm transition-colors ${item.disabled ? "text-gray-500 cursor-not-allowed" : "text-gray-200 hover:bg-gray-700"
+                }`}
               onClick={() => {
                 if (!item.disabled) {
                   item.action?.()

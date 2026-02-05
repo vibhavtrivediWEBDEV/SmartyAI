@@ -147,6 +147,7 @@ export const TerminalInput = forwardRef<HTMLInputElement, TerminalInputProps>(
           <input
             ref={internalInputRef}
             type="text"
+            id="terminal_input"
             className="flex-1 bg-transparent border-none outline-none text-green-400 ml-2 caret-green-400 text-sm sm:text-base min-h-[44px] touch-manipulation"
             value={currentInput}
             onChange={(e) => onInputChange(e.target.value)}

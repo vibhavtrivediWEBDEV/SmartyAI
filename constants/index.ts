@@ -521,6 +521,7 @@ Available Commands:
 - Toggle dark mode:   'settings.appearance.toggleDarkMode' (No variables)
 - Set folder color:   'settings.appearance.folderColor'    (Variable: hexColor)
 - Change font size:   'settings.font.changeSize'           (Variable: fontSize)
+- Open Terminal :   'openTerminal'           (Variable: prompt)
 
 Examples:
 

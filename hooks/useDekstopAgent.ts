@@ -130,6 +130,22 @@ export function useVoiceAutomation({
                 const numMatch = normalized.match(/\d+/);
                 if (numMatch) variables.fontSize = parseInt(numMatch[0]);
             }
+            if (sequenceKey.includes('terminal')) {
+                // Extract everything after 'terminal' or 'to' keyword
+                const match = normalized.match(/(?:open\s+)?terminal\s+(?:to\s+)?(.+)/i) ||
+                    normalized.match(/(?:terminal|to)\s+(.+)/i);
+
+                variables.prompt = match && match[1] ? match[1].trim() : undefined;
+
+                // If no prompt found, check if there's any text after the command
+                if (!variables.prompt) {
+                    const words = normalized.split(/\s+/);
+                    const terminalIndex = words.findIndex(w => w.includes('terminal'));
+                    if (terminalIndex !== -1 && terminalIndex < words.length - 1) {
+                        variables.prompt = words.slice(terminalIndex + 1).join(' ');
+                    }
+                }
+            }
         }
 
         return { key: sequenceKey, variables };
