@@ -141,6 +141,104 @@ export function extractCommandFromResponse(
         return result;
     }
 }
+//-------------------------------- SYSTEM AUTOMATION _________________________________
+
+export const APPS = [
+    "terminal",
+    "settings",
+    "safari",
+    "vscode",
+    "chrome",
+    "spotify",
+    "calendar",
+    "maps",
+    "youtube",
+    "excel",
+    "mail",
+    "pdf",
+    "finder",
+    "photos",
+    "tv",
+    "game",
+    "science book",
+    "app store",
+];
+
+
+function levenshtein(a: string, b: string): number {
+    const dp = Array.from({ length: a.length + 1 }, () =>
+        Array(b.length + 1).fill(0)
+    );
+
+    for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+    for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+
+    for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
+            dp[i][j] = Math.min(
+                dp[i - 1][j] + 1,
+                dp[i][j - 1] + 1,
+                dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+            );
+        }
+    }
+
+    return dp[a.length][b.length];
+}
+
+function normalizeText(str: string) {
+    return str
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+
+export function resolveAppName(input: string): string | null {
+    const normalizedInput = normalizeText(input);
+
+    let bestMatch: string | null = null;
+    let bestScore = Infinity;
+
+    for (const app of APPS) {
+        const score = levenshtein(normalizedInput, normalizeText(app));
+
+        if (score < bestScore) {
+            bestScore = score;
+            bestMatch = app;
+        }
+    }
+
+    // 🔥 Threshold = safety net
+    if (bestScore <= Math.max(2, Math.floor(normalizedInput.length / 2))) {
+        return bestMatch;
+    }
+
+    return null;
+}
+
+
+export function extractAppActionFromResponse(response: string) {
+    const text = response.toLowerCase();
+
+    const actionMatch = text.match(/\b(open|close|maximize|minimize|focus)\b/);
+    if (!actionMatch) return null;
+
+    const action = actionMatch[1];
+
+    // Everything except action → app candidate
+    const appText = text.replace(action, '').replace(/app name|action|:/g, '');
+
+    const appKey = resolveAppName(appText);
+    if (!appKey) return null;
+
+    return {
+        appKey,
+        action,
+    };
+}
+
 
 // Convert color to hex
 function convertColorToHex(color: string): string {

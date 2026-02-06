@@ -98,7 +98,22 @@
     "delay": 300
   },
   { "action": "close", "target": "Settings", "delay": 500 }
-],
+  
+],"terminal.open": [
+    { "action": "open", "target": "Terminal", "delay": 500 }
+  ],
+  
+  "terminal.close": [
+    { "action": "close", "target": "Terminal", "delay": 300 }
+  ],
+  
+  "terminal.maximize": [
+    { "action": "maximize", "target": "Terminal", "delay": 300 }
+  ],
+  
+  "terminal.minimize": [
+    { "action": "minimize", "target": "Terminal", "delay": 300 }
+  ],
 
   "openTerminal": [
     { "action": "open", "target": "Terminal", "delay": 500 },
@@ -114,21 +129,7 @@
       },
       "delay": 300
     }
-  ] ,
-    "openSettings": [
-    { "action": "open", "target": "Terminal", "delay": 500 },
-
-    { "action": "move", "target": "terminal_input", "delay": 1000 },
-    { "action": "click", "target": "terminal_input", "delay": 1200 },
- {
-      "action": "type",
-      "target": "terminal_input",
-      "params": {
-        "text": "{{prompt}}",
-        "options": { "delay": 70, "humanLike": true }
-      },
-      "delay": 300
-    }
+  
   ]
 
 }

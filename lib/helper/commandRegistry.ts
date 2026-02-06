@@ -60,12 +60,7 @@ export const COMMAND_REGISTRY = {
         ]
     },
 
-    "6": {
-        key: "openSettings",
-        description: "Open settings ",
-        variables: [],
-        examples: ["setting open", "setting kholo", "settings "]
-    }
+
 };
 
 // Helper: Generate formatted commands for VAPI

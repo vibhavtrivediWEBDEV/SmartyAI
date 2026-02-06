@@ -5,8 +5,9 @@ import { vapi } from "@/lib/vapi.sdk";
 import { desktopAssistant } from "@/constants";
 import { useCursorAutomation } from "./useCursorAutomation";
 import { resolveSequence } from "@/lib/helper/helper";
-import { extractCommandFromResponse } from "@/lib/helper/commandExtractor";
+import { extractAppActionFromResponse, extractCommandFromResponse } from "@/lib/helper/commandExtractor";
 import { getFormattedCommands, getFormattedCommandsWithExamples } from "@/lib/helper/commandRegistry";
+import { isValid } from "zod";
 
 export enum CallStatus {
     INACTIVE = "INACTIVE",
@@ -54,51 +55,152 @@ export function useVoiceAutomation({
     const lastUserText = useRef<string>("");
 
     // 🔥 Execute voice command with new extraction
-    const executeVoiceCommand = async (userTranscript: string, assistantResponse: string) => {
-        if (isProcessing.current) {
-            return;
-        }
+    // const executeVoiceCommand = async (userTranscript: string, assistantResponse: string) => {
+    //     if (isProcessing.current) {
+    //         return;
+    //     }
 
+    //     isProcessing.current = true;
+
+    //     try {
+    //         console.log("🎤 User:", userTranscript);
+    //         console.log("🤖 Assistant:", assistantResponse);
+
+    //         // 🚀 NEW: Extract using index-based system
+    //         const extracted = extractCommandFromResponse(assistantResponse, userTranscript);
+
+    //         console.log("📦 Extracted:", extracted);
+
+    //         if (!extracted.isValid) {
+    //             if (extracted.error) {
+    //                 addLog(`⚠️ ${extracted.error}`);
+    //             }
+    //             isProcessing.current = false;
+    //             return;
+    //         }
+
+    //         addLog(`🎯 Command: ${extracted.commandKey}`);
+    //         addLog(`📝 Variables: ${JSON.stringify(extracted.variables)}`);
+
+    //         // 🔹 Resolve sequence with variables
+    //         const actions = resolveSequence(extracted.commandKey!, extracted.variables);
+
+    //         console.log("🔹 ACTIONS TO EXECUTE:", actions);
+    //         addLog(`⚡ Executing ${actions.length} actions...`);
+
+    //         // 🔥 Execute automation sequence
+    //         await automation.executeSequence(actions);
+
+    //         addLog(`✅ Automation completed successfully`);
+
+    //         vapi.say("kaam ho gya g boss")
+    //         // 📞 End call after successful execution
+    //         setTimeout(() => {
+    //             addLog("📞 Ending call...");
+
+    //             vapi.stop();
+    //         }, 5000);
+
+    //     } catch (error) {
+    //         const errorMsg = error instanceof Error ? error.message : String(error);
+    //         addLog(`❌ Error: ${errorMsg}`);
+    //         console.error("Automation error:", error);
+    //     } finally {
+    //         isProcessing.current = false;
+    //     }
+    // };
+
+    const executeVoiceCommand = async (
+        userTranscript: string,
+        assistantResponse: string
+    ) => {
+        if (isProcessing.current) return;
         isProcessing.current = true;
 
         try {
             console.log("🎤 User:", userTranscript);
             console.log("🤖 Assistant:", assistantResponse);
 
-            // 🚀 NEW: Extract using index-based system
-            const extracted = extractCommandFromResponse(assistantResponse, userTranscript);
+            const normalized = assistantResponse.toLowerCase();
 
-            console.log("📦 Extracted:", extracted);
+            console.log("normalized - direction", normalized)
 
-            if (!extracted.isValid) {
-                if (extracted.error) {
-                    addLog(`⚠️ ${extracted.error}`);
+            /**
+             * 🅱️ COMPLEX AUTOMATION (INDEX / COMMAND BASED)
+             * Example:
+             * COMMAND: 4 | prompt: mountains
+             */
+            if (normalized.includes("command")) {
+                const extracted = extractCommandFromResponse(
+                    assistantResponse,
+                    userTranscript
+                );
+
+                console.log("📦 Extracted:", extracted);
+
+                if (!extracted.isValid) {
+                    if (extracted.error) {
+                        addLog(`⚠️ ${extracted.error}`);
+                    }
+                    return;
                 }
-                isProcessing.current = false;
+
+                addLog(`🎯 Command: ${extracted.commandKey}`);
+                addLog(`📝 Variables: ${JSON.stringify(extracted.variables)}`);
+
+                const actions = resolveSequence(
+                    extracted.commandKey!,
+                    extracted.variables
+                );
+
+                console.log("🔹 ACTIONS TO EXECUTE:", actions);
+                addLog(`⚡ Executing ${actions.length} actions...`);
+
+                await automation.executeSequence(actions);
+
+                addLog(`✅ Automation completed successfully`);
+                vapi.say("kaam ho gaya boss 😎");
+
+                setTimeout(() => {
+                    addLog("📞 Ending call...");
+                    vapi.stop();
+                }, 3000);
+
                 return;
             }
 
-            addLog(`🎯 Command: ${extracted.commandKey}`);
-            addLog(`📝 Variables: ${JSON.stringify(extracted.variables)}`);
+            /**
+             * 🅰️ SIMPLE APP ACTION (appName + action)
+             * Example:
+             * appName: Terminal
+             * action: open
+             */
+            const appAction = extractAppActionFromResponse(assistantResponse);
+            console.log("appAction", appAction)
+            if (!appAction) {
+                addLog("⚠️ Could not understand app action");
+                return;
+            }
 
-            // 🔹 Resolve sequence with variables
-            const actions = resolveSequence(extracted.commandKey!, extracted.variables);
+            addLog(`🖥 App: ${appAction.appKey}`);
+            addLog(`🎬 Action: ${appAction.action}`);
+
+            const actions = resolveSequence(
+                `${appAction.appKey}.${appAction.action}`
+            );
 
             console.log("🔹 ACTIONS TO EXECUTE:", actions);
             addLog(`⚡ Executing ${actions.length} actions...`);
 
-            // 🔥 Execute automation sequence
             await automation.executeSequence(actions);
 
-            addLog(`✅ Automation completed successfully`);
+            addLog(`✅ Action completed`);
+            vapi.say("ho gaya boss ");
 
-            vapi.say("kaam ho gya g boss")
-            // 📞 End call after successful execution
             // setTimeout(() => {
             //     addLog("📞 Ending call...");
-
             //     vapi.stop();
-            // }, 5000);
+            // }, 2500);
 
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
