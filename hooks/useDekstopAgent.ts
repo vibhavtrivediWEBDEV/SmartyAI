@@ -1,16 +1,12 @@
-/**
- * useVoiceAutomation Hook
- * Simple voice control for desktop automation using VAPI
- */
+// hooks/useVoiceAutomation.ts
 
 import { useState, useEffect, useRef } from "react";
 import { vapi } from "@/lib/vapi.sdk";
 import { desktopAssistant } from "@/constants";
 import { useCursorAutomation } from "./useCursorAutomation";
-import desktopJson from "../data/dekstop.json";
-
-// JSON mapping for sequences
 import { resolveSequence } from "@/lib/helper/helper";
+import { extractCommandFromResponse } from "@/lib/helper/commandExtractor";
+import { getFormattedCommands, getFormattedCommandsWithExamples } from "@/lib/helper/commandRegistry";
 
 export enum CallStatus {
     INACTIVE = "INACTIVE",
@@ -47,223 +43,97 @@ export function useVoiceAutomation({
         console.log(logMessage);
     };
 
-    const automation = useCursorAutomation(openApplication, openWindows, setOpenWindows, (text) => addLog(`🔊 ${text}`));
+    const automation = useCursorAutomation(
+        openApplication,
+        openWindows,
+        setOpenWindows,
+        (text) => addLog(`🔊 ${text}`)
+    );
+
     const isProcessing = useRef(false);
     const lastUserText = useRef<string>("");
 
-    // Extract sequence key and variables from Assistant's response
-    // const extractCommandAndVariables = (text: string): { key: string | null, variables: Record<string, any> } => {
-    //     // Normalize: "dot" -> ".", remove extra spaces, case insensitive for specific keywords
-    //     let normalized = text
-    //         .replace(/\s+dot\s+/gi, '.')
-    //         .replace(/\s+vertical bar\s+/gi, '|')
-    //         .replace(/\s+pipe\s+/gi, '|')
-    //         .replace(/\s+dash\s+/gi, '-')
-    //         .trim();
-
-    //     // 1. Extract Key
-    //     // Matches: AUTOMATE: key | ... or just key | ...
-    //     const keyMatch = normalized.match(/(?:AUTOMATE:?\s*)?([a-z0-9]+\.[a-zA-Z0-9.]+)/i);
-    //     if (!keyMatch) return { key: null, variables: {} };
-
-    //     let key = keyMatch[1];
-
-    //     // 🚨 Key Alias/Correction Map
-    //     const KEY_ALIASES: Record<string, string> = {
-    //         'settings.appearance.folder': 'settings.appearance.folderColor',
-    //         'settings.appearance.foldercolor': 'settings.appearance.folderColor',
-    //         'settings.wallpaper': 'settings.wallpaper.change',
-    //         'settings.theme': 'settings.appearance.changeTheme'
-    //     };
-
-    //     if (KEY_ALIASES[key]) {
-    //         key = KEY_ALIASES[key];
-    //     }
-
-    //     const variables: Record<string, any> = {};
-
-    //     // 2. Extract Variables
-    //     // Look for content after the key, possibly separated by | or just spaces
-    //     // Example: "... change | prompt: nature"
-    //     const variableSection = normalized.substring(normalized.indexOf(key) + key.length);
-
-    //     // Strategy: Key-Value pairs like "prompt: nature" or "hexColor: red"
-    //     // Also handle "prompt nature" (loose)
-    //     const kvMatches = variableSection.matchAll(/([a-zA-Z]+)\s*[:=]\s*([^|]+)/g);
-    //     for (const match of kvMatches) {
-    //         const varKey = match[1].trim();
-    //         const varValue = match[2].trim();
-    //         variables[varKey] = varValue;
-    //     }
-
-    //     return { key, variables };
-    // };
-
-
-
-
-    function extractCommandAndVariables(text: string) {
-        // 1️⃣ Normalize "dot" → "."
-        const normalized = text.replace(/\s+dot\s+/gi, '.').trim();
-
-        // 2️⃣ Match exact JSON key
-        const keys = Object.keys(desktopJson);
-        const sequenceKey = keys.find(key => normalized.toLowerCase().includes(key.toLowerCase()));
-
-        const variables: Record<string, any> = {};
-
-        if (sequenceKey) {
-            if (sequenceKey.includes('wallpaper')) {
-                const match = normalized.match(/(?:wallpaper|background|to)\s+(.+)/i);
-                variables.prompt = match ? match[1].trim() : undefined;
-                variables.wallpaperResultId = `new_wallpaper_${Math.floor(Math.random() * 10)}`;
-            }
-            if (sequenceKey.includes('folderColor')) {
-                const match = normalized.match(/#[0-9a-f]{6}|(?:red|blue|green|purple|orange|pink)/i);
-                const colorMap: Record<string, string> = {
-                    red: '#FF0000', blue: '#0000FF', green: '#00FF00',
-                    purple: '#800080', orange: '#FFA500', pink: '#FFC0CB'
-                };
-                variables.hexColor = match ? (match[0].startsWith('#') ? match[0] : colorMap[match[0].toLowerCase()]) : '#644AFB';
-            }
-            if (sequenceKey.includes('fontSize')) {
-                const numMatch = normalized.match(/\d+/);
-                if (numMatch) variables.fontSize = parseInt(numMatch[0]);
-            }
-            if (sequenceKey.includes('terminal')) {
-                // Extract everything after 'terminal' or 'to' keyword
-                const match = normalized.match(/(?:open\s+)?terminal\s+(?:to\s+)?(.+)/i) ||
-                    normalized.match(/(?:terminal|to)\s+(.+)/i);
-
-                variables.prompt = match && match[1] ? match[1].trim() : undefined;
-
-                // If no prompt found, check if there's any text after the command
-                if (!variables.prompt) {
-                    const words = normalized.split(/\s+/);
-                    const terminalIndex = words.findIndex(w => w.includes('terminal'));
-                    if (terminalIndex !== -1 && terminalIndex < words.length - 1) {
-                        variables.prompt = words.slice(terminalIndex + 1).join(' ');
-                    }
-                }
-            }
-        }
-
-        return { key: sequenceKey, variables };
-    }
-
-
-    // 3️⃣ Execute voice command
+    // 🔥 Execute voice command with new extraction
     const executeVoiceCommand = async (userTranscript: string, assistantResponse: string) => {
         if (isProcessing.current) {
-            // addLog("⏳ Already processing a command...");
             return;
         }
 
         isProcessing.current = true;
 
         try {
-            // addLog(`🤖 Processing: "${assistantResponse}"`);
+            console.log("🎤 User:", userTranscript);
+            console.log("🤖 Assistant:", assistantResponse);
 
-            console.log("assistantResponse", assistantResponse)
-            // Extract from ASSISTANT response now
-            const { key: sequenceKey, variables } = extractCommandAndVariables(assistantResponse);
+            // 🚀 NEW: Extract using index-based system
+            const extracted = extractCommandFromResponse(assistantResponse, userTranscript);
 
-            console.log({ sequenceKey, variables })
+            console.log("📦 Extracted:", extracted);
 
-            if (!sequenceKey) {
+            if (!extracted.isValid) {
+                if (extracted.error) {
+                    addLog(`⚠️ ${extracted.error}`);
+                }
                 isProcessing.current = false;
                 return;
             }
 
-            addLog(`🤖 automating: ${sequenceKey}`);
+            addLog(`🎯 Command: ${extracted.commandKey}`);
+            addLog(`📝 Variables: ${JSON.stringify(extracted.variables)}`);
 
-            // --- Client-side Enhancement / Fallback Logic ---
+            // 🔹 Resolve sequence with variables
+            const actions = resolveSequence(extracted.commandKey!, extracted.variables);
 
-            // 1. Wallpaper: If prompt not found in assistant response, check user transcript
-            if (sequenceKey.includes('wallpaper')) {
-                if (!variables.prompt) {
-                    // Try to find "change to X" or "wallpaper X" in USER text
-                    const userMatch = userTranscript.match(/(?:to|wallpaper|background)\s+(.+)/i);
-                    if (userMatch) {
-                        variables.prompt = userMatch[1].trim();
-                    } else if (userTranscript) {
-                        // Desperate fallback: take the last word(s)
-                        variables.prompt = userTranscript;
-                    }
-                }
-                // Generate random ID
-                variables.wallpaperResultId = `new_wallpaper_${Math.floor(Math.random() * 10)}`;
-            }
-
-            // 2. Folder Color: Hex conversion
-            if (sequenceKey.includes('folderColor')) {
-                // Try assistant extracted value first, then user's
-                const colorSource = variables.hexColor || userTranscript;
-
-                const colorMatch = colorSource.match(/#[0-9a-f]{6}|(?:red|blue|green|purple|orange|pink)/i);
-                if (colorMatch) {
-                    const colorMap: Record<string, string> = {
-                        red: '#FF0000', blue: '#0000FF', green: '#00FF00',
-                        purple: '#800080', orange: '#FFA500', pink: '#FFC0CB'
-                    };
-                    variables.hexColor = colorMatch[0].startsWith('#')
-                        ? colorMatch[0]
-                        : colorMap[colorMatch[0].toLowerCase()] || '#644AFB';
-                }
-            }
-
-            // 3. Font Size: Parse number
-            if (sequenceKey.includes('fontSize')) {
-                const sizeSource = variables.fontSize || userTranscript;
-                const numMatch = String(sizeSource).match(/\d+/);
-                if (numMatch) variables.fontSize = parseInt(numMatch[0]);
-            }
-
-
-            addLog(`🎯 Matched sequence: ${sequenceKey}`);
-            addLog(`📝 Variables: ${JSON.stringify(variables)}`);
-
-            // 🔹 Resolve sequence
-            const actions = resolveSequence(sequenceKey, variables);
-            console.log("🔹 EXECUTING ACTIONS:", actions);
+            console.log("🔹 ACTIONS TO EXECUTE:", actions);
             addLog(`⚡ Executing ${actions.length} actions...`);
 
-            // 🔥 ACTUALLY EXECUTE NOW
+            // 🔥 Execute automation sequence
             await automation.executeSequence(actions);
 
-            addLog(`✅ Sequence completed`);
+            addLog(`✅ Automation completed successfully`);
 
+            vapi.say("kaam ho gya g boss")
+            // 📞 End call after successful execution
+            // setTimeout(() => {
+            //     addLog("📞 Ending call...");
 
-            // 3️⃣ End call automatically
-            addLog("📞 Ending call...");
-            vapi.stop();
+            //     vapi.stop();
+            // }, 5000);
 
         } catch (error) {
-            addLog(`❌ Error: ${error}`);
-            console.error(error);
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            addLog(`❌ Error: ${errorMsg}`);
+            console.error("Automation error:", error);
         } finally {
             isProcessing.current = false;
         }
     };
 
-
     useEffect(() => {
-        const onCallStart = () => { setCallStatus(CallStatus.ACTIVE); addLog("📞 Voice assistant connected"); };
-        const onCallEnd = () => { setCallStatus(CallStatus.INACTIVE); addLog("📞 Voice assistant disconnected"); lastUserText.current = ""; };
+        const onCallStart = () => {
+            setCallStatus(CallStatus.ACTIVE);
+            addLog("📞 Voice assistant connected");
+        };
+
+        const onCallEnd = () => {
+            setCallStatus(CallStatus.INACTIVE);
+            addLog("📞 Voice assistant disconnected");
+            lastUserText.current = "";
+        };
+
         const onMessage = (message: Message) => {
             if (message.type === "transcript" && message.transcriptType === "final") {
                 setLastTranscript(message.transcript);
 
                 if (message.role === "user") {
                     lastUserText.current = message.transcript;
-                    addLog(`🎤 "${message.transcript}"`);
+                    addLog(`🎤 User: "${message.transcript}"`);
                 } else if (message.role === "assistant") {
                     const fullAssistantText = message.transcript.trim();
-                    addLog(`🤖 "${fullAssistantText}"`);
+                    addLog(`🤖 Assistant: "${fullAssistantText}"`);
 
                     if (lastUserText.current) {
                         executeVoiceCommand(lastUserText.current, fullAssistantText);
-                        // Do NOT clear user text here, as assistant might send multiple segments
                     }
                 }
             }
@@ -271,7 +141,10 @@ export function useVoiceAutomation({
 
         const onSpeechStart = () => setIsSpeaking(true);
         const onSpeechEnd = () => setIsSpeaking(false);
-        const onError = (error: Error) => { addLog(`❌ Error: ${error.message}`); console.error(error); };
+        const onError = (error: Error) => {
+            addLog(`❌ VAPI Error: ${error.message}`);
+            console.error("VAPI error:", error);
+        };
 
         vapi.on("call-start", onCallStart);
         vapi.on("call-end", onCallEnd);
@@ -291,11 +164,44 @@ export function useVoiceAutomation({
     }, [automation]);
 
     const startCall = async () => {
-        try { addLog("📞 Connecting to voice assistant..."); await vapi.start(desktopAssistant); }
-        catch (error) { addLog(`❌ Failed to start call: ${error}`); console.error(error); }
+        try {
+
+            addLog("📞 Connecting to voice assistant...");
+
+            const formattedCommands = getFormattedCommandsWithExamples();
+
+
+            await vapi.start(desktopAssistant, {
+                variableValues: {
+                    commands: formattedCommands,
+                },
+            });
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            addLog(`❌ Failed to start call: ${errorMsg}`);
+            console.error("Start call error:", error);
+        }
     };
 
-    const endCall = () => { addLog("📞 Ending call..."); vapi.stop(); };
+    const endCall = () => {
+        addLog("📞 Ending call...");
+        vapi.stop();
+    };
 
-    return { callStatus, lastTranscript, isSpeaking, executionLog, startCall, endCall, isActive: callStatus === CallStatus.ACTIVE };
+    return {
+        callStatus,
+        lastTranscript,
+        isSpeaking,
+        executionLog,
+        startCall,
+        endCall,
+        isActive: callStatus === CallStatus.ACTIVE
+    };
 }
+
+
+
+
+
+
+

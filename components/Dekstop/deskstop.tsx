@@ -47,6 +47,7 @@ import { FakeCursor } from "./FakeCursor"
 import { useElevenTTS } from "@/hooks/ElevenLabs"
 import { resolveSequence } from "@/lib/helper/helper"
 import { VoiceControlButton } from "./VoiceControlButton"
+import { getFormattedCommandsWithExamples } from "@/lib/helper/commandRegistry"
 
 interface WindowState {
   id: string
@@ -86,6 +87,8 @@ export function Desktop() {
   const [openWindows, setOpenWindows] = useState<WindowState[]>([])
   const [desktopBg, setDesktopBg] = useState("dot")
   const [nextZIndex, setNextZIndex] = useState(1)
+  const ref = useRef(1)
+
   const portfolioTextRef = useRef<HTMLHeadingElement>(null)
   const [commandToAutoRun, setCommandToAutoRun] = useState<{ command: string; args?: Record<string, any> } | null>(null)
 
@@ -153,6 +156,7 @@ export function Desktop() {
         { opacity: 1, y: 0, duration: 1, ease: "power3.out", delay: 0.5 }
       );
     }
+    console.log("ssa", getFormattedCommandsWithExamples())
   }, []);
 
   useEffect(() => {
@@ -553,7 +557,11 @@ export function Desktop() {
 
       windowCounter += 1;
 
-      const z = nextZIndex + 1;
+      const isAlwaysMax = ['vscode', 'App Store'].includes(appName)
+
+      const z = ref.current + 100;
+
+      console.log(`prev ${ref.current} - next ${z}`)
       const newWindow: WindowState = {
         id: `window-${windowCounter}`,
         title,
@@ -571,7 +579,7 @@ export function Desktop() {
         width: defaultWidth,
         height: defaultHeight,
         isMinimized: false,
-        isMaximized: appName === "vscode", // 👈 Add this line
+        isMaximized: isAlwaysMax,
 
         zIndex: z,
       };

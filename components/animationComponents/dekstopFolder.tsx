@@ -91,9 +91,8 @@ const Folder: React.FC<FolderProps> = ({ color = 'pink', size = 0.5, items = [],
   return (
     <div style={scaleStyle} className={className}>
       <div
-        className={`group relative transition-all duration-200 ease-in cursor-pointer ${
-          !open ? 'hover:-translate-y-2' : ''
-        }`}
+        className={`group relative transition-all duration-200 ease-in cursor-pointer ${!open ? 'hover:-translate-y-2' : ''
+          }`}
         style={{
           ...folderStyle,
           transform: open ? 'translateY(-8px)' : undefined
@@ -123,9 +122,8 @@ const Folder: React.FC<FolderProps> = ({ color = 'pink', size = 0.5, items = [],
                 key={i}
                 onMouseMove={e => handlePaperMouseMove(e, i)}
                 onMouseLeave={e => handlePaperMouseLeave(e, i)}
-                className={`absolute z-20 bottom-[10%] left-1/2 transition-all duration-300 ease-in-out ${
-                  !open ? 'transform -translate-x-1/2 translate-y-[10%] group-hover:translate-y-0' : 'hover:scale-110'
-                } ${sizeClasses}`}
+                className={`absolute z-20 bottom-[10%] left-1/2 transition-all duration-300 ease-in-out ${!open ? 'transform -translate-x-1/2 translate-y-[10%] group-hover:translate-y-0' : 'hover:scale-110'
+                  } ${sizeClasses}`}
                 style={{
                   ...(!open ? {} : { transform: transformStyle }),
                   backgroundColor: i === 0 ? paper1 : i === 1 ? paper2 : paper3,
@@ -137,9 +135,8 @@ const Folder: React.FC<FolderProps> = ({ color = 'pink', size = 0.5, items = [],
             );
           })}
           <div
-            className={`absolute z-30 w-full h-full origin-bottom transition-all duration-300 ease-in-out ${
-              !open ? 'group-hover:[transform:skew(15deg)_scaleY(0.6)]' : ''
-            }`}
+            className={`absolute z-30 w-full h-full origin-bottom transition-all duration-300 ease-in-out ${!open ? 'group-hover:[transform:skew(15deg)_scaleY(0.6)]' : ''
+              }`}
             style={{
               backgroundColor: color,
               borderRadius: '5px 10px 10px 10px',
@@ -147,9 +144,8 @@ const Folder: React.FC<FolderProps> = ({ color = 'pink', size = 0.5, items = [],
             }}
           ></div>
           <div
-            className={`absolute z-30 w-full h-full origin-bottom transition-all duration-300 ease-in-out ${
-              !open ? 'group-hover:[transform:skew(-15deg)_scaleY(0.6)]' : ''
-            }`}
+            className={`absolute z-30 w-full h-full origin-bottom transition-all duration-300 ease-in-out ${!open ? 'group-hover:[transform:skew(-15deg)_scaleY(0.6)]' : ''
+              }`}
             style={{
               backgroundColor: color,
               borderRadius: '5px 10px 10px 10px',
