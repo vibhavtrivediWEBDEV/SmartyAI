@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Gesture Mouse Control</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 900px;
+            width: 90%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 2em;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 640px;
+            margin: 0 auto 20px;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        #video {
+            width: 100%;
+            height: auto;
+            display: block;
+            transform: scaleX(-1);
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+        }
+
+        #startBtn {
+            background: #667eea;
+            color: white;
+        }
+
+        #startBtn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+
+        #stopBtn {
+            background: #f093fb;
+            color: white;
+        }
+
+        #stopBtn:hover {
+            background: #e082ea;
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status {
+            text-align: center;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            background: #ff4444;
+        }
+
+        .status-indicator.active {
+            background: #44ff44;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .instructions {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .instructions h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .instructions ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .instructions li {
+            padding: 8px 0;
+            padding-left: 25px;
+            position: relative;
+        }
+
+        .instructions li:before {
+            content: "👉";
+            position: absolute;
+            left: 0;
+        }
+
+        .cursor {
+            position: fixed;
+            width: 20px;
+            height: 20px;
+            background: rgba(102, 126, 234, 0.8);
+            border: 3px solid white;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 10000;
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.6);
+            transition: all 0.05s ease;
+            display: none;
+        }
+
+        .cursor.clicking {
+            background: rgba(240, 147, 251, 1);
+            transform: scale(1.5);
+        }
+
+        .gesture-info {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            display: none;
+            z-index: 9999;
+        }
+
+        .scroll-indicator {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 10px;
+            display: none;
+            z-index: 9999;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🖐️ Hand Gesture Mouse Control</h1>
+
+        <div class="status">
+            <span class="status-indicator" id="statusIndicator"></span>
+            <span id="statusText">Ready to start</span>
+        </div>
+
+        <div class="video-container">
+            <video id="video" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+        </div>
+
+        <div class="controls">
+            <button id="startBtn">Start Camera</button>
+            <button id="stopBtn" disabled>Stop</button>
+        </div>
+
+        <div class="instructions">
+            <h3>Gesture Controls:</h3>
+            <ul>
+                <li><strong>Move Cursor:</strong> Point with index finger extended</li>
+                <li><strong>Click:</strong> Pinch thumb and index finger together</li>
+                <li><strong>Scroll Up:</strong> Show open palm (all 5 fingers up)</li>
+                <li><strong>Scroll Down:</strong> Make a fist (close all fingers)</li>
+                <li><strong>Right Click:</strong> Pinch thumb and middle finger</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="cursor" id="virtualCursor"></div>
+    <div class="gesture-info" id="gestureInfo">Gesture: None</div>
+    <div class="scroll-indicator" id="scrollIndicator">⬆️ Scrolling</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+        const virtualCursor = document.getElementById('virtualCursor');
+        const gestureInfo = document.getElementById('gestureInfo');
+        const scrollIndicator = document.getElementById('scrollIndicator');
+
+        let hands;
+        let camera;
+        let isRunning = false;
+        let lastGesture = '';
+        let lastScrollTime = 0;
+        let clickCooldown = false;
+
+        // Initialize MediaPipe Hands
+        function initializeHands() {
+            hands = new Hands({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+                }
+            });
+
+            hands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.7,
+                minTrackingConfidence: 0.7
+            });
+
+            hands.onResults(onResults);
+        }
+
+        // Calculate distance between two points
+        function distance(point1, point2) {
+            return Math.sqrt(
+                Math.pow(point1.x - point2.x, 2) +
+                Math.pow(point1.y - point2.y, 2)
+            );
+        }
+
+        // Detect gestures
+        function detectGesture(landmarks) {
+            const thumb = landmarks[4];
+            const indexFinger = landmarks[8];
+            const middleFinger = landmarks[12];
+            const ringFinger = landmarks[16];
+            const pinky = landmarks[20];
+
+            const thumbIndex = distance(thumb, indexFinger);
+            const thumbMiddle = distance(thumb, middleFinger);
+
+            // Check if fingers are extended
+            const indexExtended = landmarks[8].y < landmarks[6].y;
+            const middleExtended = landmarks[12].y < landmarks[10].y;
+            const ringExtended = landmarks[16].y < landmarks[14].y;
+            const pinkyExtended = landmarks[20].y < landmarks[18].y;
+
+            const fingersExtended = [
+                indexExtended,
+                middleExtended,
+                ringExtended,
+                pinkyExtended
+            ].filter(Boolean).length;
+
+            // Pinch detection (Click)
+            if (thumbIndex < 0.05) {
+                return 'click';
+            }
+
+            // Thumb + Middle finger pinch (Right click)
+            if (thumbMiddle < 0.05) {
+                return 'rightclick';
+            }
+
+            // Open palm (Scroll up)
+            if (fingersExtended === 4) {
+                return 'scrollup';
+            }
+
+            // Fist (Scroll down)
+            if (fingersExtended === 0) {
+                return 'scrolldown';
+            }
+
+            // Index finger pointing (Move cursor)
+            if (indexExtended && fingersExtended === 1) {
+                return 'move';
+            }
+
+            return 'none';
+        }
+
+        // Handle gesture actions
+        function handleGesture(gesture, cursorX, cursorY) {
+            const now = Date.now();
+
+            gestureInfo.textContent = `Gesture: ${gesture}`;
+
+            if (gesture === 'click' && !clickCooldown) {
+                virtualCursor.classList.add('clicking');
+                clickCooldown = true;
+
+                // Simulate click at cursor position
+                const elementAtPoint = document.elementFromPoint(cursorX, cursorY);
+                if (elementAtPoint && elementAtPoint !== virtualCursor) {
+                    elementAtPoint.click();
+                }
+
+                setTimeout(() => {
+                    virtualCursor.classList.remove('clicking');
+                    clickCooldown = false;
+                }, 300);
+            }
+
+            if (gesture === 'scrollup' && now - lastScrollTime > 100) {
+                window.scrollBy(0, -15);
+                scrollIndicator.textContent = '⬆️ Scrolling Up';
+                scrollIndicator.style.display = 'block';
+                lastScrollTime = now;
+            } else if (gesture === 'scrolldown' && now - lastScrollTime > 100) {
+                window.scrollBy(0, 15);
+                scrollIndicator.textContent = '⬇️ Scrolling Down';
+                scrollIndicator.style.display = 'block';
+                lastScrollTime = now;
+            } else if (gesture !== 'scrollup' && gesture !== 'scrolldown') {
+                scrollIndicator.style.display = 'none';
+            }
+
+            lastGesture = gesture;
+        }
+
+        // Process hand tracking results
+        function onResults(results) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+
+                // Draw hand landmarks
+                drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
+                drawLandmarks(ctx, landmarks, { color: '#FF0000', lineWidth: 1, radius: 3 });
+
+                // Get index finger tip position (landmark 8)
+                const indexTip = landmarks[8];
+
+                // Convert to screen coordinates
+                const cursorX = (1 - indexTip.x) * window.innerWidth;
+                const cursorY = indexTip.y * window.innerHeight;
+
+                // Update virtual cursor position
+                virtualCursor.style.left = cursorX + 'px';
+                virtualCursor.style.top = cursorY + 'px';
+                virtualCursor.style.display = 'block';
+                gestureInfo.style.display = 'block';
+
+                // Detect and handle gestures
+                const gesture = detectGesture(landmarks);
+                handleGesture(gesture, cursorX, cursorY);
+            } else {
+                virtualCursor.style.display = 'none';
+                gestureInfo.style.display = 'none';
+                scrollIndicator.style.display = 'none';
+            }
+
+            ctx.restore();
+        }
+
+        // Start camera
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480 }
+                });
+
+                video.srcObject = stream;
+
+                initializeHands();
+
+                camera = new Camera(video, {
+                    onFrame: async () => {
+                        await hands.send({ image: video });
+                    },
+                    width: 640,
+                    height: 480
+                });
+
+                await camera.start();
+
+                isRunning = true;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                statusIndicator.classList.add('active');
+                statusText.textContent = 'Camera Active - Show your hand!';
+
+            } catch (error) {
+                alert('Error accessing camera: ' + error.message);
+                console.error(error);
+            }
+        }
+
+        // Stop camera
+        function stopCamera() {
+            if (camera) {
+                camera.stop();
+            }
+
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+            }
+
+            isRunning = false;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            statusIndicator.classList.remove('active');
+            statusText.textContent = 'Camera Stopped';
+            virtualCursor.style.display = 'none';
+            gestureInfo.style.display = 'none';
+            scrollIndicator.style.display = 'none';
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // Event listeners
+        startBtn.addEventListener('click', startCamera);
+        stopBtn.addEventListener('click', stopCamera);
+    </script>
+</body>
+
+</html>

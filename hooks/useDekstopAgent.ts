@@ -121,36 +121,24 @@ export function useVoiceAutomation({
             console.log("🎤 User:", userTranscript);
             console.log("🤖 Assistant:", assistantResponse);
 
-            const normalized = assistantResponse.toLowerCase();
-
-            console.log("normalized - direction", normalized)
-
             /**
-             * 🅱️ COMPLEX AUTOMATION (INDEX / COMMAND BASED)
-             * Example:
-             * COMMAND: 4 | prompt: mountains
+             * 🧠 STEP 1: Try COMMAND extraction FIRST
+             * Because command responses are STRUCTURED & strict
              */
-            if (normalized.includes("command")) {
-                const extracted = extractCommandFromResponse(
-                    assistantResponse,
-                    userTranscript
-                );
+            const commandExtracted = extractCommandFromResponse(
+                assistantResponse,
+                userTranscript
+            );
 
-                console.log("📦 Extracted:", extracted);
+            if (commandExtracted.isValid && commandExtracted.commandKey) {
+                console.log("🎯 Detected COMMAND flow");
 
-                if (!extracted.isValid) {
-                    if (extracted.error) {
-                        addLog(`⚠️ ${extracted.error}`);
-                    }
-                    return;
-                }
-
-                addLog(`🎯 Command: ${extracted.commandKey}`);
-                addLog(`📝 Variables: ${JSON.stringify(extracted.variables)}`);
+                addLog(`🎯 Command: ${commandExtracted.commandKey}`);
+                addLog(`📝 Variables: ${JSON.stringify(commandExtracted.variables)}`);
 
                 const actions = resolveSequence(
-                    extracted.commandKey!,
-                    extracted.variables
+                    commandExtracted.commandKey,
+                    commandExtracted.variables
                 );
 
                 console.log("🔹 ACTIONS TO EXECUTE:", actions);
@@ -170,15 +158,15 @@ export function useVoiceAutomation({
             }
 
             /**
-             * 🅰️ SIMPLE APP ACTION (appName + action)
-             * Example:
-             * appName: Terminal
-             * action: open
+             * 🅰️ STEP 2: Fallback to SIMPLE APP ACTION
              */
             const appAction = extractAppActionFromResponse(assistantResponse);
-            console.log("appAction", appAction)
+
+            console.log("appAction", appAction);
+
             if (!appAction) {
-                addLog("⚠️ Could not understand app action");
+                addLog("⚠️ Could not understand command or app action");
+                // vapi.say("Samajh nahi aaya, thoda clear bolo");
                 return;
             }
 
@@ -195,21 +183,18 @@ export function useVoiceAutomation({
             await automation.executeSequence(actions);
 
             addLog(`✅ Action completed`);
-            vapi.say("ho gaya boss ");
-
-            // setTimeout(() => {
-            //     addLog("📞 Ending call...");
-            //     vapi.stop();
-            // }, 2500);
+            vapi.say("ho gaya boss 😎");
 
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
             addLog(`❌ Error: ${errorMsg}`);
+            vapi.say("Could you please clarify what you Exactly want to OPerate ?");
             console.error("Automation error:", error);
         } finally {
             isProcessing.current = false;
         }
     };
+
 
     useEffect(() => {
         const onCallStart = () => {

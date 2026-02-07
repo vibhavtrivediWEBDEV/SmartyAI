@@ -77,6 +77,7 @@ interface IconItem {
 
 export function Desktop() {
   const { settings, updateSettings, updateGithubProfile } = useSettings()
+  const [handControlCursor, setHandControlCursor] = useState(false)
 
 
 
@@ -974,7 +975,11 @@ export function Desktop() {
             </div>
             {/* <CustomCursor /> */}
 
-            <FakeCursor visible={showCursor} color={settings.folderColor} />
+            <FakeCursor
+              visible={showCursor}
+              color={settings.folderColor}
+              handControl={handControlCursor}
+            />
 
 
             {/* Central Portfolio Text */}

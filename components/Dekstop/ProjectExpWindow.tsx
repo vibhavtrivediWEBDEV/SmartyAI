@@ -744,98 +744,9 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
   //       )}
   //     </div>
 
-  //     {/* File Creation Dialog */}
-  //     {fileCreationDialog?.isOpen && (
-  //       <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-  //         <div className="bg-white rounded-lg shadow-lg p-4 w-96">
-  //           <h3 className="text-sm font-bold mb-4">Create New File</h3>
+  {/* File Creation Dialog */ }
 
-  //           <div className="space-y-4">
-  //             {/* File Name Input */}
-  //             <div>
-  //               <label className="block text-xs font-medium text-gray-700 mb-1">File Name</label>
-  //               <input
-  //                 type="text"
-  //                 value={fileCreationDialog.fileName}
-  //                 onChange={(e) =>
-  //                   setFileCreationDialog({
-  //                     ...fileCreationDialog,
-  //                     fileName: e.target.value,
-  //                   })
-  //                 }
-  //                 placeholder="Enter file name"
-  //                 className="w-full px-3 py-2 border border-gray-300 rounded text-xs focus:outline-none focus:border-blue-500"
-  //                 autoFocus
-  //               />
-  //             </div>
 
-  //             {/* File Type Selection */}
-  //             <div>
-  //               <label className="block text-xs font-medium text-gray-700 mb-2">File Type</label>
-  //               <div className="grid grid-cols-2 gap-2">
-  //                 {Object.entries(FILE_EXTENSIONS).map(([type]) => (
-  //                   <button
-  //                     key={type}
-  //                     onClick={() =>
-  //                       setFileCreationDialog({
-  //                         ...fileCreationDialog,
-  //                         fileType: type,
-  //                       })
-  //                     }
-  //                     className={`px-3 py-2 rounded text-xs border transition-colors capitalize ${fileCreationDialog.fileType === type
-  //                         ? "bg-blue-100 border-blue-500 text-blue-700 font-medium"
-  //                         : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100"
-  //                       }`}
-  //                   >
-  //                     {type}
-  //                   </button>
-  //                 ))}
-  //               </div>
-  //             </div>
-
-  //             {/* Extension Preview */}
-  //             <div className="bg-gray-50 p-2 rounded text-xs">
-  //               <span className="text-gray-600">File will be: </span>
-  //               <span className="font-mono font-medium text-gray-900">
-  //                 {fileCreationDialog.fileName || "filename"}
-  //                 {FILE_EXTENSIONS[fileCreationDialog.fileType as keyof typeof FILE_EXTENSIONS]?.[0] || ".file"}
-  //               </span>
-  //             </div>
-  //           </div>
-
-  //           {/* Action Buttons */}
-  //           <div className="flex gap-2 mt-5">
-  //             <button
-  //               onClick={async () => {
-  //                 if (fileCreationDialog.fileName.trim()) {
-  //                   try {
-  //                     const ext =
-  //                       FILE_EXTENSIONS[fileCreationDialog.fileType as keyof typeof FILE_EXTENSIONS]?.[0] || ""
-  //                     const fullName = `${fileCreationDialog.fileName.trim()}${ext}`
-  //                     await createProject(fullName, "file", fileCreationDialog.parentId)
-  //                     setFileCreationDialog(null)
-  //                     onDataChange?.()
-  //                   } catch (err) {
-  //                     console.error("[v0] Failed to create file:", err)
-  //                   }
-  //                 }
-  //               }}
-  //               className="flex-1 px-3 py-2 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 font-medium"
-  //             >
-  //               Create
-  //             </button>
-  //             <button
-  //               onClick={() => setFileCreationDialog(null)}
-  //               className="flex-1 px-3 py-2 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
-  //             >
-  //               Cancel
-  //             </button>
-  //           </div>
-  //         </div>
-  //       </div>
-  //     )}
-  //   </div>
-  // )
 
   return (
     <div className="flex w-full h-screen  text-gray-800 overflow-hidden">
@@ -904,70 +815,164 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
         </div>
 
         {/* Content Area */}
-        <div
-          className="flex-1  p-2 overflow-y-auto"
-          onContextMenu={handleBlankAreaContextMenu}
-          onDragOver={handleDragOver}
-          onDrop={(e) => handleDrop(e, selectedCategory)}
-        >
-          {currentProject ? (
-            <>
-              {/* Desktop Title */}
-              <h2 className="hidden md:block text-sm font-bold text-gray-700 mb-2 truncate">
-                {currentProject.name}
-              </h2>
 
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-                {currentProject.files?.map((file) => {
-                  const isSelected = selectedItems.includes(file.id)
-                  const isCut = clipboardItems.some(
-                    (item) => item.id === file.id && item.operation === "cut"
-                  )
-                  const isRenaming = renamingItem === file.id
 
-                  return (
-                    <div
-                      key={file.id}
+        {fileCreationDialog?.isOpen ? (
+          <div className=" inset-0  bg-opacity-40 flex items-center justify-center z-50 overflow-auto h-72">
+            <div className=" rounded-lg shadow-lg p-4 w-96">
+              <h3 className="text-sm font-bold mb-4">Create New File</h3>
 
-                      className={`flex flex-col items-center text-center p-1 rounded cursor-pointer transition-all
-                      ${isSelected
-                          ? "bg-blue-100 border-2 border-blue-400"
-                          : "hover:bg-gray-100 border-2 border-transparent"
+              <div className="space-y-4">
+                {/* File Name Input */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">File Name</label>
+                  <input
+                    type="text"
+                    style={{ color: settings.textColor }}
+                    value={fileCreationDialog.fileName}
+                    onChange={(e) =>
+                      setFileCreationDialog({
+                        ...fileCreationDialog,
+                        fileName: e.target.value,
+                      })
+                    }
+                    placeholder="Enter file name"
+                    className="w-full px-3  py-2 border border-gray-300 rounded text-xs focus:outline-none focus:border-blue-500"
+                    autoFocus
+                  />
+                </div>
+
+                {/* File Type Selection */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-2">File Type</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(FILE_EXTENSIONS).map(([type]) => (
+                      <button
+                        key={type}
+                        onClick={() =>
+                          setFileCreationDialog({
+                            ...fileCreationDialog,
+                            fileType: type,
+                          })
                         }
+                        className={`px-3 py-2 rounded text-xs border transition-colors capitalize ${fileCreationDialog.fileType === type
+                          ? "bg-blue-100 border-blue-500 text-blue-700 font-medium"
+                          : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100"
+                          }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Extension Preview */}
+                <div className="bg-gray-50 p-2 rounded text-xs">
+                  <span className="text-gray-600">File will be: </span>
+                  <span className="font-mono font-medium text-gray-900">
+                    {fileCreationDialog.fileName || "filename"}
+                    {FILE_EXTENSIONS[fileCreationDialog.fileType as keyof typeof FILE_EXTENSIONS]?.[0] || ".file"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 mt-5">
+                <button
+                  onClick={async () => {
+                    if (fileCreationDialog.fileName.trim()) {
+                      try {
+                        const ext =
+                          FILE_EXTENSIONS[fileCreationDialog.fileType as keyof typeof FILE_EXTENSIONS]?.[0] || ""
+                        const fullName = `${fileCreationDialog.fileName.trim()}${ext}`
+                        await createProject(fullName, "file", fileCreationDialog.parentId)
+                        setFileCreationDialog(null)
+                        onDataChange?.()
+                      } catch (err) {
+                        console.error("[v0] Failed to create file:", err)
+                      }
+                    }
+                  }}
+                  className="flex-1 px-3 py-2 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 font-medium"
+                >
+                  Create
+                </button>
+                <button
+                  onClick={() => setFileCreationDialog(null)}
+                  className="flex-1 px-3 py-2 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        ) :
+          <div
+            className="flex-1  p-2 overflow-y-auto"
+            onContextMenu={handleBlankAreaContextMenu}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, selectedCategory)}
+          >
+            {currentProject ? (
+              <>
+                {/* Desktop Title */}
+                <h2 className="hidden md:block text-sm font-bold text-gray-700 mb-2 truncate">
+                  {currentProject.name}
+                </h2>
+
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                  {currentProject.files?.map((file) => {
+                    const isSelected = selectedItems.includes(file.id)
+                    const isCut = clipboardItems.some(
+                      (item) => item.id === file.id && item.operation === "cut"
+                    )
+                    const isRenaming = renamingItem === file.id
+
+                    return (
+                      <div
+                        key={file.id}
+                        style={{ background: isSelected ? "rgba(20, 9, 9, 0.37)" : "rgba(184, 172, 172, 0.04)" }}
+                        // onMouseEnter={()}
+                        className={`flex flex-col items-center text-center p-1 rounded cursor-pointer transition-all
+                      ${isSelected
+                            ? `bg-[${settings.folderColor}] border-1 border-grey-100`
+                            : "hover:bg-slate-800 border-2 border-transparent"
+                          }
                       ${isCut ? "opacity-50" : ""}
                     `}
-                      onClick={(e) => handleFileClick(file, e)}
-                      onContextMenu={(e) => handleContextMenu(file, e)}
-                      draggable={!isRenaming}
-                      onDragStart={(e) => handleDragStart(e, file)}
-                    >
-                      {getFileIcon(file)}
+                        onClick={(e) => handleFileClick(file, e)}
+                        onContextMenu={(e) => handleContextMenu(file, e)}
+                        draggable={!isRenaming}
+                        onDragStart={(e) => handleDragStart(e, file)}
+                      >
+                        {getFileIcon(file)}
 
-                      {isRenaming ? (
-                        <input
-                          value={renameValue}
-                          onChange={(e) => setRenameValue(e.target.value)}
-                          onKeyDown={handleRenameKeyDown}
-                          onBlur={handleRenameSubmit}
-                          className="text-[10px] mt-1 w-full text-center border rounded"
-                          autoFocus
-                        />
-                      ) : (
-                        <span style={{ color: settings.textColor }} className=" mt-1 truncate w-full">
-                          {file.name}
-                        </span>
-                      )}
-                    </div>
-                  )
-                })}
+                        {isRenaming ? (
+                          <input
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={handleRenameKeyDown}
+                            onBlur={handleRenameSubmit}
+                            className="text-[10px] mt-1 w-full text-center border rounded"
+                            autoFocus
+                          />
+                        ) : (
+                          <span style={{ color: settings.textColor }} className=" mt-1 truncate w-full">
+                            {file.name}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-400">
+                No project selected
               </div>
-            </>
-          ) : (
-            <div className="flex items-center justify-center h-full text-gray-400">
-              No project selected
-            </div>
-          )}
-        </div>
+            )}
+          </div>}
+
       </div>
     </div>
   )
