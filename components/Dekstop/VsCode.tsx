@@ -1,11 +1,9 @@
 'use client'
 
 import React, { useState, useRef, useEffect } from 'react'
-import { FileText, Folder, Plus, X, Play, ChevronRight, ChevronDown, Code, Terminal, Maximize } from 'lucide-react'
+import { FileText, Folder, Plus, X, Play, ChevronRight, ChevronDown, Code, Terminal, Menu, ChevronLeft } from 'lucide-react'
 import Editor from '@monaco-editor/react'
 import { useCursorAutomation } from '@/hooks/useCursorAutomation'
-
-
 
 // ============ TYPES ============
 interface CodeFile {
@@ -28,6 +26,13 @@ interface ConsoleLog {
   message: string
   time: string
 }
+
+// ============ DEFAULT FILES ============
+const DEFAULT_FILES: CodeFile[] = [
+  { id: '1', name: 'index.html', type: 'html', content: '<!DOCTYPE html>\n<html>\n<head>\n  <meta charset="UTF-8">\n  <title>My Project</title>\n</head>\n<body>\n  <h1>Hello World</h1>\n  <p id="demo">Click the button</p>\n  <button id="btn">Click Me</button>\n</body>\n</html>' },
+  { id: '2', name: 'style.css', type: 'css', content: 'body {\n  font-family: Arial, sans-serif;\n  background: #f0f0f0;\n  padding: 20px;\n}\n\nh1 {\n  color: #333;\n}\n\nbutton {\n  padding: 8px 16px;\n  background: #007acc;\n  color: white;\n  border: none;\n  border-radius: 4px;\n  cursor: pointer;\n}' },
+  { id: '3', name: 'script.js', type: 'js', content: 'console.log("Script loaded!");\n\ndocument.addEventListener("DOMContentLoaded", () => {\n  console.log("Page ready");\n  \n  const btn = document.getElementById("btn");\n  if (btn) {\n    btn.addEventListener("click", () => {\n      console.log("Button clicked");\n      document.getElementById("demo").textContent = "Button was clicked!";\n    });\n  }\n});' },
+]
 
 // ============ UTILITIES ============
 const getFileIcon = (type: string) => {
@@ -52,16 +57,10 @@ const getLanguageFromType = (type: string): string => {
 }
 
 export default function VSCodeEditor() {
-
   const automationAPI = useCursorAutomation(() => { })
 
   // ============ STATE ============
-  const [files, setFiles] = useState<CodeFile[]>([
-    { id: '1', name: 'index.html', type: 'html', content: '<!DOCTYPE html>\n<html>\n<head>\n  <meta charset="UTF-8">\n  <title>My Project</title>\n</head>\n<body>\n  <h1>Hello World</h1>\n  <p id="demo">Click the button</p>\n  <button id="btn">Click Me</button>\n</body>\n</html>' },
-    { id: '2', name: 'style.css', type: 'css', content: 'body {\n  font-family: Arial, sans-serif;\n  background: #f0f0f0;\n  padding: 20px;\n}\n\nh1 {\n  color: #333;\n}\n\nbutton {\n  padding: 8px 16px;\n  background: #007acc;\n  color: white;\n  border: none;\n  border-radius: 4px;\n  cursor: pointer;\n}' },
-    { id: '3', name: 'script.js', type: 'js', content: 'console.log("Script loaded!");\n\ndocument.addEventListener("DOMContentLoaded", () => {\n  console.log("Page ready");\n  \n  const btn = document.getElementById("btn");\n  if (btn) {\n    btn.addEventListener("click", () => {\n      console.log("Button clicked");\n      document.getElementById("demo").textContent = "Button was clicked!";\n    });\n  }\n});' },
-  ])
-
+  const [files, setFiles] = useState<CodeFile[]>([])
   const [folders, setFolders] = useState<FolderItem[]>([])
   const [activeFileId, setActiveFileId] = useState('1')
   const [showPreview, setShowPreview] = useState(true)
@@ -70,6 +69,8 @@ export default function VSCodeEditor() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
   const [creatingFileType, setCreatingFileType] = useState<'html' | 'css' | 'js' | 'txt' | null>(null)
   const [fileName, setFileName] = useState('')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -78,9 +79,65 @@ export default function VSCodeEditor() {
 
   const activeFile = files.find(f => f.id === activeFileId)
 
+  // ============ LOCALSTORAGE HELPERS ============
+  const saveToLocalStorage = (files: CodeFile[], folders: FolderItem[]) => {
+    try {
+      localStorage.setItem('vscode-files', JSON.stringify(files))
+      localStorage.setItem('vscode-folders', JSON.stringify(folders))
+      localStorage.setItem('vscode-activeFileId', activeFileId)
+    } catch (error) {
+      console.error('Failed to save to localStorage:', error)
+    }
+  }
+
+  const loadFromLocalStorage = () => {
+    try {
+      const savedFiles = localStorage.getItem('vscode-files')
+      const savedFolders = localStorage.getItem('vscode-folders')
+      const savedActiveFileId = localStorage.getItem('vscode-activeFileId')
+
+      if (savedFiles) {
+        const parsedFiles = JSON.parse(savedFiles)
+        setFiles(parsedFiles.length > 0 ? parsedFiles : DEFAULT_FILES)
+      } else {
+        setFiles(DEFAULT_FILES)
+      }
+
+      if (savedFolders) {
+        setFolders(JSON.parse(savedFolders))
+      }
+
+      if (savedActiveFileId) {
+        setActiveFileId(savedActiveFileId)
+      }
+    } catch (error) {
+      console.error('Failed to load from localStorage:', error)
+      setFiles(DEFAULT_FILES)
+    }
+  }
+
+  // ============ INITIAL LOAD ============
+  useEffect(() => {
+    loadFromLocalStorage()
+  }, [])
+
+  // ============ AUTO-SAVE TO LOCALSTORAGE ============
+  useEffect(() => {
+    if (files.length > 0) {
+      saveToLocalStorage(files, folders)
+    }
+  }, [files, folders])
+
+  useEffect(() => {
+    if (activeFileId) {
+      localStorage.setItem('vscode-activeFileId', activeFileId)
+    }
+  }, [activeFileId])
+
   // ============ FILE OPERATIONS ============
   const updateFile = (id: string, content: string) => {
     setFiles(files.map(f => (f.id === id ? { ...f, content } : f)))
+    setHasUnsavedChanges(true)
   }
 
   const deleteFile = (id: string) => {
@@ -189,22 +246,11 @@ export default function VSCodeEditor() {
   const generatePreview = () => {
     if (!iframeRef.current) return
     iframeRef.current.srcdoc = bundleCode()
+    setConsoleLogs([]) // Clear console on each run
+    setHasUnsavedChanges(false)
   }
 
-  // ============ EFFECTS ============
-  useEffect(() => {
-
-    if (showPreview) {
-      generatePreview()
-    }
-
-    // async function max() {
-    //   await automationAPI.maximizeWindow("vscode")
-    // }
-    // max()
-
-  }, [files, showPreview])
-
+  // ============ CONSOLE MESSAGE HANDLER ============
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (!e.data?.type || !['log', 'error', 'warn', 'info'].includes(e.data.type)) return
@@ -225,38 +271,66 @@ export default function VSCodeEditor() {
 
   // ============ RENDER ============
   return (
-    <div className="flex flex-col h-screen  bg-[#1e1e1e] text-[#cccccc] overflow-auto">
+    <div className="flex flex-col h-screen bg-[#1e1e1e] text-[#cccccc] overflow-hidden">
       {/* Header */}
       <div className="h-8 bg-[#252526] border-b border-[#2d2d30] flex items-center justify-between px-3 flex-shrink-0">
-        <span className="text-sm font-semibold flex items-center gap-2">
-          <Code size={16} /> VS Code Editor
-        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="lg:hidden text-[#cccccc] hover:text-white transition-colors"
+            title="Toggle Sidebar"
+          >
+            <Menu size={16} />
+          </button>
+          <span className="text-sm font-semibold flex items-center gap-2">
+            <Code size={16} /> <span className="hidden sm:inline">VS Code Editor</span>
+          </span>
+        </div>
       </div>
 
       {/* Menu Bar */}
-      <div className="h-9 bg-[#323233] border-b border-[#2d2d30] flex items-center justify-end px-4 flex-shrink-0">
-        <div className="flex gap-2">
+      <div className="h-9 bg-[#323233] border-b border-[#2d2d30] flex items-center justify-between px-2 sm:px-4 flex-shrink-0">
+        <button
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          className="hidden lg:flex items-center gap-1 text-[#cccccc] hover:text-white transition-colors text-xs"
+        >
+          {sidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+          <span className="hidden xl:inline">{sidebarCollapsed ? 'Show' : 'Hide'} Sidebar</span>
+        </button>
+
+        <div className="flex gap-2 ml-auto">
           <button
             onClick={() => setShowConsole(!showConsole)}
-            className={`${showConsole ? 'bg-[#1177bb]' : 'bg-[#0e639c]'} hover:bg-[#1177bb] text-white px-3 py-1 rounded text-xs flex items-center gap-2 transition-colors`}
+            className={`${showConsole ? 'bg-[#1177bb]' : 'bg-[#0e639c]'} hover:bg-[#1177bb] text-white px-2 sm:px-3 py-1 rounded text-xs flex items-center gap-1 sm:gap-2 transition-colors`}
           >
             <Terminal size={12} />
-            {showConsole ? 'Hide Console' : 'Show Console'}
+            <span className="hidden sm:inline">{showConsole ? 'Hide Console' : 'Show Console'}</span>
           </button>
           <button
             onClick={() => setShowPreview(!showPreview)}
-            className={`${showPreview ? 'bg-[#1177bb]' : 'bg-[#0e639c]'} hover:bg-[#1177bb] text-white px-3 py-1 rounded text-xs flex items-center gap-2 transition-colors`}
+            className={`${showPreview ? 'bg-[#1177bb]' : 'bg-[#0e639c]'} hover:bg-[#1177bb] text-white px-2 sm:px-3 py-1 rounded text-xs flex items-center gap-1 sm:gap-2 transition-colors`}
           >
             <Play size={12} />
-            {showPreview ? 'Hide Preview' : 'Show Preview'}
+            <span className="hidden sm:inline">{showPreview ? 'Hide Preview' : 'Show Preview'}</span>
+          </button>
+          <button
+            onClick={generatePreview}
+            className="bg-green-600 hover:bg-green-700 text-white px-2 sm:px-3 py-1 rounded text-xs flex items-center gap-1 sm:gap-2 transition-colors font-semibold"
+          >
+            <Play size={12} fill="white" />
+            <span>Run</span>
+            {hasUnsavedChanges && <span className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></span>}
           </button>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden min-h-0 h-screen">
+      <div className="flex flex-1 overflow-hidden min-h-0">
         {/* Sidebar - File Explorer */}
-        <div className="w-64 bg-[#252526] border-r border-[#2d2d30] flex flex-col flex-shrink-0 overflow-hidden">
+        <div
+          className={`${sidebarCollapsed ? 'w-0 -ml-64' : 'w-64'
+            } bg-[#252526] border-r border-[#2d2d30] flex flex-col flex-shrink-0 overflow-hidden transition-all duration-300 absolute lg:relative z-10 h-full lg:z-0`}
+        >
           {/* Sidebar Header */}
           <div className="h-10 border-b border-[#2d2d30] px-3 flex items-center justify-between flex-shrink-0">
             <span className="text-xs font-semibold uppercase tracking-wide">Explorer</span>
@@ -418,6 +492,14 @@ export default function VSCodeEditor() {
           </div>
         </div>
 
+        {/* Overlay for mobile sidebar */}
+        {!sidebarCollapsed && (
+          <div
+            className=" inset-0 bg-black bg-opacity-50 z-[5] lg:hidden"
+            onClick={() => setSidebarCollapsed(true)}
+          >kjkkjjk</div>
+        )}
+
         {/* Editor Area */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {/* Tabs */}
@@ -446,9 +528,9 @@ export default function VSCodeEditor() {
           {/* Editor + Preview Split */}
           {activeFile && (
             <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-              <div className="flex-1 flex overflow-hidden min-h-0">
+              <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
                 {/* Monaco Editor */}
-                <div className={`${showPreview ? 'w-1/2' : 'w-full'} flex flex-col overflow-hidden min-w-0 transition-all duration-300`}>
+                <div className={`${showPreview ? 'lg:w-1/2' : 'w-full'} flex flex-col overflow-hidden min-w-0 transition-all duration-300 ${showPreview ? 'h-1/2 lg:h-full' : 'h-full'}`}>
                   <Editor
                     height="100%"
                     language={getLanguageFromType(activeFile.type)}
@@ -456,8 +538,8 @@ export default function VSCodeEditor() {
                     onChange={(value) => updateFile(activeFile.id, value || '')}
                     theme="vs-dark"
                     options={{
-                      minimap: { enabled: true },
-                      fontSize: 14,
+                      minimap: { enabled: window.innerWidth > 768 },
+                      fontSize: window.innerWidth < 640 ? 12 : 14,
                       fontFamily: 'Monaco, Menlo, Consolas, monospace',
                       lineNumbers: 'on',
                       roundedSelection: false,
@@ -486,7 +568,7 @@ export default function VSCodeEditor() {
 
                 {/* Live Preview */}
                 {showPreview && (
-                  <div className="w-1/2 border-l border-[#2d2d30] bg-white overflow-hidden flex flex-col transition-all duration-300">
+                  <div className={`${showPreview ? 'lg:w-1/2' : 'w-0'} border-t lg:border-t-0 lg:border-l border-[#2d2d30] bg-white overflow-hidden flex flex-col transition-all duration-300 ${showPreview ? 'h-1/2 lg:h-full' : 'h-0'}`}>
                     <div className="h-8 bg-[#252526] border-b border-[#2d2d30] px-3 flex items-center justify-between flex-shrink-0">
                       <span className="text-xs text-[#cccccc]">Live Preview</span>
                       <button
@@ -508,7 +590,7 @@ export default function VSCodeEditor() {
 
               {/* Console Panel */}
               {showConsole && (
-                <div className="h-40 border-t border-[#2d2d30] bg-[#1e1e1e] flex flex-col flex-shrink-0 overflow-hidden transition-all duration-300">
+                <div className="h-32 sm:h-40 border-t border-[#2d2d30] bg-[#1e1e1e] flex flex-col flex-shrink-0 overflow-hidden transition-all duration-300">
                   <div className="h-8 bg-[#252526] border-b border-[#2d2d30] px-3 flex items-center justify-between flex-shrink-0">
                     <div className="flex items-center gap-2 text-xs text-[#cccccc]">
                       <Terminal size={14} />

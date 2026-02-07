@@ -20,15 +20,36 @@ export function FakeCursor({ visible = true, color = '#FF0080', handControl = fa
     const lastScrollTimeRef = useRef(0);
     const clickCooldownRef = useRef(false);
     const animationFrameRef = useRef<number>();
+    const lastClickTimeRef = useRef(0);
+    const lastGestureRef = useRef('');
+    const lastHoverElementRef = useRef<Element | null>(null);
+    const velocityRef = useRef({ x: 0, y: 0 });
+    const rawPositionRef = useRef({ x: 0, y: 0 });
+    const fingerBasePositionRef = useRef({ x: 0.5, y: 0.5 }); // Track finger base position
+    const fingerTipDeltaRef = useRef({ x: 0, y: 0 }); // Track finger tip delta from base
 
-    // Smooth interpolation for hand movement
+    // Ultra smooth interpolation with easing
     const lerp = (start: number, end: number, factor: number) => {
         return start + (end - start) * factor;
+    };
+
+    // Smooth easing function
+    const easeOutQuad = (t: number) => {
+        return t * (2 - t);
     };
 
     // Initialize hand tracking
     useEffect(() => {
         if (!handControl) return;
+
+        // Initialize cursor at center (safe for SSR)
+        if (typeof window !== 'undefined') {
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+
+            smoothPositionRef.current = { x: centerX, y: centerY };
+            setPosition({ x: centerX, y: centerY });
+        }
 
         const initializeHandTracking = async () => {
             try {
@@ -38,7 +59,11 @@ export function FakeCursor({ visible = true, color = '#FF0080', handControl = fa
 
                 // Request camera permission
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: 640, height: 480 }
+                    video: {
+                        width: 1280,
+                        height: 720,
+                        frameRate: { ideal: 30, max: 60 }
+                    }
                 });
 
                 // Create hidden video element
@@ -64,7 +89,7 @@ export function FakeCursor({ visible = true, color = '#FF0080', handControl = fa
                     maxNumHands: 1,
                     modelComplexity: 1,
                     minDetectionConfidence: 0.7,
-                    minTrackingConfidence: 0.7
+                    minTrackingConfidence: 0.8
                 });
 
                 hands.onResults(onHandResults);
@@ -76,8 +101,8 @@ export function FakeCursor({ visible = true, color = '#FF0080', handControl = fa
                             await handsRef.current.send({ image: video });
                         }
                     },
-                    width: 640,
-                    height: 480
+                    width: 1280,
+                    height: 720
                 });
 
                 await camera.start();
@@ -133,7 +158,41 @@ export function FakeCursor({ visible = true, color = '#FF0080', handControl = fa
         );
     };
 
-    // Detect hand gestures
+    // Map finger tip movement to screen cursor (joystick-style control)
+    const mapFingerTipToScreen = (landmarks: any[], currentScreenPos: { x: number, y: number }) => {
+        // Get index finger points
+        const indexKnuckle = landmarks[5]; // Index finger base (MCP joint)
+        const indexTip = landmarks[8]; // Index finger tip
+
+        // Calculate finger tip position relative to knuckle
+        // FIXED X-AXIS: Negative delta for proper left-right control with mirror camera
+        const deltaX = -(indexTip.x - indexKnuckle.x);
+        const deltaY = indexTip.y - indexKnuckle.y;
+
+        // Sensitivity: REDUCED for slower, controlled movement
+        const sensitivityX = 800; // Lower = slower
+        const sensitivityY = 800;
+
+        // Calculate cursor movement (velocity-based)
+        const velocityX = deltaX * sensitivityX;
+        const velocityY = deltaY * sensitivityY;
+
+        // Apply velocity to current position
+        let newX = currentScreenPos.x + velocityX;
+        let newY = currentScreenPos.y + velocityY;
+
+        // Get screen dimensions safely
+        const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
+        const screenHeight = typeof window !== 'undefined' ? window.innerHeight : 1080;
+
+        // Clamp to screen bounds
+        newX = Math.max(20, Math.min(screenWidth - 20, newX));
+        newY = Math.max(20, Math.min(screenHeight - 20, newY));
+
+        return { x: newX, y: newY };
+    };
+
+    // Detect hand gestures with improved accuracy
     const detectGesture = (landmarks: any[]) => {
         const thumb = landmarks[4];
         const indexFinger = landmarks[8];
@@ -144,11 +203,12 @@ export function FakeCursor({ visible = true, color = '#FF0080', handControl = fa
         const thumbIndex = distance(thumb, indexFinger);
         const thumbMiddle = distance(thumb, middleFinger);
 
-        // Check if fingers are extended
+        // Check if fingers are extended (more lenient detection)
         const indexExtended = landmarks[8].y < landmarks[6].y;
         const middleExtended = landmarks[12].y < landmarks[10].y;
         const ringExtended = landmarks[16].y < landmarks[14].y;
         const pinkyExtended = landmarks[20].y < landmarks[18].y;
+        const thumbExtended = landmarks[4].x < landmarks[3].x || landmarks[4].x > landmarks[3].x; // Check thumb extension
 
         const fingersExtended = [
             indexExtended,
@@ -158,54 +218,51 @@ export function FakeCursor({ visible = true, color = '#FF0080', handControl = fa
         ].filter(Boolean).length;
 
         // Pinch detection (Click) - thumb and index finger close
-        if (thumbIndex < 0.05) {
+        if (thumbIndex < 0.06) {
             return 'click';
         }
 
         // Thumb + Middle finger pinch (Right click)
-        if (thumbMiddle < 0.05) {
+        if (thumbMiddle < 0.06 && !indexExtended) {
             return 'rightclick';
         }
 
-        // Open palm (Scroll up)
-        if (fingersExtended === 4) {
+        // Two fingers up (peace sign) - Scroll up
+        if (indexExtended && middleExtended && !ringExtended && !pinkyExtended) {
             return 'scrollup';
         }
 
-        // Fist (Scroll down)
-        if (fingersExtended === 0) {
+        // Three fingers up - Scroll down
+        if (indexExtended && middleExtended && ringExtended && !pinkyExtended) {
             return 'scrolldown';
         }
 
         // Index finger pointing (Move cursor)
-        if (indexExtended && fingersExtended === 1) {
+        if (indexExtended) {
             return 'move';
         }
 
         return 'none';
     };
 
-    // Handle hand tracking results
+    // Handle hand tracking results with finger tip velocity control
     const onHandResults = (results: any) => {
         if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
             const landmarks = results.multiHandLandmarks[0];
 
-            // Get index finger tip position (landmark 8)
-            const indexTip = landmarks[8];
+            // Get new cursor position based on finger tip movement
+            const newPosition = mapFingerTipToScreen(landmarks, smoothPositionRef.current);
 
-            // Convert to screen coordinates (flip X for mirror effect)
-            const targetX = (1 - indexTip.x) * window.innerWidth;
-            const targetY = indexTip.y * window.innerHeight;
+            // Apply smooth interpolation - HIGHER value for more responsive control
+            const smoothFactor = 0.35; // Increased from 0.25 for better responsiveness
 
-            // Smooth the movement using lerp
-            const smoothFactor = 0.2; // Lower = smoother but slower, Higher = faster but jittery
-            smoothPositionRef.current.x = lerp(smoothPositionRef.current.x, targetX, smoothFactor);
-            smoothPositionRef.current.y = lerp(smoothPositionRef.current.y, targetY, smoothFactor);
+            smoothPositionRef.current.x = lerp(smoothPositionRef.current.x, newPosition.x, smoothFactor);
+            smoothPositionRef.current.y = lerp(smoothPositionRef.current.y, newPosition.y, smoothFactor);
 
-            // Update cursor position with smooth values
+            // Update cursor position
             setPosition({
-                x: smoothPositionRef.current.x,
-                y: smoothPositionRef.current.y
+                x: Math.round(smoothPositionRef.current.x),
+                y: Math.round(smoothPositionRef.current.y)
             });
 
             // Detect and handle gestures
@@ -214,55 +271,158 @@ export function FakeCursor({ visible = true, color = '#FF0080', handControl = fa
         }
     };
 
-    // Handle gesture actions
+    // Handle gesture actions with all features
     const handleGesture = (gesture: string, cursorX: number, cursorY: number) => {
         const now = Date.now();
 
-        if (gesture === 'click' && !clickCooldownRef.current) {
-            setIsClicking(true);
-            clickCooldownRef.current = true;
+        // Update hover state
+        const elementAtPoint = document.elementFromPoint(cursorX, cursorY);
 
-            // Simulate click at cursor position
-            const elementAtPoint = document.elementFromPoint(cursorX, cursorY);
-            if (elementAtPoint) {
-                elementAtPoint.click();
-            }
-
-            setTimeout(() => {
-                setIsClicking(false);
-                clickCooldownRef.current = false;
-            }, 300);
-        }
-
-        if (gesture === 'rightclick' && !clickCooldownRef.current) {
-            clickCooldownRef.current = true;
-
-            // Simulate right click
-            const elementAtPoint = document.elementFromPoint(cursorX, cursorY);
-            if (elementAtPoint) {
-                const event = new MouseEvent('contextmenu', {
+        if (elementAtPoint && elementAtPoint !== lastHoverElementRef.current) {
+            // Trigger hover events
+            if (lastHoverElementRef.current) {
+                const leaveEvent = new MouseEvent('mouseleave', {
                     bubbles: true,
                     cancelable: true,
                     view: window,
                     clientX: cursorX,
                     clientY: cursorY
                 });
-                elementAtPoint.dispatchEvent(event);
+                lastHoverElementRef.current.dispatchEvent(leaveEvent);
             }
 
-            setTimeout(() => {
-                clickCooldownRef.current = false;
-            }, 300);
+            if (elementAtPoint) {
+                const enterEvent = new MouseEvent('mouseenter', {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window,
+                    clientX: cursorX,
+                    clientY: cursorY
+                });
+                elementAtPoint.dispatchEvent(enterEvent);
+
+                // Also dispatch mouseover for better compatibility
+                const overEvent = new MouseEvent('mouseover', {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window,
+                    clientX: cursorX,
+                    clientY: cursorY
+                });
+                elementAtPoint.dispatchEvent(overEvent);
+            }
+
+            lastHoverElementRef.current = elementAtPoint;
         }
 
-        // Smooth scrolling with cooldown
-        if (gesture === 'scrollup' && now - lastScrollTimeRef.current > 50) {
-            window.scrollBy({ top: -10, behavior: 'smooth' });
+        // Handle click gesture - improved double-click detection
+        if (gesture === 'click' && lastGestureRef.current !== 'click') {
+            // Only trigger on gesture START (transition from non-click to click)
+            if (!clickCooldownRef.current) {
+                setIsClicking(true);
+                clickCooldownRef.current = true;
+
+                const timeSinceLastClick = now - lastClickTimeRef.current;
+                const isDoubleClick = timeSinceLastClick < 500; // 500ms window for double-click
+
+                if (elementAtPoint) {
+                    // Simulate mousedown
+                    const mouseDownEvent = new MouseEvent('mousedown', {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window,
+                        clientX: cursorX,
+                        clientY: cursorY,
+                        detail: isDoubleClick ? 2 : 1
+                    });
+                    elementAtPoint.dispatchEvent(mouseDownEvent);
+
+                    // Simulate mouseup and click
+                    setTimeout(() => {
+                        const mouseUpEvent = new MouseEvent('mouseup', {
+                            bubbles: true,
+                            cancelable: true,
+                            view: window,
+                            clientX: cursorX,
+                            clientY: cursorY,
+                            detail: isDoubleClick ? 2 : 1
+                        });
+                        elementAtPoint.dispatchEvent(mouseUpEvent);
+
+                        // Single click
+                        const clickEvent = new MouseEvent('click', {
+                            bubbles: true,
+                            cancelable: true,
+                            view: window,
+                            clientX: cursorX,
+                            clientY: cursorY,
+                            detail: isDoubleClick ? 2 : 1
+                        });
+                        elementAtPoint.dispatchEvent(clickEvent);
+
+                        // Double-click if within time window
+                        if (isDoubleClick) {
+                            const dblClickEvent = new MouseEvent('dblclick', {
+                                bubbles: true,
+                                cancelable: true,
+                                view: window,
+                                clientX: cursorX,
+                                clientY: cursorY,
+                                detail: 2
+                            });
+                            elementAtPoint.dispatchEvent(dblClickEvent);
+                            lastClickTimeRef.current = 0; // Reset to prevent triple-click
+                        } else {
+                            lastClickTimeRef.current = now;
+                        }
+                    }, 50);
+                }
+
+                setTimeout(() => {
+                    setIsClicking(false);
+                    clickCooldownRef.current = false;
+                }, 300);
+            }
+        }
+
+        // Handle right-click gesture
+        if (gesture === 'rightclick' && lastGestureRef.current !== 'rightclick') {
+            if (!clickCooldownRef.current) {
+                clickCooldownRef.current = true;
+
+                if (elementAtPoint) {
+                    const contextMenuEvent = new MouseEvent('contextmenu', {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window,
+                        clientX: cursorX,
+                        clientY: cursorY
+                    });
+                    elementAtPoint.dispatchEvent(contextMenuEvent);
+                }
+
+                setTimeout(() => {
+                    clickCooldownRef.current = false;
+                }, 400);
+            }
+        }
+
+        // Smooth continuous scrolling
+        if (gesture === 'scrollup' && now - lastScrollTimeRef.current > 30) {
+            window.scrollBy({
+                top: -8,
+                behavior: 'auto'
+            });
             lastScrollTimeRef.current = now;
-        } else if (gesture === 'scrolldown' && now - lastScrollTimeRef.current > 50) {
-            window.scrollBy({ top: 10, behavior: 'smooth' });
+        } else if (gesture === 'scrolldown' && now - lastScrollTimeRef.current > 30) {
+            window.scrollBy({
+                top: 8,
+                behavior: 'auto'
+            });
             lastScrollTimeRef.current = now;
         }
+
+        lastGestureRef.current = gesture;
     };
 
     // Track native mouse movement
@@ -317,11 +477,12 @@ export function FakeCursor({ visible = true, color = '#FF0080', handControl = fa
     return (
         <div
             ref={cursorRef}
-            className="fixed pointer-events-none z-[10000] transition-all duration-75 ease-out"
+            className="fixed pointer-events-none z-[10000] transition-transform duration-75 ease-out"
             style={{
                 left: `${position.x}px`,
                 top: `${position.y}px`,
                 transform: `translate(-50%, -50%) scale(${isClicking ? 0.8 : 1})`,
+                willChange: 'transform, left, top',
             }}
         >
             {/* Cursor pointer */}

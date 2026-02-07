@@ -35,9 +35,9 @@ export function VoiceControlButton({
             {/* Voice Control Button */}
             <button
                 onClick={isActive ? endCall : startCall}
-                className={`fixed bottom-8 right-8 w-16 h-16 rounded-full shadow-2xl transition-all duration-300 z-[9998] flex items-center justify-center ${isActive
-                        ? 'bg-red-600 hover:bg-red-700 scale-110'
-                        : 'bg-gradient-to-br from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700'
+                className={`fixed  bottom-26 sm:bottom-8 right-8 w-4 h-4 rounded-full shadow-2xl transition-all duration-300 z-[9998] flex items-center justify-center ${isActive
+                    ? 'bg-red-600 hover:bg-red-700 scale-110'
+                    : 'bg-gradient-to-br from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700'
                     }`}
                 title={isActive ? "End Voice Control" : "Start Voice Control"}
             >

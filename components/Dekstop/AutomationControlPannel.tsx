@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { CursorAutomationAPI } from './useCursorAutomation';
 import { useElevenTTS } from '@/hooks/ElevenLabs';
+import { scale } from 'framer-motion';
 
 interface AutomationControlPanelProps {
     automationAPI: CursorAutomationAPI;
@@ -72,11 +73,12 @@ export function AutomationControlPanel({
             {/* Floating Button */}
             {!isOpen && (
                 <button
+                    style={{ transform: 'scale(2)' }}
                     onClick={() => setIsOpen(true)}
-                    className="fixed bottom-8 right-30 z-[9999] w-14 h-14 rounded-full bg-purple-600 hover:bg-purple-700 text-white flex items-center justify-center shadow-2xl transition-all"
+                    className="fixed  bottom-26 sm:bottom-8 right-18  z-[9999] w-6 h-6 rounded-full  text-white flex items-center justify-center shadow-2xl transition-all"
                     title="Open Automation Panel"
                 >
-                    🤖
+                    🐞
                 </button>
             )}
 
@@ -85,12 +87,12 @@ export function AutomationControlPanel({
                 <div className="fixed bottom-4 right-4 z-[9999] w-96 bg-black/80 backdrop-blur-xl rounded-xl border border-white/20 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
 
                     {/* Close Button */}
-                    <div className="flex justify-end p-2">
+                    <div className="flex justify-start  p-2">
                         <button
                             onClick={() => setIsOpen(false)}
-                            className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs"
+                            className=" h-6 w-6  hover:bg-red-700 text-white rounded-full text-xs"
                         >
-                            ✕ Close
+                            ✕
                         </button>
                     </div>
 

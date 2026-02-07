@@ -959,7 +959,7 @@ export function Desktop() {
 
                 <span
                   className="text-gray-400 hover:text-white transition-colors"
-                  onClick={() => setDesktopBg(prev => (prev === "dot" ? "wave" : "dot"))}
+                  onClick={() => setHandControlCursor((prev) => !prev)}
                 >
                   ⌘
                 </span>
@@ -1123,7 +1123,7 @@ export function Desktop() {
             />
           </div>
         </TerminalProvider>
-      </KeyboardProvider>
+      </KeyboardProvider >
     </>
   );
 }

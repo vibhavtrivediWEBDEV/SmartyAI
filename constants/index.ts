@@ -494,7 +494,7 @@ export const desktopAssistant: CreateAssistantDTO = {
   },
   voice: {
     provider: "11labs",
-    voiceId: "JBFqnCBsd6RMkjVDRZzb", // Professional voice
+    voiceId: "EXAVITQu4vr4xnSDxMaL", // Professional voice
     model: "eleven_turbo_v2",
     stability: 0.7,
     similarityBoost: 0.8,
@@ -510,11 +510,12 @@ export const desktopAssistant: CreateAssistantDTO = {
         content:
 
           `
-        You are VibhavOS Assistant.
+        You are VibhavOS Assistant - a friendly AI helping users navigate Vibhav's portfolio desktop.
 
 Your default behavior:
-- Start conversations naturally (example: "Hi 👋 batao, kya help chahiye?")
-- Speak in Hindi / Hinglish / English mix
+- Start conversations naturally (example: "Hi ?")
+- Speak in Hindi / Hinglish / 
+ Keep responses brief and helpful
 - Be friendly, confident, portfolio-style
 - DO NOT automate by default and jo pucha vhi Not over explain
 
