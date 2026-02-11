@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { BackgroundGradientAnimation } from "./GradientBg";
 import GridGlobe from "./GridGlobe";
 
-import {animationData} from "@/data/confetti.json"
+import { animationData } from "@/data/confetti.json"
 import MagicButton from "../MagicButton";
 import Image from "next/image";
 import dynamic from "next/dynamic";
@@ -60,37 +60,37 @@ export const BentoGridItem = ({
   spareImg?: string;
 }) => {
   const leftLists = [
-    "NextJS", 
-    "NodeJS", 
-    "Typescript", 
-    "ThreeJS", 
-    "Blender", 
-    "React", 
-    "Vue", 
-    "Angular", 
-    "Svelte", 
-    "TailwindCSS", 
-    "Redux", 
-    "Zustand", 
-    "Webpack", 
-    "Vite", 
+    "NextJS",
+    "NodeJS",
+    "Typescript",
+    "ThreeJS",
+    "Blender",
+    "React",
+    "Vue",
+    "Angular",
+    "Svelte",
+    "TailwindCSS",
+    "Redux",
+    "Zustand",
+    "Webpack",
+    "Vite",
     "Docker"
   ];
   const rightLists = [
-    "SQL", 
-    "MongoDB", 
-    "GraphQL", 
-    "Java", 
-    "AWS", 
-    "Figma", 
-    "Python", 
-    "Go", 
-    "Rust", 
-    "Firebase", 
-    "Kubernetes", 
-    "Azure", 
-    "Git", 
-    "CI/CD", 
+    "SQL",
+    "MongoDB",
+    "GraphQL",
+    "Java",
+    "AWS",
+    "Figma",
+    "Python",
+    "Go",
+    "Rust",
+    "Firebase",
+    "Kubernetes",
+    "Azure",
+    "Git",
+    "CI/CD",
     "Jest"
   ];
 
@@ -132,8 +132,8 @@ export const BentoGridItem = ({
           {img && (
             <img
               src={img}
-             height={10000}
-             width={10000}
+              height={10000}
+              width={10000}
               alt={img}
               className={cn(imgClassName, "object-cover object-center ")}
             />
@@ -146,7 +146,7 @@ export const BentoGridItem = ({
           {spareImg && (
             <img
               height={10000}
-             width={10000}
+              width={10000}
               src={spareImg}
               alt={spareImg}
               //   width={220}
@@ -243,7 +243,7 @@ export const BentoGridItem = ({
                 <img src="/confetti.gif" alt="confetti" />
                 {/* <Lottie options={defaultOptions} height={200} width={400} /> */}
               </div>
-           
+
 
               <MagicButton
                 title={copied ? "Email is Copied!" : "Copy my email address"}

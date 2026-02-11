@@ -479,8 +479,8 @@ export function FakeCursor({ visible = true, color = '#FF0080', handControl = fa
             ref={cursorRef}
             className="fixed pointer-events-none z-[10000] transition-transform duration-75 ease-out"
             style={{
-                left: `${position.x}px`,
-                top: `${position.y}px`,
+                left: `${position.x + 10}px`,
+                top: `${position.y + 10}px`,
                 transform: `translate(-50%, -50%) scale(${isClicking ? 0.8 : 1})`,
                 willChange: 'transform, left, top',
             }}

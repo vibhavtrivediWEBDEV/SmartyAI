@@ -25,6 +25,7 @@ import CustomizableAgGrid from "@/components/Dekstop/AgGrid";
 import { DynamicAgGridConfigurator } from "@/components/Dekstop/dataTableViewer";
 // import { useAIVoice } from "@/hooks/useAIVoice";
 import { useElevenTTS } from "@/hooks/ElevenLabs";
+import GridGlobe from "@/components/ui/GridGlobe";
 
 
 
@@ -195,6 +196,9 @@ export async function handleCommand({
           output = `Invalid 'about' subcommand. Available: name, title, skills, projects, contact.`;
           break;
       }
+      break;
+    case "earth":
+      output = <GridGlobe />;
       break;
     case "clear":
       // Clear UI state

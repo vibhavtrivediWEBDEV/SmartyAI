@@ -68,17 +68,8 @@ void main() {
     vec2 cellSize = vec2(1.0) / vec2(float(cellsPerRow));
     vec2 cellOffset = vec2(float(cellX), float(cellY)) * cellSize;
 
-    ivec2 texSize = textureSize(uTex, 0);
-    float imageAspect = float(texSize.x) / float(texSize.y);
-    float containerAspect = 1.0;
-    
-    float scale = max(imageAspect / containerAspect, 
-                     containerAspect / imageAspect);
-    
+    // Simple stretch to fill - no aspect ratio preservation
     vec2 st = vec2(vUvs.x, 1.0 - vUvs.y);
-    st = (st - 0.5) * scale + 0.5;
-    
-    st = clamp(st, 0.0, 1.0);
     st = st * cellSize + cellOffset;
     
     outColor = texture(uTex, st);
@@ -163,6 +154,10 @@ class Geometry {
     return this;
   }
 
+
+
+
+
   public spherize(radius = 1): this {
     this.vertices.forEach(vertex => {
       vec3.normalize(vertex.normal, vertex.position);
@@ -214,6 +209,8 @@ class Geometry {
     return ndx;
   }
 }
+
+
 
 class IcosahedronGeometry extends Geometry {
   constructor() {
@@ -321,28 +318,33 @@ class IcosahedronGeometry extends Geometry {
   }
 }
 
-class DiscGeometry extends Geometry {
-  constructor(steps = 4, radius = 8) {
+class QuadGeometry extends Geometry {
+  constructor(width = 2, height = 2) {
     super();
-    const safeSteps = Math.max(4, steps);
-    const alpha = (2 * Math.PI) / safeSteps;
+    const hw = width / 2;
+    const hh = height / 2;
 
-    this.addVertex(0, 0, 0);
-    this.lastVertex.uv[0] = 0.5;
-    this.lastVertex.uv[1] = 0.5;
+    // Add 4 vertices for the quad corners
+    this.addVertex(
+      -hw, -hh, 0,  // bottom-left
+      hw, -hh, 0,  // bottom-right
+      hw, hh, 0,  // top-right
+      -hw, hh, 0   // top-left
+    );
 
-    for (let i = 0; i < safeSteps; ++i) {
-      const x = Math.cos(alpha * i);
-      const y = Math.sin(alpha * i);
-      this.addVertex(radius * x, radius * y, 0);
-      this.lastVertex.uv[0] = x * 0.5 + 0.5;
-      this.lastVertex.uv[1] = y * 0.5 + 0.5;
+    // Set UVs for each vertex
+    this.vertices[0].uv = vec2.fromValues(0, 0);
+    this.vertices[1].uv = vec2.fromValues(1, 0);
+    this.vertices[2].uv = vec2.fromValues(1, 1);
+    this.vertices[3].uv = vec2.fromValues(0, 1);
 
-      if (i > 0) {
-        this.addFace(0, i, i + 1);
-      }
-    }
-    this.addFace(0, safeSteps, 1);
+    // Set normals pointing forward
+    this.vertices.forEach(v => {
+      vec3.set(v.normal, 0, 0, 1);
+    });
+
+    // Add 2 triangles to form the quad
+    this.addFace(0, 1, 2, 0, 2, 3);
   }
 }
 
@@ -659,7 +661,7 @@ class InfiniteGridMenu {
     uvs: Float32Array;
   };
   private icoGeo!: IcosahedronGeometry;
-  private discGeo!: DiscGeometry;
+  private discGeo!: QuadGeometry;
   private worldMatrix = mat4.create();
   private tex: WebGLTexture | null = null;
   private control!: ArcballControl;
@@ -701,7 +703,7 @@ class InfiniteGridMenu {
   private movementActive = false;
 
   private TARGET_FRAME_DURATION = 1000 / 60;
-  private SPHERE_RADIUS = 2;
+  private SPHERE_RADIUS = 3.2;
 
   public camera: Camera = {
     matrix: mat4.create(),
@@ -709,7 +711,7 @@ class InfiniteGridMenu {
     far: 40,
     fov: Math.PI / 4,
     aspect: 1,
-    position: vec3.fromValues(0, 0, 3),
+    position: vec3.fromValues(0, 0, 3.5),
     up: vec3.fromValues(0, 1, 0),
     matrices: {
       view: mat4.create(),
@@ -788,7 +790,7 @@ class InfiniteGridMenu {
       uAtlasSize: gl.getUniformLocation(this.discProgram!, 'uAtlasSize')
     };
 
-    this.discGeo = new DiscGeometry(56, 1);
+    this.discGeo = new QuadGeometry(2, 2);
     this.discBuffers = this.discGeo.data;
     this.discVAO = makeVertexArray(
       gl,
@@ -1098,14 +1100,14 @@ const InfiniteMenu: FC<InfiniteMenuProps> = ({ items = [] }) => {
   };
 
   return (
-    <div className="relative w-full h-full">
+    <div className="relative w-full h-full overflow-hidden">
       <canvas
         id="infinite-grid-menu-canvas"
         ref={canvasRef}
         className="cursor-grab w-full h-full overflow-hidden relative outline-none active:cursor-grabbing"
       />
 
-      {activeItem && (
+      {/* {activeItem && (
         <>
           <h2
             className={`
@@ -1120,11 +1122,10 @@ const InfiniteMenu: FC<InfiniteMenuProps> = ({ items = [] }) => {
           -translate-y-1/2
           transition-all
           ease-[cubic-bezier(0.25,0.1,0.25,1.0)]
-          ${
-            isMoving
-              ? 'opacity-0 pointer-events-none duration-[100ms]'
-              : 'opacity-100 pointer-events-auto duration-[500ms]'
-          }
+          ${isMoving
+                ? 'opacity-0 pointer-events-none duration-[100ms]'
+                : 'opacity-100 pointer-events-auto duration-[500ms]'
+              }
         `}
           >
             {activeItem.title}
@@ -1140,11 +1141,10 @@ const InfiniteMenu: FC<InfiniteMenuProps> = ({ items = [] }) => {
           right-[1%]
           transition-all
           ease-[cubic-bezier(0.25,0.1,0.25,1.0)]
-          ${
-            isMoving
-              ? 'opacity-0 pointer-events-none duration-[100ms] translate-x-[-60%] -translate-y-1/2'
-              : 'opacity-100 pointer-events-auto duration-[500ms] translate-x-[-90%] -translate-y-1/2'
-          }
+          ${isMoving
+                ? 'opacity-0 pointer-events-none duration-[100ms] translate-x-[-60%] -translate-y-1/2'
+                : 'opacity-100 pointer-events-auto duration-[500ms] translate-x-[-90%] -translate-y-1/2'
+              }
         `}
           >
             {activeItem.description}
@@ -1167,17 +1167,16 @@ const InfiniteMenu: FC<InfiniteMenuProps> = ({ items = [] }) => {
           cursor-pointer
           transition-all
           ease-[cubic-bezier(0.25,0.1,0.25,1.0)]
-          ${
-            isMoving
-              ? 'bottom-[-80px] opacity-0 pointer-events-none duration-[100ms] scale-0 -translate-x-1/2'
-              : 'bottom-[3.8em] opacity-100 pointer-events-auto duration-[500ms] scale-100 -translate-x-1/2'
-          }
+          ${isMoving
+                ? 'bottom-[-80px] opacity-0 pointer-events-none duration-[100ms] scale-0 -translate-x-1/2'
+                : 'bottom-[3.8em] opacity-100 pointer-events-auto duration-[500ms] scale-100 -translate-x-1/2'
+              }
         `}
           >
             <p className="select-none relative text-[#060010] top-[2px] text-[26px]">&#x2197;</p>
           </div>
         </>
-      )}
+      )} */}
     </div>
   );
 };
