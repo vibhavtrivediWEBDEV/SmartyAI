@@ -35,7 +35,7 @@ export function VoiceControlButton({
             {/* Voice Control Button */}
             <button
                 onClick={isActive ? endCall : startCall}
-                className={`fixed  bottom-26 sm:bottom-8 right-8 w-4 h-4 rounded-full shadow-2xl transition-all duration-300 z-[9998] flex items-center justify-center ${isActive
+                className={` w-2 h-2 rounded-full shadow-2xl transition-all duration-300 z-[9998] flex items-center justify-center ${isActive
                     ? 'bg-red-600 hover:bg-red-700 scale-110'
                     : 'bg-gradient-to-br from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700'
                     }`}
@@ -50,7 +50,7 @@ export function VoiceControlButton({
                 <div className="relative z-10">
                     {isActive ? (
                         <svg
-                            className="w-8 h-8 text-white"
+                            className="w-4 h-4 text-white"
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"

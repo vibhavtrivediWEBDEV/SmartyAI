@@ -48,6 +48,7 @@ import { useElevenTTS } from "@/hooks/ElevenLabs"
 import { resolveSequence } from "@/lib/helper/helper"
 import { VoiceControlButton } from "./VoiceControlButton"
 import { getFormattedCommandsWithExamples } from "@/lib/helper/commandRegistry"
+import LoveCounter from "./macFeedback"
 
 interface WindowState {
   id: string
@@ -880,19 +881,40 @@ export function Desktop() {
 
           <div
             ref={desktopRef}
-            className="relative w-full h-screen  overflow-hidden "
+            className="relative w-full h-screen  overflow-hidden isolate"
 
 
             style={{
-              backgroundColor: `hsl(${themeColor})`,
-              backgroundImage: backgroundImage ? `url('${settings.backgroundImage}')` : `url('https://4kwallpapers.com/images/walls/thumbs_3t/14776.jpg')`,
-              backgroundSize: 'cover',
+              // backgroundColor: `hsl(${themeColor})`,
+              // backgroundImage: backgroundImage ? `url('${settings.backgroundImage}')` : `url('https://4kwallpapers.com/images/walls/thumbs_3t/14776.jpg')`,
+              // backgroundSize: 'cover',
 
-              backgroundPosition: 'center',
-              backgroundAttachment: 'fixed',
+              // backgroundPosition: 'center',
+              // backgroundAttachment: 'fixed',
 
             }}
           >
+
+
+
+            {/* 🌄 If user selected image */}
+            {settings.backgroundImage ? (
+              <div
+                className="absolute inset-0 -z-10 bg-cover bg-center"
+                style={{
+                  backgroundImage: `url('${settings.backgroundImage}')`,
+                }}
+              />
+            ) : (<video
+              autoPlay
+              loop
+              muted
+              playsInline
+              preload="auto"
+              className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+            >
+              <source src="/assets/dekstopBg.mp4" type="video/mp4" />
+            </video>)}
             {/* {desktopBg === "dot" && <DotGrid />}
             {desktopBg === "wave" && <WavesDemo />} */}
 
@@ -946,6 +968,24 @@ export function Desktop() {
                 </span>
 
                 {/* Hide on small screens */}
+                <span className="text-gray-400 hidden xs:inline"><AutomationControlPanel
+                  automationAPI={automationAPI}
+                  openWindows={openWindows}
+                /></span>
+                <span className="text-gray-400 ">
+                  <AutomationControlPanel
+                    automationAPI={automationAPI}
+                    openWindows={openWindows}
+                  />
+                </span>
+                <span className="text-gray-400 ">
+                  <VoiceControlButton
+                    openApplication={openApplication}
+                    openWindows={openWindows}
+                    setOpenWindows={setOpenWindows}
+                  />
+                </span>
+
                 <span className="text-gray-400 hidden xs:inline">🔋</span>
                 <span className="text-gray-400 hidden xs:inline">🔊</span>
                 <span className="text-gray-400 hidden sm:inline">Wi-Fi</span>
@@ -980,6 +1020,8 @@ export function Desktop() {
               color={settings.folderColor}
               handControl={handControlCursor}
             />
+
+            <LoveCounter />
 
 
             {/* Central Portfolio Text */}
@@ -1085,17 +1127,10 @@ export function Desktop() {
 
 
             {/* // automation api  */}
-            <AutomationControlPanel
-              automationAPI={automationAPI}
-              openWindows={openWindows}
-            />
 
 
-            <VoiceControlButton
-              openApplication={openApplication}
-              openWindows={openWindows}
-              setOpenWindows={setOpenWindows}
-            />
+
+
 
 
             {/* Dock */}

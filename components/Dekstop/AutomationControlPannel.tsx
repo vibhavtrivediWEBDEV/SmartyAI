@@ -75,7 +75,7 @@ export function AutomationControlPanel({
                 <button
                     style={{ transform: 'scale(2)' }}
                     onClick={() => setIsOpen(true)}
-                    className="fixed  bottom-26 sm:bottom-8 right-18  z-[9999] w-6 h-6 rounded-full  text-white flex items-center justify-center shadow-2xl transition-all"
+                    className=" z-[9999] w-6 h-4 rounded-full  text-white flex items-center justify-center shadow-2xl transition-all"
                     title="Open Automation Panel"
                 >
                     🐞
@@ -84,7 +84,7 @@ export function AutomationControlPanel({
 
             {/* Panel */}
             {isOpen && (
-                <div className="fixed bottom-4 right-4 z-[9999] w-96 bg-black/80 backdrop-blur-xl rounded-xl border border-white/20 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+                <div className="absolute top-4 right-4 z-[9999] w-96 bg-black/80 backdrop-blur-xl rounded-xl border border-white/20 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
 
                     {/* Close Button */}
                     <div className="flex justify-start  p-2">

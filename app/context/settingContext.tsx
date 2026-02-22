@@ -23,7 +23,7 @@ const DEFAULT_SETTINGS: DesktopSettings = {
   darkMode: true,
   themeColor: '240 5.9% 10%',
   // backgroundImage: 'https://4kwallpapers.com/images/walls/thumbs_3t/14776.jpg',
-  backgroundImage: 'https://wallpapercave.com/dwp2x/wp3695039.jpg',
+  backgroundImage: '',
 
   isMobile: false,
   wallpaperQuery: 'wallpaper',
