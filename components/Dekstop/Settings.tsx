@@ -437,8 +437,8 @@ export default function SettingsModal() {
                     <input
                       type="range"
                       id="font_size_slider"
-                      min="12"
-                      max="20"
+                      min="9"
+                      max="40"
                       value={settings.fontSize}
                       onChange={(e) => updateSettings({ fontSize: parseInt(e.target.value) })}
                       className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"

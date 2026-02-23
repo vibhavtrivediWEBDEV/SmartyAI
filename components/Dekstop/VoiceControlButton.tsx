@@ -64,7 +64,7 @@ export function VoiceControlButton({
                         </svg>
                     ) : (
                         <svg
-                            className="w-8 h-8 text-white"
+                            className="w-4 h-4 text-white text-gray"
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"

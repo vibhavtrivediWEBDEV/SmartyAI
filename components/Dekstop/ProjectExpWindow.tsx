@@ -325,7 +325,7 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
     const iconSize = 28
 
     if (file.type === "folder") {
-      return <FolderIcon size={iconSize} className="text-blue-500" />
+      return <FolderIcon size={iconSize} style={{ color: settings.folderColor }} />
     }
 
     const extension = file.name.split(".").pop()?.toLowerCase()
@@ -336,32 +336,32 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
       case "docx":
       case "txt":
       case "md":
-        return <FileTextIcon size={iconSize} className="text-gray-500 " />
+        return <FileTextIcon size={iconSize} style={{ color: settings.folderColor }} />
       case "mp4":
       case "mov":
       case "avi":
-        return <PlayCircleIcon size={iconSize} className="text-red-500" />
+        return <PlayCircleIcon size={iconSize} style={{ color: settings.folderColor }} />
       case "jpg":
       case "jpeg":
       case "png":
       case "gif":
       case "svg":
-        return <FileImage size={iconSize} className="text-green-500" />
+        return <FileImage size={iconSize} style={{ color: settings.folderColor }} />
       case "xlsx":
       case "xls":
       case "csv":
-        return <FileSpreadsheet size={iconSize} className="text-green-600" />
+        return <FileSpreadsheet size={iconSize} style={{ color: settings.folderColor }} />
       case "zip":
       case "rar":
       case "7z":
-        return <FileArchive size={iconSize} className="text-purple-500" />
+        return <FileArchive size={iconSize} style={{ color: settings.folderColor }} />
       case "js":
       case "ts":
       case "jsx":
       case "tsx":
       case "html":
       case "css":
-        return <FileCode size={iconSize} className="text-blue-400" />
+        return <FileCode size={iconSize} style={{ color: settings.folderColor }} />
       default:
         if (file.name.includes(".com") || file.name.includes(".ai")) {
           return <GlobeIcon size={iconSize} className="text-indigo-500" />
@@ -763,7 +763,7 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
         style={{ backgroundColor: settings.themeColor }}
         className={`
         fixed md:static z-40
-        top-0 left-0 h-full w-56 bg-gray-200
+        top-0 left-0 h-full w-56 bg-gray-100
          border-r border-gray-300 p-2
         transform transition-transform duration-300
         ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}

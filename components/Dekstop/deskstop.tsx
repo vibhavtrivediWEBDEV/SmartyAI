@@ -49,6 +49,8 @@ import { resolveSequence } from "@/lib/helper/helper"
 import { VoiceControlButton } from "./VoiceControlButton"
 import { getFormattedCommandsWithExamples } from "@/lib/helper/commandRegistry"
 import LoveCounter from "./macFeedback"
+import FileIcon from "./fileicon"
+import LiquidGlassVideo from "./glassvediowallpaper"
 
 interface WindowState {
   id: string
@@ -113,11 +115,10 @@ export function Desktop() {
   ]);
 
   const [UserIcon, setuserIcons] = useState<IconItem[]>([
-    { id: 1, name: 'Resume PDF', folderColor: "pink", type: 'file', icon: <FileTextIcon />, x: 1100, y: 50 },
-    { id: 2, name: 'About Me', type: 'folder', icon: <FileTextIcon />, x: 1100, y: 150, folderColor: 'red', folderItems: [] },
-    { id: 999, name: "Don't Look", folderColor: 'red', type: 'trash', icon: <Trash2Icon />, x: 1100, y: 250 },
+    { id: 1, name: 'Resume PDF', type: 'file', icon: "pdf", x: 1100, y: 50 },
+    { id: 2, name: 'About Me', type: 'folder', icon: "folder", x: 1100, y: 150, folderItems: [] },
+    { id: 999, name: "Don't Look", type: 'trash', icon: "trash", x: 1100, y: 250 },
   ])
-
   // news items
 
 
@@ -905,16 +906,7 @@ export function Desktop() {
                   backgroundImage: `url('${settings.backgroundImage}')`,
                 }}
               />
-            ) : (<video
-              autoPlay
-              loop
-              muted
-              playsInline
-              preload="auto"
-              className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-            >
-              <source src="/assets/dekstopBg.mp4" type="video/mp4" />
-            </video>)}
+            ) : (<LiquidGlassVideo src="/assets/dekstopBg.mp4" />)}
             {/* {desktopBg === "dot" && <DotGrid />}
             {desktopBg === "wave" && <WavesDemo />} */}
 
@@ -937,7 +929,7 @@ export function Desktop() {
                 {/* Hide menu items on small mobile, show on tablet+ */}
                 <div className="hidden sm:flex space-x-2 md:space-x-4">
 
-                  <p className="hover:text-white cursor-pointer transition-colors" onClick={() => openApplication('Terminal', 200, 400, 'contact')}>  Contact </p>
+                  <p className="hover:text-white cursor-pointer transition-colors" onClick={() => openApplication('Terminal', 20, 400, 'contact')}>  Contact </p>
 
                   <p
                     className="hover:text-white cursor-pointer transition-colors"
@@ -1046,19 +1038,21 @@ export function Desktop() {
       
       </h1> */}
 
-            {UserIcon.map((icon) => (<DesktopIcon
-              key={icon.id}
-              name={icon.name}
-              icon={icon.icon}
-              initialX={icon.x}
-              initialY={icon.y}
-              onPositionChange={(x, y) =>
-                updateIconPosition(icon.id, x, y)
-              }
-              folderColor={settings.folderColor}
-              onDoubleClick={() => openApplication(icon.name)}
-              desktopRef={desktopRef}
-            />))}
+            {UserIcon.map((icon) => (
+              <FileIcon
+                key={icon.id}
+                id={icon.id}
+                name={icon.name}
+                icon={icon.icon}
+                initialX={icon.x}
+                initialY={icon.y}
+                onPositionChange={(x, y) =>
+                  updateIconPosition(icon.id, x, y)
+                }
+                onDoubleClick={() => openApplication(icon.name)}
+                desktopRef={desktopRef}
+              />
+            ))}
 
             {icons?.slice(0, 7).map(icon => (
               // <DesktopIcon

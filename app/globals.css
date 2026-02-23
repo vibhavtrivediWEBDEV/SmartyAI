@@ -191,6 +191,12 @@
   }
 }
 
+ @keyframes glassShimmer {
+    0%, 100% { opacity: 0.5; transform: scaleY(1); }
+    33%       { opacity: 0.7; transform: scaleY(1.0005); }
+    66%       { opacity: 0.4; transform: scaleY(0.9998); }
+  }
+
 @layer components {
   .btn-call {
     @apply inline-block px-7 py-3 font-bold text-sm leading-5 text-white transition-colors duration-150 bg-success-100 border border-transparent rounded-full shadow-sm focus:outline-none focus:shadow-2xl active:bg-success-200 hover:bg-success-200 min-w-28 cursor-pointer items-center justify-center overflow-visible;

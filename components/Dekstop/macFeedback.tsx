@@ -3,140 +3,135 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-interface Reaction {
-  id:    string;
-  emoji: string;
-  label: string;
-  color: string;
-}
-
-interface Comment {
-  id:    number;
-  text:  string;
-  emoji: string;
-  time:  string;
-}
-
-interface Counts {
-  love:   number;
-  fire:   number;
-  wow:    number;
-  clap:   number;
-  rocket: number;
-}
-
-interface ParticleItem {
-  id:    string;
-  emoji: string;
-}
+interface Reaction { id: string; emoji: string; label: string; color: string; }
+interface Comment { id: string; text: string; emoji: string; time: string; }
+interface Counts { love: number; fire: number; wow: number; clap: number; rocket: number; }
+interface Floater { id: string; emoji: string; x: number; }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-
 const REACTIONS: Reaction[] = [
-  { id: "love",   emoji: "❤️",  label: "Love",   color: "#ff4d6d" },
-  { id: "fire",   emoji: "🔥",  label: "Fire",   color: "#ff6b2b" },
-  { id: "wow",    emoji: "🤩",  label: "Wow",    color: "#f7c948" },
-  { id: "clap",   emoji: "👏",  label: "Clap",   color: "#a78bfa" },
-  { id: "rocket", emoji: "🚀",  label: "Rocket", color: "#38bdf8" },
+  { id: "love", emoji: "❤️", label: "Love it", color: "#ff4d6d" },
+  { id: "fire", emoji: "🔥", label: "On fire!", color: "#ff6b35" },
+  { id: "wow", emoji: "🤩", label: "Blown away", color: "#fbbf24" },
+  { id: "clap", emoji: "👏", label: "Impressed", color: "#a78bfa" },
+  { id: "rocket", emoji: "🚀", label: "To the moon", color: "#38bdf8" },
 ];
 
-const EMPTY_COUNTS: Counts = { love: 0, fire: 0, wow: 0, clap: 0, rocket: 0 };
-const SHARED = true;
+const EMPTY: Counts = { love: 0, fire: 0, wow: 0, clap: 0, rocket: 0 };
 
-const fmt = (n: number): string =>
+// ✅ Points to your Next.js API route: app/api/reactions/route.ts
+const API = "/api/reactions";
+
+const fmt = (n: number) =>
   n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(n);
 
-// ── Storage helpers (typed) ───────────────────────────────────────────────────
-
-declare global {
-  interface Window {
-    storage: {
-      get:    (key: string, shared?: boolean) => Promise<{ value: string } | null>;
-      set:    (key: string, value: string, shared?: boolean) => Promise<unknown>;
-      delete: (key: string, shared?: boolean) => Promise<unknown>;
-    };
+// Stable user ID — survives refresh, stored in localStorage
+const getUserId = (): string => {
+  if (typeof window === "undefined") return "ssr";
+  const k = "lc:uid";
+  let v = localStorage.getItem(k);
+  if (!v) {
+    v = `u-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    localStorage.setItem(k, v);
   }
-}
+  return v;
+};
 
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function Particle({ emoji }: { emoji: string }) {
-  const left  = 20 + Math.random() * 60;
-  const dur   = 1.0 + Math.random() * 0.8;
-  const delay = Math.random() * 0.2;
-  const size  = 13 + Math.random() * 14;
+// ── Floating emoji particle ───────────────────────────────────────────────────
+function Floater({ emoji, x }: { emoji: string; x: number }) {
+  const size = 16 + Math.random() * 14;
+  const dur = 1.2 + Math.random() * 0.6;
+  const delay = Math.random() * 0.15;
+  const drift = (Math.random() - 0.5) * 40;
   return (
-    <span style={{
-      position: "absolute", pointerEvents: "none", userSelect: "none", zIndex: 999,
-      fontSize: size, left: `${left}%`, bottom: 60,
-      animation: `lcFloat ${dur}s ${delay}s ease-out forwards`,
-    }}>
+    <span
+      style={{
+        position: "fixed", pointerEvents: "none", userSelect: "none",
+        fontSize: size, bottom: 90, left: x, zIndex: 10000,
+        animation: `lcRise ${dur}s ${delay}s cubic-bezier(0.25,0.46,0.45,0.94) forwards`,
+        "--drift": `${drift}px`,
+      } as React.CSSProperties}
+    >
       {emoji}
     </span>
   );
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-
 export default function LoveCounter() {
-  const [open, setOpen]             = useState(false);
-  const [counts, setCounts]         = useState<Counts>({ ...EMPTY_COUNTS });
+  const [open, setOpen] = useState(false);
+  const [counts, setCounts] = useState<Counts>({ ...EMPTY });
   const [myReaction, setMyReaction] = useState<string | null>(null);
-  const [comments, setComments]     = useState<Comment[]>([]);
-  const [comment, setComment]       = useState("");
-  const [showInput, setShowInput]   = useState(false);
-  const [particles, setParticles]   = useState<ParticleItem[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [visitors, setVisitors]     = useState(0);
-  const [heartAnim, setHeartAnim]   = useState(false);
-  const [mounted, setMounted]       = useState(false);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [comment, setComment] = useState("");
+  const [showInput, setShowInput] = useState(false);
+  const [floaters, setFloaters] = useState<Floater[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [posting, setPosting] = useState(false);
+  const [visitors, setVisitors] = useState(0);
+  const [btnPop, setBtnPop] = useState(false);
+  const [hoverReaction, setHoverReaction] = useState<string | null>(null);
 
-  const sid      = useRef(`s-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
-  const pollRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const userId = useRef("");
 
   const total = (Object.values(counts) as number[]).reduce((a, b) => a + b, 0);
-  const myR   = REACTIONS.find(r => r.id === myReaction) ?? null;
+  const myR = REACTIONS.find(r => r.id === myReaction) ?? null;
+  const btnEmoji = myR?.emoji ?? "❤️";
+  const btnColor = myR?.color ?? "#ff4d6d";
+  const btnColorDark = myR?.color ?? "#c2185b";
+  const activeR = hoverReaction
+    ? REACTIONS.find(r => r.id === hoverReaction)
+    : myR;
 
-  // ── Load shared data ────────────────────────────────────────────────────────
-  const loadShared = useCallback(async () => {
+  // ── Fetch data from Firebase via API route ───────────────────────────────
+  const fetchData = useCallback(async () => {
     try {
-      const [cRes, cmRes, vRes] = await Promise.all([
-        window.storage.get("lc:counts",   SHARED).catch(() => null),
-        window.storage.get("lc:comments", SHARED).catch(() => null),
-        window.storage.get("lc:visitors", SHARED).catch(() => null),
-      ]);
-      if (cRes)  setCounts(JSON.parse(cRes.value) as Counts);
-      if (cmRes) setComments(JSON.parse(cmRes.value) as Comment[]);
-      if (vRes)  setVisitors(parseInt(vRes.value) || 0);
-    } catch (_) {}
+      const res = await fetch(API);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.counts) setCounts(data.counts);
+      if (data.comments) setComments(data.comments);
+      if (data.visitors !== undefined) setVisitors(data.visitors);
+    } catch { }
   }, []);
 
+  // ── Init ─────────────────────────────────────────────────────────────────
   useEffect(() => {
-    setMounted(true);
+    userId.current = getUserId();
+
+    // Restore this user's saved reaction from localStorage
+    const saved = localStorage.getItem("lc:myReaction");
+    if (saved) setMyReaction(saved);
+
     const init = async () => {
-      // Increment shared visitor count
+      // 1. Load all data (counts, comments, visitors) from Firebase
+      await fetchData();
+
+      // 2. Increment visitor count in Firebase
       try {
-        const vRes = await window.storage.get("lc:visitors", SHARED).catch(() => null);
-        const next = (vRes ? parseInt(vRes.value) || 0 : 0) + 1;
-        await window.storage.set("lc:visitors", String(next), SHARED).catch(() => {});
-        setVisitors(next);
-      } catch (_) {}
-      // Restore this session's reaction (private)
-      try {
-        const me = await window.storage.get(`lc:me:${sid.current}`).catch(() => null);
-        if (me) setMyReaction(me.value);
-      } catch (_) {}
-      await loadShared();
+        await fetch(API, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "visit" }),
+        });
+        // Re-fetch to get updated visitor count
+        await fetchData();
+      } catch { }
+
       setLoading(false);
-      pollRef.current = setInterval(loadShared, 4000);
+
+      // 3. Live poll every 5s — picks up other users' reactions in real time
+      pollRef.current = setInterval(fetchData, 5000);
     };
+
     init();
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [loadShared]);
+  }, [fetchData]);
 
-  // Close on outside click
+  // ── Outside click closes panel ───────────────────────────────────────────
   useEffect(() => {
     if (!open) return;
     const h = (e: MouseEvent) => {
@@ -146,389 +141,490 @@ export default function LoveCounter() {
     return () => { clearTimeout(t); document.removeEventListener("mousedown", h); };
   }, [open]);
 
-  // ── Handle reaction ─────────────────────────────────────────────────────────
+  // ── Spawn floaters from button ───────────────────────────────────────────
+  const spawnFloaters = useCallback((emoji: string) => {
+    if (!btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const fs: Floater[] = Array.from({ length: 8 }, (_, i) => ({
+      id: `f${Date.now()}${i}`, emoji,
+      x: cx - 10 + (Math.random() - 0.5) * 40,
+    }));
+    setFloaters(p => [...p, ...fs]);
+    setTimeout(() => setFloaters(p => p.filter(x => !fs.find(f => f.id === x.id))), 2500);
+  }, []);
+
+  // ── React — saves to Firebase via API route ──────────────────────────────
   const handleReact = useCallback(async (id: string) => {
-    const r       = REACTIONS.find(r => r.id === id)!;
+    if (posting) return;
+    const r = REACTIONS.find(r => r.id === id)!;
     const removing = myReaction === id;
 
-    // Optimistic update
+    // Optimistic UI update — instant feel
     setCounts(prev => {
-      const n = { ...prev } as Counts;
+      const n = { ...prev };
       if (removing) {
-        (n as any)[id] = Math.max(0, (n as any)[id] - 1);
+        n[id as keyof Counts] = Math.max(0, n[id as keyof Counts] - 1);
       } else {
-        if (myReaction) (n as any)[myReaction] = Math.max(0, (n as any)[myReaction] - 1);
-        (n as any)[id] = (n as any)[id] + 1;
+        if (myReaction) n[myReaction as keyof Counts] = Math.max(0, n[myReaction as keyof Counts] - 1);
+        n[id as keyof Counts] = n[id as keyof Counts] + 1;
       }
       return n;
     });
-    setMyReaction(removing ? null : id);
+
+    const next = removing ? null : id;
+    setMyReaction(next);
+
+    // Persist user's choice in localStorage (survives page refresh)
+    if (next) localStorage.setItem("lc:myReaction", next);
+    else localStorage.removeItem("lc:myReaction");
 
     if (!removing) {
-      setHeartAnim(true);
-      setTimeout(() => setHeartAnim(false), 600);
-      const ps: ParticleItem[] = Array.from({ length: 6 }, (_, i) => ({
-        id: `p${Date.now()}${i}`, emoji: r.emoji,
-      }));
-      setParticles(p => [...p, ...ps]);
-      setTimeout(() => setParticles(p => p.filter(x => !ps.find(n => n.id === x.id))), 2000);
-      setTimeout(() => setShowInput(true), 400);
+      setBtnPop(true);
+      setTimeout(() => setBtnPop(false), 500);
+      spawnFloaters(r.emoji);
+      setTimeout(() => setShowInput(true), 600);
     } else {
       setShowInput(false);
     }
 
-    // Persist to shared storage
+    // ✅ Save to Firebase via API route — ALL visitors will see this
+    setPosting(true);
     try {
-      const latest = await window.storage.get("lc:counts", SHARED).catch(() => null);
-      const sc: Counts = latest ? JSON.parse(latest.value) : { ...EMPTY_COUNTS };
-      if (!removing) {
-        if (myReaction) (sc as any)[myReaction] = Math.max(0, (sc as any)[myReaction] - 1);
-        (sc as any)[id] = (sc as any)[id] + 1;
-        await window.storage.set(`lc:me:${sid.current}`, id).catch(() => {});
-      } else {
-        (sc as any)[id] = Math.max(0, (sc as any)[id] - 1);
-        await window.storage.delete(`lc:me:${sid.current}`).catch(() => {});
-      }
-      await window.storage.set("lc:counts", JSON.stringify(sc), SHARED).catch(() => {});
-      setCounts(sc);
-    } catch (_) {}
-  }, [myReaction]);
+      const res = await fetch(API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          removing
+            ? { action: "unreact", reactionId: id, userId: userId.current }
+            : { action: "react", reactionId: id, userId: userId.current, prevReactionId: myReaction }
+        ),
+      });
+      const data = await res.json();
+      // Sync counts with Firebase truth (in case of concurrent updates)
+      if (data.counts) setCounts(data.counts);
+    } catch { }
+    setPosting(false);
+  }, [myReaction, posting, spawnFloaters]);
 
-  // ── Submit comment ──────────────────────────────────────────────────────────
+  // ── Submit comment — saves to Firebase via API route ────────────────────
   const submitComment = useCallback(async () => {
     const text = comment.trim();
-    if (!text || text.length > 200) return;
-    const entry: Comment = {
-      id:    Date.now(),
+    if (!text || posting) return;
+
+    // Optimistic: show immediately
+    const optimistic: Comment = {
+      id: `opt-${Date.now()}`,
       text,
       emoji: myR?.emoji ?? "💬",
-      time:  new Date().toISOString(),
+      time: new Date().toISOString(),
     };
-    const updated = [entry, ...comments].slice(0, 50);
-    setComments(updated);
+    setComments(p => [optimistic, ...p].slice(0, 50));
     setComment("");
     setShowInput(false);
-    await window.storage.set("lc:comments", JSON.stringify(updated), SHARED).catch(() => {});
-  }, [comment, comments, myR]);
 
-  if (!mounted) return null;
+    // ✅ Save to Firebase — ALL visitors will see this comment
+    setPosting(true);
+    try {
+      const res = await fetch(API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "comment",
+          text,
+          emoji: myR?.emoji ?? "💬",
+          userId: userId.current,
+        }),
+      });
+      const data = await res.json();
+      // Replace optimistic with server data
+      if (data.comments) setComments(data.comments);
+    } catch { }
+    setPosting(false);
+  }, [comment, myR, posting]);
 
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
 
-        .lc-wrap, .lc-wrap * { box-sizing: border-box; margin: 0; padding: 0; }
-        .lc-wrap {
-          position: fixed; bottom: 28px; right: 28px; z-index: 9999;
-          font-family: 'Sora', sans-serif;
+        .lc-root, .lc-root * { box-sizing: border-box; margin: 0; padding: 0; }
+        .lc-root {
+          position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+          font-family: 'Plus Jakarta Sans', sans-serif;
         }
 
-        /* Trigger */
-        .lc-trigger {
-          width: 56px; height: 56px; border-radius: 50%; border: none;
-          background: linear-gradient(135deg, #ff4d6d, #c2185b);
-          cursor: pointer; display: flex; align-items: center; justify-content: center;
-          font-size: 24px;
-          box-shadow: 0 4px 24px rgba(255,77,109,.45), 0 2px 8px rgba(0,0,0,.3);
-          transition: transform .2s cubic-bezier(.34,1.56,.64,1), box-shadow .2s;
-          position: relative; z-index: 2; outline: none;
+        /* ── Button ─────────────────────────────────────────────────────── */
+        .lc-btn {
+          width: 58px; height: 58px; border-radius: 50%; border: none;
+          cursor: pointer; outline: none; position: relative;
+          display: flex; align-items: center; justify-content: center;
+          transition: transform .25s cubic-bezier(.34,1.56,.64,1);
         }
-        .lc-trigger:hover {
-          transform: scale(1.1);
-          box-shadow: 0 6px 32px rgba(255,77,109,.6), 0 2px 8px rgba(0,0,0,.3);
-        }
-        .lc-trigger.beat  { animation: lcBeat .5s ease; }
-        .lc-trigger.open  { transform: scale(0.92); }
-        .lc-trigger.idle  { animation: lcPulse 2.5s ease-in-out infinite; }
+        .lc-btn:hover { transform: scale(1.12); }
+        .lc-btn.pop   { animation: lcPop .4s cubic-bezier(.34,1.56,.64,1); }
+        .lc-btn.open  { transform: scale(0.9) !important; }
 
-        /* Badge */
+        .lc-glow {
+          position: absolute; inset: -4px; border-radius: 50%;
+          animation: lcGlow 2s ease-in-out infinite; pointer-events: none;
+        }
+        .lc-ring {
+          position: absolute; inset: -2px; border-radius: 50%;
+          border: 2px solid transparent; opacity: 0;
+          animation: lcRing 2s ease-out infinite; pointer-events: none;
+        }
+        .lc-ring2 { animation-delay: 0.7s; }
+
+        .lc-btn-emoji {
+          font-size: 26px; line-height: 1; position: relative; z-index: 1;
+          animation: lcBreath 3s ease-in-out infinite;
+          filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));
+        }
+        .lc-btn.open .lc-btn-emoji { display: none; }
+        .lc-btn-x { display: none; position: relative; z-index: 1; }
+        .lc-btn.open .lc-btn-x { display: block; }
+
         .lc-badge {
-          position: absolute; top: -6px; left: -6px;
-          background: #fff; color: #ff4d6d;
-          font-size: 10px; font-weight: 600; border-radius: 100px;
+          position: absolute; top: -4px; right: -4px;
+          background: white; border-radius: 100px;
+          font-size: 10px; font-weight: 700;
           padding: 2px 6px; min-width: 20px; text-align: center;
-          box-shadow: 0 2px 8px rgba(0,0,0,.2);
-          animation: lcPop .3s ease;
-          font-family: 'Sora', sans-serif;
+          box-shadow: 0 2px 8px rgba(0,0,0,.25);
+          font-family: 'Plus Jakarta Sans', sans-serif;
+          animation: lcBadgePop .3s ease;
         }
 
-        /* Panel */
+        /* ── Panel ──────────────────────────────────────────────────────── */
         .lc-panel {
-          position: absolute; bottom: 68px; right: 0; width: 340px;
-          background: rgba(13,13,18,.97);
-          border: 1px solid rgba(255,255,255,.08); border-radius: 24px;
+          position: absolute; bottom: 70px; right: 0; width: 330px;
+          background: #0f0f14;
+          border: 1px solid rgba(255,255,255,.09); border-radius: 22px;
           overflow: hidden;
-          box-shadow: 0 24px 64px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.04);
+          box-shadow: 0 20px 60px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.04);
           transform-origin: bottom right;
-          transition: transform .35s cubic-bezier(.34,1.4,.64,1), opacity .25s ease;
+          transition: transform .4s cubic-bezier(.34,1.3,.64,1), opacity .3s ease;
         }
-        .lc-panel.closed  { transform: scale(0.6) translateY(20px); opacity: 0; pointer-events: none; }
-        .lc-panel.opened  { transform: scale(1) translateY(0); opacity: 1; }
+        .lc-panel.closed { transform: scale(0.55) translateY(24px); opacity: 0; pointer-events: none; }
+        .lc-panel.opened { transform: scale(1) translateY(0); opacity: 1; }
 
-        /* Header */
-        .lc-header {
-          padding: 18px 20px 14px;
+        /* ── Header ─────────────────────────────────────────────────────── */
+        .lc-hdr {
+          padding: 16px 18px 12px; position: relative; overflow: hidden;
           border-bottom: 1px solid rgba(255,255,255,.06);
-          background: linear-gradient(180deg, rgba(255,77,109,.08) 0%, transparent 100%);
         }
-        .lc-title { font-size: 15px; font-weight: 600; color: #eae6df; letter-spacing: -.2px; }
-        .lc-sub   { font-size: 11px; color: rgba(234,230,223,.38); margin-top: 3px; letter-spacing: .2px; }
+        .lc-hdr-bg {
+          position: absolute; inset: 0; pointer-events: none;
+          transition: background .5s ease;
+        }
+        .lc-hdr-inner { position: relative; z-index: 1; }
+        .lc-title {
+          font-size: 15px; font-weight: 700; color: #f0ece4; letter-spacing: -.3px;
+        }
+        .lc-sub {
+          font-size: 11px; color: rgba(240,236,228,.35);
+          margin-top: 3px; display: flex; align-items: center; gap: 6px;
+        }
+        .lc-dot {
+          width: 5px; height: 5px; border-radius: 50%; background: #4ade80;
+          animation: lcLive 1.6s ease-in-out infinite; flex-shrink: 0;
+        }
 
-        /* Reactions row */
-        .lc-reactions {
-          display: flex; gap: 6px; padding: 16px 16px 12px;
+        /* ── Reactions ──────────────────────────────────────────────────── */
+        .lc-rxns {
+          display: flex; gap: 5px; padding: 14px 14px 10px;
           border-bottom: 1px solid rgba(255,255,255,.05);
           overflow-x: auto; scrollbar-width: none;
         }
-        .lc-reactions::-webkit-scrollbar { display: none; }
+        .lc-rxns::-webkit-scrollbar { display: none; }
 
-        .lc-rb {
-          flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
-          background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07);
-          border-radius: 16px; padding: 10px 12px; cursor: pointer;
+        .lc-rxn {
+          flex-shrink: 0; display: flex; flex-direction: column;
+          align-items: center; gap: 3px;
+          border-radius: 14px; padding: 9px 11px; cursor: pointer;
+          outline: none; min-width: 56px;
+          border: 1.5px solid rgba(255,255,255,.07);
+          background: rgba(255,255,255,.03);
           transition: all .2s cubic-bezier(.34,1.56,.64,1);
-          min-width: 60px; outline: none;
         }
-        .lc-rb:hover { transform: translateY(-3px) scale(1.08); }
-        .lc-rb.on    { transform: translateY(-2px) scale(1.05); }
-        .lc-rb .em   { font-size: 22px; line-height: 1; }
-        .lc-rb.on .em{ animation: lcBeat .4s ease; }
-        .lc-rb .ct   { font-size: 11px; font-weight: 600; color: rgba(234,230,223,.4); }
-        .lc-rb.on .ct{ animation: lcPop .3s ease; }
-        .lc-rb .lb   { font-size: 9px; color: rgba(234,230,223,.3); letter-spacing: .3px; }
+        .lc-rxn:hover     { transform: translateY(-4px) scale(1.1); }
+        .lc-rxn.on        { transform: translateY(-3px) scale(1.06); }
+        .lc-rxn-em        { font-size: 20px; line-height: 1; filter: drop-shadow(0 1px 3px rgba(0,0,0,.3)); }
+        .lc-rxn.on .lc-rxn-em  { animation: lcJelly .4s ease; }
+        .lc-rxn:hover .lc-rxn-em { animation: lcJelly .4s ease; }
+        .lc-rxn-ct        { font-size: 11px; font-weight: 600; color: rgba(240,236,228,.38); transition: color .2s; }
+        .lc-rxn.on .lc-rxn-ct { font-weight: 700; animation: lcCountPop .3s ease; }
+        .lc-rxn-lb        { font-size: 8.5px; color: rgba(240,236,228,.25); letter-spacing: .3px; text-transform: uppercase; font-weight: 500; white-space: nowrap; }
 
-        /* Comments */
-        .lc-comments {
-          max-height: 190px; overflow-y: auto;
-          scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.08) transparent;
+        /* ── Input ──────────────────────────────────────────────────────── */
+        .lc-inp-wrap {
+          padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,.05);
+          animation: lcSlide .35s cubic-bezier(.34,1.3,.64,1);
         }
-        .lc-comments::-webkit-scrollbar       { width: 3px; }
-        .lc-comments::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 2px; }
-
-        .lc-comment {
-          display: flex; align-items: flex-start; gap: 9px;
-          padding: 11px 16px;
-          border-bottom: 1px solid rgba(255,255,255,.04);
-          animation: lcSlide .3s ease;
-        }
-        .lc-comment:last-child { border-bottom: none; }
-        .lc-comment .em2 { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
-        .lc-comment .txt { font-size: 12px; color: rgba(234,230,223,.8); line-height: 1.5; }
-        .lc-comment .ts  { font-size: 10px; color: rgba(234,230,223,.25); margin-top: 3px; }
-
-        /* Input */
-        .lc-input-wrap {
-          padding: 12px 16px 14px;
-          border-top: 1px solid rgba(255,255,255,.06);
-          background: rgba(255,255,255,.02);
-          animation: lcSlide .3s ease;
+        .lc-inp-prompt {
+          font-size: 12px; color: rgba(240,236,228,.45);
+          margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
         }
         .lc-ta {
           width: 100%; background: rgba(255,255,255,.05);
-          border: 1px solid rgba(255,255,255,.09); border-radius: 12px;
-          padding: 9px 12px; color: #eae6df;
-          font-family: 'Sora', sans-serif; font-size: 12px;
-          resize: none; outline: none; transition: border-color .2s; line-height: 1.5;
+          border: 1.5px solid rgba(255,255,255,.08); border-radius: 11px;
+          padding: 9px 12px; color: #f0ece4;
+          font-family: 'Plus Jakarta Sans', sans-serif; font-size: 12.5px;
+          resize: none; outline: none;
+          transition: border-color .2s, box-shadow .2s; line-height: 1.5;
         }
-        .lc-ta:focus       { border-color: rgba(255,77,109,.4); }
-        .lc-ta::placeholder{ color: rgba(234,230,223,.28); }
-
-        .lc-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
-        .lc-send {
-          background: linear-gradient(135deg, #ff4d6d, #c2185b); color: #fff;
-          border: none; border-radius: 10px; padding: 7px 16px;
-          font-family: 'Sora', sans-serif; font-size: 12px; font-weight: 600;
+        .lc-ta:focus       { border-color: rgba(255,255,255,.2); box-shadow: 0 0 0 3px rgba(255,255,255,.03); }
+        .lc-ta::placeholder{ color: rgba(240,236,228,.22); }
+        .lc-inp-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+        .lc-char    { font-size: 10px; color: rgba(240,236,228,.2); }
+        .lc-btns    { display: flex; gap: 6px; }
+        .lc-post {
+          border: none; border-radius: 9px; padding: 7px 15px; color: white;
+          font-family: 'Plus Jakarta Sans', sans-serif; font-size: 12px; font-weight: 600;
           cursor: pointer; transition: all .15s;
         }
-        .lc-send:hover     { filter: brightness(1.1); transform: scale(1.04); }
-        .lc-send:disabled  { opacity: .4; cursor: not-allowed; transform: none; }
+        .lc-post:hover    { filter: brightness(1.12); transform: scale(1.04); }
+        .lc-post:disabled { opacity: .35; cursor: not-allowed; transform: none; filter: none; }
         .lc-skip {
-          background: none; border: none; color: rgba(234,230,223,.28);
-          font-family: 'Sora', sans-serif; font-size: 11px;
-          cursor: pointer; padding: 4px 8px; border-radius: 6px; transition: color .15s;
+          background: none; border: none; font-family: 'Plus Jakarta Sans', sans-serif;
+          font-size: 11.5px; color: rgba(240,236,228,.28); cursor: pointer;
+          padding: 6px 10px; border-radius: 8px; transition: color .15s;
         }
-        .lc-skip:hover { color: rgba(234,230,223,.55); }
+        .lc-skip:hover { color: rgba(240,236,228,.55); }
+
+        /* ── Comments ───────────────────────────────────────────────────── */
+        .lc-list {
+          max-height: 200px; overflow-y: auto;
+          scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.07) transparent;
+        }
+        .lc-list::-webkit-scrollbar       { width: 3px; }
+        .lc-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 2px; }
+
+        .lc-cmt {
+          display: flex; gap: 9px; padding: 11px 14px;
+          border-bottom: 1px solid rgba(255,255,255,.04);
+          animation: lcSlide .3s ease;
+        }
+        .lc-cmt:last-child { border-bottom: none; }
+        .lc-cmt-em  { font-size: 15px; flex-shrink: 0; margin-top: 2px; }
+        .lc-cmt-txt { font-size: 12.5px; color: rgba(240,236,228,.78); line-height: 1.5; }
+        .lc-cmt-ts  { font-size: 10px; color: rgba(240,236,228,.2); margin-top: 3px; }
 
         .lc-empty {
-          padding: 24px 16px; text-align: center;
-          color: rgba(234,230,223,.2); font-size: 12px; line-height: 1.6;
+          padding: 22px 16px; text-align: center;
+          font-size: 12px; color: rgba(240,236,228,.2); line-height: 1.7;
         }
+        .lc-addnote {
+          padding: 9px 14px; text-align: right;
+          border-bottom: 1px solid rgba(255,255,255,.04);
+        }
+        .lc-addnote button {
+          background: none; border: none; font-family: 'Plus Jakarta Sans', sans-serif;
+          font-size: 11px; color: rgba(240,236,228,.28); cursor: pointer;
+          text-decoration: underline; transition: color .15s;
+        }
+        .lc-addnote button:hover { color: rgba(240,236,228,.55); }
+
         .lc-footer {
-          padding: 8px 16px; text-align: center;
-          font-size: 10px; color: rgba(234,230,223,.16);
-          border-top: 1px solid rgba(255,255,255,.04); letter-spacing: .3px;
+          padding: 8px 14px; text-align: center; font-size: 9.5px;
+          color: rgba(240,236,228,.14);
+          border-top: 1px solid rgba(255,255,255,.04); letter-spacing: .4px;
         }
 
-        /* Keyframes */
-        @keyframes lcBeat  {
-          0%,100%{ transform: scale(1); }
-          30%    { transform: scale(1.3); }
-          65%    { transform: scale(1.1); }
-        }
-        @keyframes lcPop   {
-          0%,100%{ transform: scale(1); }
-          50%    { transform: scale(1.45); }
-        }
-        @keyframes lcSlide {
-          from { opacity: 0; transform: translateY(8px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes lcFloat {
-          0%   { transform: translateY(0) scale(1); opacity: 1; }
-          80%  { opacity: .8; }
-          100% { transform: translateY(-90px) scale(.4); opacity: 0; }
-        }
-        @keyframes lcPulse {
-          0%,100%{ box-shadow: 0 4px 24px rgba(255,77,109,.45), 0 2px 8px rgba(0,0,0,.3); }
-          50%    { box-shadow: 0 4px 32px rgba(255,77,109,.7),  0 2px 8px rgba(0,0,0,.3); }
-        }
-        @keyframes lcLive  {
-          0%,100%{ opacity: .4; transform: scale(1); }
-          50%    { opacity: 1;  transform: scale(1.5); }
-        }
+        /* ── Keyframes ──────────────────────────────────────────────────── */
+        @keyframes lcBreath    { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+        @keyframes lcGlow      { 0%,100%{opacity:.4;transform:scale(1)} 50%{opacity:.7;transform:scale(1.05)} }
+        @keyframes lcRing      { 0%{transform:scale(1);opacity:.5} 100%{transform:scale(1.9);opacity:0} }
+        @keyframes lcPop       { 0%{transform:scale(1)} 40%{transform:scale(1.25)} 70%{transform:scale(0.92)} 100%{transform:scale(1)} }
+        @keyframes lcBadgePop  { 0%{transform:scale(0)} 70%{transform:scale(1.2)} 100%{transform:scale(1)} }
+        @keyframes lcCountPop  { 0%,100%{transform:scale(1)} 50%{transform:scale(1.4)} }
+        @keyframes lcJelly     { 0%{transform:scale(1)} 25%{transform:scale(1.3) rotate(-5deg)} 50%{transform:scale(.88) rotate(3deg)} 75%{transform:scale(1.1) rotate(-2deg)} 100%{transform:scale(1)} }
+        @keyframes lcRise      { 0%{transform:translateY(0) translateX(0) scale(1);opacity:1} 60%{opacity:1} 100%{transform:translateY(-110px) translateX(var(--drift,0px)) scale(.3);opacity:0} }
+        @keyframes lcSlide     { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes lcLive      { 0%,100%{opacity:.5;transform:scale(1)} 50%{opacity:1;transform:scale(1.4);box-shadow:0 0 6px #4ade80} }
       `}</style>
 
-      <div className="lc-wrap" ref={panelRef}>
+      {/* Floaters — fixed position, appear over everything */}
+      {floaters.map(f => <Floater key={f.id} emoji={f.emoji} x={f.x} />)}
 
-        {/* Floating particles */}
-        {particles.map(p => <Particle key={p.id} emoji={p.emoji} />)}
+      <div className="lc-root" ref={panelRef}>
 
-        {/* ── Slide-up panel ──────────────────────────────────────────── */}
+        {/* ── Panel ───────────────────────────────────────────────────── */}
         <div className={`lc-panel ${open ? "opened" : "closed"}`}>
 
           {/* Header */}
-          <div className="lc-header">
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div>
-                <div className="lc-title">
-                  {loading ? "Loading…" : `${fmt(total)} reaction${total !== 1 ? "s" : ""}`}
-                  {myR && <span style={{ marginLeft: 6 }}>{myR.emoji}</span>}
+          <div className="lc-hdr">
+            <div
+              className="lc-hdr-bg"
+              style={{
+                background: activeR
+                  ? `linear-gradient(135deg, ${activeR.color}22 0%, transparent 60%)`
+                  : "linear-gradient(135deg, rgba(255,77,109,.12) 0%, transparent 60%)",
+              }}
+            />
+            <div className="lc-hdr-inner">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div className="lc-title">
+                    {loading ? "Loading…" : total === 0
+                      ? "Be the first to react! 👋"
+                      : `${fmt(total)} ${total === 1 ? "person" : "people"} reacted`}
+                  </div>
+                  <div className="lc-sub">
+                    <div className="lc-dot" />
+                    <span>
+                      {loading ? "—" : `${fmt(visitors)} visitor${visitors !== 1 ? "s" : ""} · live`}
+                    </span>
+                  </div>
                 </div>
-                <div className="lc-sub">
-                  {loading ? "—" : `${fmt(visitors)} visitor${visitors !== 1 ? "s" : ""} · live`}
-                </div>
-              </div>
-              {/* Live indicator */}
-              <div style={{ display:"flex", alignItems:"center", gap: 5 }}>
-                <div style={{
-                  width: 6, height: 6, borderRadius: "50%", background: "#30D158",
-                  boxShadow: "0 0 6px #30D158",
-                  animation: "lcLive 1.8s ease-in-out infinite",
-                }}/>
-                <span style={{ fontSize: 10, color:"rgba(234,230,223,.3)", letterSpacing: 1.5 }}>LIVE</span>
+                {/* Top 3 emoji summary */}
+                {total > 0 && (
+                  <div style={{ display: "flex", gap: 2, marginTop: 2 }}>
+                    {REACTIONS
+                      .filter(r => counts[r.id as keyof Counts] > 0)
+                      .sort((a, b) => counts[b.id as keyof Counts] - counts[a.id as keyof Counts])
+                      .slice(0, 3)
+                      .map(r => (
+                        <span key={r.id} style={{ fontSize: 14 }} title={`${counts[r.id as keyof Counts]}`}>
+                          {r.emoji}
+                        </span>
+                      ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
           {/* Reaction buttons */}
-          <div className="lc-reactions">
+          <div className="lc-rxns">
             {REACTIONS.map(r => {
               const on = myReaction === r.id;
+              const count = counts[r.id as keyof Counts];
               return (
                 <button
                   key={r.id}
-                  className={`lc-rb${on ? " on" : ""}`}
+                  className={`lc-rxn${on ? " on" : ""}`}
                   onClick={() => handleReact(r.id)}
-                  disabled={loading}
+                  onMouseEnter={() => setHoverReaction(r.id)}
+                  onMouseLeave={() => setHoverReaction(null)}
+                  disabled={loading || posting}
                   title={r.label}
                   style={{
-                    background:   on ? `linear-gradient(135deg,${r.color}28,${r.color}0a)` : "rgba(255,255,255,.04)",
-                    borderColor:  on ? `${r.color}60` : "rgba(255,255,255,.07)",
-                    boxShadow:    on ? `0 0 18px ${r.color}20` : "none",
+                    background: on ? `${r.color}18` : "rgba(255,255,255,.03)",
+                    borderColor: on ? `${r.color}55` : "rgba(255,255,255,.07)",
+                    boxShadow: on ? `0 4px 20px ${r.color}25, inset 0 0 12px ${r.color}0a` : "none",
                   }}
                 >
-                  <span className="em">{r.emoji}</span>
-                  <span className="ct" style={{ color: on ? r.color : "rgba(234,230,223,.4)" }}>
-                    {loading ? "·" : fmt(counts[r.id as keyof Counts])}
-                  </span>
-                  <span className="lb">{r.label}</span>
+                  <div className="lc-rxn-em">{r.emoji}</div>
+                  <div className="lc-rxn-ct" style={{ color: on ? r.color : "rgba(240,236,228,.38)" }}>
+                    {loading ? "·" : count > 0 ? fmt(count) : "·"}
+                  </div>
+                  <div className="lc-rxn-lb">{r.label}</div>
                 </button>
               );
             })}
           </div>
 
-          {/* Comment input */}
-          {showInput && myReaction && (
-            <div className="lc-input-wrap">
+          {/* Comment input — appears after reacting */}
+          {myReaction && showInput ? (
+            <div className="lc-inp-wrap">
+              <div className="lc-inp-prompt">
+                <span style={{ fontSize: 15 }}>{myR?.emoji}</span>
+                <span>Tell visitors what you loved</span>
+              </div>
               <textarea
                 className="lc-ta"
                 rows={2}
                 maxLength={200}
-                placeholder={`Leave a note for visitors… ${myR?.emoji ?? ""}`}
+                placeholder="Your thoughts make a difference…"
                 value={comment}
                 onChange={e => setComment(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitComment(); } }}
                 autoFocus
               />
-              <div className="lc-actions">
-                <span style={{ fontSize: 10, color: "rgba(234,230,223,.25)" }}>{comment.length}/200</span>
-                <div style={{ display:"flex", gap: 6 }}>
-                  <button className="lc-skip" onClick={() => { setShowInput(false); setComment(""); }}>Skip</button>
-                  <button className="lc-send" onClick={submitComment} disabled={!comment.trim()}>
-                    Post ✉️
+              <div className="lc-inp-row">
+                <span className="lc-char">{comment.length}/200</span>
+                <div className="lc-btns">
+                  <button className="lc-skip" onClick={() => { setShowInput(false); setComment(""); }}>
+                    Maybe later
+                  </button>
+                  <button
+                    className="lc-post"
+                    onClick={submitComment}
+                    disabled={!comment.trim() || posting}
+                    style={{ background: `linear-gradient(135deg, ${btnColor}, ${btnColorDark})` }}
+                  >
+                    {posting ? "Sending…" : "Share note ✉️"}
                   </button>
                 </div>
               </div>
             </div>
-          )}
-
-          {/* My reaction — add note link */}
-          {myReaction && !showInput && (
-            <div style={{ padding:"10px 16px", borderTop:"1px solid rgba(255,255,255,.05)", textAlign:"right" }}>
-              <button
-                onClick={() => setShowInput(true)}
-                style={{ background:"none", border:"none", color:"rgba(234,230,223,.3)", fontSize:11, cursor:"pointer", textDecoration:"underline" }}
-              >
-                + add a note
-              </button>
+          ) : myReaction && !showInput ? (
+            <div className="lc-addnote">
+              <button onClick={() => setShowInput(true)}>✏️ Leave a note for visitors</button>
             </div>
-          )}
+          ) : null}
 
-          {/* Comments list */}
+          {/* Comments — from Firebase, visible to ALL visitors */}
           {comments.length > 0 ? (
-            <div className="lc-comments">
+            <div className="lc-list">
               {comments.map(c => (
-                <div key={c.id} className="lc-comment">
-                  <span className="em2">{c.emoji}</span>
+                <div key={c.id} className="lc-cmt">
+                  <span className="lc-cmt-em">{c.emoji}</span>
                   <div>
-                    <div className="txt">{c.text}</div>
-                    <div className="ts">
+                    <div className="lc-cmt-txt">{c.text}</div>
+                    <div className="lc-cmt-ts">
                       {new Date(c.time).toLocaleDateString("en-US", {
-                        month:"short", day:"numeric", hour:"2-digit", minute:"2-digit",
+                        month: "short", day: "numeric",
+                        hour: "2-digit", minute: "2-digit",
                       })}
                     </div>
                   </div>
                 </div>
               ))}
             </div>
-          ) : !showInput && (
+          ) : !myReaction ? (
             <div className="lc-empty">
-              No notes yet.<br />Be the first to leave one 💌
+              No reactions yet —<br />yours could be first! 🌟
             </div>
-          )}
+          ) : null}
 
-          <div className="lc-footer">Reactions &amp; notes shared across all visitors</div>
+          <div className="lc-footer">
+            🔥 FIREBASE · LIVE FOR ALL VISITORS · PERSISTS FOREVER
+          </div>
         </div>
 
-        {/* ── Heart trigger button ─────────────────────────────────────── */}
+        {/* ── Floating Heart Button ────────────────────────────────────── */}
         <button
-          className={`lc-trigger ${heartAnim ? "beat" : ""} ${open ? "open" : "idle"}`}
+          ref={btnRef}
+          className={`lc-btn${btnPop ? " pop" : ""}${open ? " open" : ""}`}
           onClick={() => setOpen(o => !o)}
           aria-label="Reactions"
-          title="Leave a reaction"
+          style={{
+            background: `linear-gradient(135deg, ${btnColor}, ${btnColorDark})`,
+            boxShadow: `0 4px 24px ${btnColor}66, 0 2px 8px rgba(0,0,0,.35)`,
+          }}
         >
-          {open ? (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M18 6L6 18M6 6l12 12" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
-            </svg>
-          ) : (
-            <span style={{ fontSize: 24, display:"block", lineHeight: 1 }}>❤️</span>
-          )}
+          {/* Breathing glow */}
+          <div
+            className="lc-glow"
+            style={{ background: `radial-gradient(circle, ${btnColor}40 0%, transparent 70%)` }}
+          />
+          {/* Always-on pulse rings */}
+          <div className="lc-ring" style={{ borderColor: `${btnColor}60` }} />
+          <div className="lc-ring lc-ring2" style={{ borderColor: `${btnColor}40` }} />
+
+          {/* Emoji — changes to user's last reaction */}
+          <span className="lc-btn-emoji">{btnEmoji}</span>
+
+          {/* Close icon */}
+          <svg className="lc-btn-x" width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M18 6L6 18M6 6l12 12" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+          </svg>
 
           {/* Count badge */}
           {!open && total > 0 && (
-            <span className="lc-badge">{fmt(total)}</span>
+            <span className="lc-badge" style={{ color: btnColor }}>{fmt(total)}</span>
           )}
         </button>
       </div>

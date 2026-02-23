@@ -73,12 +73,12 @@ export function AutomationControlPanel({
             {/* Floating Button */}
             {!isOpen && (
                 <button
-                    style={{ transform: 'scale(2)' }}
+                    style={{ transform: 'scale(1.2)' }}
                     onClick={() => setIsOpen(true)}
-                    className=" z-[9999] w-6 h-4 rounded-full  text-white flex items-center justify-center shadow-2xl transition-all"
+                    className=" z-[9999] w-2 h-2  rounded-full  text-white flex items-center justify-center shadow-2xl transition-all"
                     title="Open Automation Panel"
                 >
-                    🐞
+                    ⚡
                 </button>
             )}
 

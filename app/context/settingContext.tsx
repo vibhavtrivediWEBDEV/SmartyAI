@@ -17,7 +17,7 @@ export interface DesktopSettings {
 
 const DEFAULT_SETTINGS: DesktopSettings = {
   fontSize: 14,
-  folderColor: '#FF6B6B',
+  folderColor: '#9de9ff',
   textColor: '#333333',
   backgroundColor: '240 5.9% 10%',
   darkMode: true,
