@@ -18,7 +18,7 @@ import { Human } from "../three/vibhavModel"
 import { CameraDebugger } from "../three/cameraDebugger"
 import { RetroScrollingTextWall } from "../three/scrollingWall"
 import { NatureBase } from "../three/naturebase"
-import { useAIVoice  } from "@/hooks/useAIVoice"
+// import { useAIVoice  } from "@/hooks/useAIVoice"
 
 
 export default function PortfolioScene({ setdekstopView }: { setdekstopView: any }) {
@@ -27,7 +27,7 @@ export default function PortfolioScene({ setdekstopView }: { setdekstopView: any
   const [mode, setMode] = useState("night")
 
 
-  const {speak} = useAIVoice()
+  // const {speak} = useAIVoice()
   const humanRef = useRef<THREE.Group>(null)
 
   useEffect(() => {
@@ -37,9 +37,9 @@ export default function PortfolioScene({ setdekstopView }: { setdekstopView: any
     }
   }, [])
 
-  useEffect(() => {
-  speak("Welcome to my interactive portfolio .");
-}, []);
+  //   useEffect(() => {
+  //   speak("Welcome to my interactive portfolio .");
+  // }, []);
 
 
   function Loader() {
@@ -56,7 +56,7 @@ export default function PortfolioScene({ setdekstopView }: { setdekstopView: any
         }}>
 
           <RetroTerminal progress={progress} />
-            
+
         </div>
       </Html>
     )
@@ -68,7 +68,7 @@ export default function PortfolioScene({ setdekstopView }: { setdekstopView: any
   return (
     <div className="w-full h-screen relative overflow-hidden">
       <Canvas
-        camera={{ position: [-12,ROOM_Y  +  7, 8], fov: 55 }}
+        camera={{ position: [-12, ROOM_Y + 7, 8], fov: 55 }}
         shadows
         gl={{
           antialias: false, // Disable for better performance
@@ -79,17 +79,17 @@ export default function PortfolioScene({ setdekstopView }: { setdekstopView: any
         }}
         dpr={[1, 1.5]} // Limit pixel ratio for performance
       >
-         {/* <CameraDebugger /> */}
-       
+        {/* <CameraDebugger /> */}
+
         <Suspense fallback={<Loader />}>
-        <Suspense fallback={null}>
-        <NatureBase mode={mode} controlsRef={controlsRef} position={[0, -45, 0]} />
-        </Suspense>
-        
+          <Suspense fallback={null}>
+            <NatureBase mode={mode} controlsRef={controlsRef} position={[0, -45, 0]} />
+          </Suspense>
+
           <CameraAnimation controlsRef={controlsRef} humanRef={humanRef} setShowDesktop={setShowDesktop} setdekstopView={setdekstopView} />
           <Lights />
           <Room />
-          
+
           <Human ref={humanRef} />
           <LaptopScreen onclick={() => window.dispatchEvent(new CustomEvent("playAnimation", { detail: "mixamo.com" }))} showDesktop={showDesktop} setdekstopView={setdekstopView} />
 
@@ -145,7 +145,7 @@ export default function PortfolioScene({ setdekstopView }: { setdekstopView: any
 
 
 
-<RetroScrollingTextWall mode={mode} />
+          <RetroScrollingTextWall mode={mode} />
           <OrbitControls
             ref={controlsRef}
             enablePan={false}
@@ -161,7 +161,7 @@ export default function PortfolioScene({ setdekstopView }: { setdekstopView: any
             zoomSpeed={1.0} // Increased for better zoom response
           />
         </Suspense>
-       
+
       </Canvas>
 
       <div style={{ position: "absolute", top: 20, left: 20, zIndex: 10 }}>
@@ -173,11 +173,11 @@ export default function PortfolioScene({ setdekstopView }: { setdekstopView: any
         >
           Go to vibhav's Desktop
         </button>
- 
 
-        <button className="bg-white text-black px-4 ml-2 py-2 rounded-md" onClick={() => setMode(mode==="day"?"night":"day")}>
-  Toggle {mode ? "Night" : "Day"}
-</button>
+
+        <button className="bg-white text-black px-4 ml-2 py-2 rounded-md" onClick={() => setMode(mode === "day" ? "night" : "day")}>
+          Toggle {mode ? "Night" : "Day"}
+        </button>
       </div>
     </div>
   )

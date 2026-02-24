@@ -51,6 +51,7 @@ import { getFormattedCommandsWithExamples } from "@/lib/helper/commandRegistry"
 import LoveCounter from "./macFeedback"
 import FileIcon from "./fileicon"
 import LiquidGlassVideo from "./glassvediowallpaper"
+import Figma from "./figma"
 
 interface WindowState {
   id: string
@@ -372,6 +373,16 @@ export function Desktop() {
         case "vscode":
           component = <Vscode />;
           title = "VS code";
+          iconPath = "/icons/ai.png";
+          defaultWidth = 900;
+          defaultHeight = 550;
+
+          // automationAPI.maximizeWindow("vscode")
+
+          break;
+        case "figma":
+          component = <Figma />;
+          title = "figma";
           iconPath = "/icons/ai.png";
           defaultWidth = 900;
           defaultHeight = 550;
@@ -774,7 +785,8 @@ export function Desktop() {
     { name: "App Store", icon: <SearchIcon /> }, // Using SearchIcon for App Store
     { name: "Settings", icon: <ListTodoIcon /> }, // Using ListTodoIcon for Settings
     { name: "TV", icon: <SearchIcon /> }, // Using SearchIcon for TV
-    { name: "vscode", icon: <SearchIcon /> }, // Using SearchIcon for Music
+    { name: "vscode", icon: <SearchIcon /> },
+    { name: "figma", icon: <SearchIcon /> }, // Using SearchIcon for Music
     { name: "Spotify", icon: <SearchIcon /> }, // Using SearchIcon for Spotify
     { name: "Trash", icon: <Trash2Icon /> },
 
