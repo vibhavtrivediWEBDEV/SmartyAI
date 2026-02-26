@@ -52,6 +52,7 @@ import LoveCounter from "./macFeedback"
 import FileIcon from "./fileicon"
 import LiquidGlassVideo from "./glassvediowallpaper"
 import Figma from "./figma"
+import PremiumNotes from "./notesapp"
 
 interface WindowState {
   id: string
@@ -323,7 +324,7 @@ export function Desktop() {
             <div className="" >
               <TerminalUI
                 key={`terminal-${Date.now()}`} // 👈 Force remount
-
+                automationAPI={automationAPI}
                 autoRunCommand={commandToRun}
                 autoRunCommandArgs={arg}
                 onCommandExecuted={() => setCommandToAutoRun(null)}
@@ -366,6 +367,13 @@ export function Desktop() {
         case "Safari":
           component = <AISearch />;
           title = "AI Search";
+          iconPath = "/icons/ai.png";
+          defaultWidth = 700;
+          defaultHeight = 550;
+          break;
+        case "Notes":
+          component = <PremiumNotes />;
+          title = "notes";
           iconPath = "/icons/ai.png";
           defaultWidth = 700;
           defaultHeight = 550;
@@ -462,7 +470,7 @@ export function Desktop() {
           component = (
             <Webpage />
           );
-          title = "PDF Viewer";
+          title = "Demo Portfolio";
           iconPath = "/icons/pdf.png";
           defaultWidth = 900;
           defaultHeight = 600;
@@ -571,7 +579,7 @@ export function Desktop() {
 
       windowCounter += 1;
 
-      const isAlwaysMax = ['vscode', 'App Store'].includes(appName)
+      const isAlwaysMax = ['vscode', 'game', 'App Store'].includes(appName)
 
       const z = ref.current + 100;
 
@@ -882,19 +890,20 @@ export function Desktop() {
         onOpenApps={openApplication}
 
       >
-        <TerminalProvider openApplication={openApplication} runCommandInTerminal={runCommandInTerminal}>
+        <TerminalProvider openApplication={openApplication} automationAPI={automationAPI} runCommandInTerminal={runCommandInTerminal}>
           {/*  */}
 
+          {/**/}
           {/* <KeyboardWrapper
-        initialX={500}
-        initialY={400}
-        desktopRef={desktopRef}
-      /> */}
+            initialX={800}
+            initialY={400}
+            desktopRef={desktopRef}
+          /> */}
 
 
           <div
             ref={desktopRef}
-            className="relative w-full h-screen  overflow-hidden isolate"
+            className="relative w-full h-screen  overflow-hidden isolate nocursor"
 
 
             style={{

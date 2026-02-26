@@ -125,7 +125,7 @@ export function Dock({ appIcons, minappIcons, onAppClick, onminAppClick }: DockP
         {!drawerExpanded && (
           <div
             className="fixed bottom-0 left-0 right-0 backdrop-blur-xl px-4 py-3 z-50 flex items-center justify-center gap-2"
-            style={{ background: "rgba(39, 31, 31, 0.95)" }}
+            style={{ background: "rgba(45, 45, 45, 0.47)" }}
           >
             {/* Swipe indicator */}
             <div className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 bg-white/30 rounded-full" />
@@ -271,7 +271,7 @@ export function Dock({ appIcons, minappIcons, onAppClick, onminAppClick }: DockP
     <div
       className={`fixed left-1/2 -translate-x-1/2 bottom-0 mb-2 bg-opacity-70 backdrop-blur-md rounded-xl p-2 flex space-x-2 shadow-lg z-40 transform transition-all duration-300 ease-out
       ${isVisible ? "translate-y-0 opacity-100" : "translate-y-full opacity-0 pointer-events-none"}`}
-      style={{ background: "rgba(39, 31, 31, 0.62)", zIndex: 9999999 }}
+      style={{ background: "rgba(155, 152, 152, 0.09)", zIndex: 9999999 }}
     >
       {mergedIcons.map((app) => (
         <button

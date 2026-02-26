@@ -26,6 +26,7 @@ import { DynamicAgGridConfigurator } from "@/components/Dekstop/dataTableViewer"
 // import { useAIVoice } from "@/hooks/useAIVoice";
 import { useElevenTTS } from "@/hooks/ElevenLabs";
 import GridGlobe from "@/components/ui/GridGlobe";
+import { useCursorAutomation } from "@/hooks/useCursorAutomation";
 
 
 
@@ -36,6 +37,7 @@ interface HistoryEntry {
 }
 
 interface HandleCommandProps {
+  automationAPI?: any;
   command: string;
   history: HistoryEntry[];
   setHistory: React.Dispatch<React.SetStateAction<HistoryEntry[]>>;
@@ -45,6 +47,7 @@ interface HandleCommandProps {
 }
 
 export async function handleCommand({
+  automationAPI,
   command,
   history,
   setHistory,
@@ -55,6 +58,8 @@ export async function handleCommand({
   setHistory((prev) => [...prev, { type: "input", value: trimmedCommand }]);
 
   // const { speak } = useElevenTTS()
+
+
 
   const [baseCommand, ...args] = trimmedCommand.toLowerCase().split(" ");
   let output: string | JSX.Element = "";
@@ -243,26 +248,46 @@ export async function handleCommand({
       output = "Thinking...";
       setHistory((prev) => [...prev, { type: "output", value: output }]);
 
-      try {
-        const res = await fetch("/api/gemini/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: trimmedCommand }),
-        });
-        const data = await res.json();
-        output = data.content || "Sorry, I couldn't generate a response.";
-        // speak("Please check Your balance , Quota Exceeded")
-      } catch (err) {
-        output = "Error fetching response from Gemini.";
+      const parts = command.split(" ");
+      const action = parts[0];
+      const target = parts.slice(1).join(" ");
+
+      if (['open', 'close', 'minimize', 'maximize', 'focus'].includes(action)) {
+
+        const success = await automationAPI.executeTextCommand(command);
+
+        if (success) {
+          output = target
+            ? `${target} ${action}ed`
+            : `${action} executed successfully`;
+        } else {
+          output = `Failed to ${action} ${target}`;
+        }
+        setHistory((prev) => [...prev, { type: "output", value: output }]);
+        setCurrentInput("");
+        return;
       }
 
-      setHistory((prev) => {
-        const newHistory = [...prev];
-        newHistory.pop();
-        return [...newHistory, { type: "output", value: output }];
-      });
-      setCurrentInput("");
-      return;
+    // try {
+    //   const res = await fetch("/api/gemini/generate", {
+    //     method: "POST",
+    //     headers: { "Content-Type": "application/json" },
+    //     body: JSON.stringify({ prompt: trimmedCommand }),
+    //   });
+    //   const data = await res.json();
+    //   output = data.content || "Sorry, I couldn't generate a response.";
+    //   // speak("Please check Your balance , Quota Exceeded")
+    // } catch (err) {
+    //   output = "Error fetching response from Gemini.";
+    // }
+
+    // setHistory((prev) => {
+    //   const newHistory = [...prev];
+    //   newHistory.pop();
+    //   return [...newHistory, { type: "output", value: output }];
+    // });
+    // setCurrentInput("");
+    // return;
   }
 
   setHistory((prev) => [...prev, { type: "output", value: output }]);

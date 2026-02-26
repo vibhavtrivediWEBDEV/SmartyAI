@@ -370,7 +370,9 @@ export function Window({
             className={`font-semibold text-white/90 truncate drop-shadow-sm ${isMobile ? "text-base" : "text-sm"
               }`}
           >
-            {title}  [ID: {id}]
+            {title}
+            {/* [{zIndex}] */}
+            {/* [ID: {id}] */}
           </span>
         </div>
 

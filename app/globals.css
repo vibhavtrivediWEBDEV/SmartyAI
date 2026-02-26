@@ -93,6 +93,10 @@
   
 }
 
+* {
+  cursor: none !important;
+}
+
 .dark {
   --background: oklch(99.336% 0.00316 15.246);
   --foreground: oklch(0.985 0 0);
@@ -481,6 +485,8 @@
   }
 }
 
+
+.nocursor { cursor:none !important; }
 
 
 .keyboardWrapper {

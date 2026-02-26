@@ -16,12 +16,13 @@ interface HistoryEntry {
 }
 
 interface TerminalUIProps {
+  automationAPI?: any
   autoRunCommand?: string | null // New prop for auto-running commands
   autoRunCommandArgs?: Record<string, any> // New prop for auto-run command arguments
   onCommandExecuted?: () => void // Callback to notify parent that command was executed
 }
 
-export function TerminalUI({ autoRunCommand, autoRunCommandArgs, onCommandExecuted }: TerminalUIProps) {
+export function TerminalUI({ automationAPI, autoRunCommand, autoRunCommandArgs, onCommandExecuted }: TerminalUIProps) {
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [currentInput, setCurrentInput] = useState("")
   const outputRef = useRef<HTMLDivElement>(null)
@@ -62,6 +63,7 @@ export function TerminalUI({ autoRunCommand, autoRunCommandArgs, onCommandExecut
   useEffect(() => {
     if (autoRunCommand) {
       handleCommand({
+
         command: autoRunCommand,
         history,
         setHistory,
@@ -138,11 +140,11 @@ export function TerminalUI({ autoRunCommand, autoRunCommandArgs, onCommandExecut
     <>
       {reopenButton}
 
-      <div className="flex flex-col h-screen ">
+      <div className="flex flex-col h-screen  ">
         {/* Scrollable output */}
         <div
           ref={outputRef}
-          className="flex-1 overflow-y-auto p-4 text-sm scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900"
+          className="flex-1 overflow-y-auto  p-4 text-sm scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900"
 
           style={{ paddingBottom: "6rem" }} // reserve space for input
         >
@@ -150,12 +152,13 @@ export function TerminalUI({ autoRunCommand, autoRunCommandArgs, onCommandExecut
         </div>
 
         {/* Input bar (UI unchanged) */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-700 bg-">
+        <div className="absolute bottom-0 left-0 right-0 bg-black p-4 border-t border-gray-700 bg-">
 
           <TerminalInput
             ref={inputRef}
             onCommand={(cmd) =>
               handleCommand({
+                automationAPI: automationAPI,
                 command: cmd,
                 history,
                 setHistory,

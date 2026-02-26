@@ -3,6 +3,7 @@
 import { createContext, useContext, type ReactNode } from "react"
 
 interface TerminalContextType {
+  automationAPI: any
   openApplication: (appName: string, initialX?: number, initialY?: number) => void
   runCommandInTerminal: (command: string, args?: Record<string, any>) => void
 }
@@ -19,12 +20,13 @@ export const useTerminal = () => {
 
 interface TerminalProviderProps {
   children: ReactNode
+  automationAPI: any;
   openApplication: (appName: string, initialX?: number, initialY?: number) => void
   runCommandInTerminal: (command: string, args?: Record<string, any>) => void
 }
 
-export function TerminalProvider({ children, openApplication, runCommandInTerminal }: TerminalProviderProps) {
+export function TerminalProvider({ children, automationAPI, openApplication, runCommandInTerminal }: TerminalProviderProps) {
   return (
-    <TerminalContext.Provider value={{ openApplication, runCommandInTerminal }}>{children}</TerminalContext.Provider>
+    <TerminalContext.Provider value={{ automationAPI, openApplication, runCommandInTerminal }}>{children}</TerminalContext.Provider>
   )
 }
