@@ -81,80 +81,80 @@ function useFormFields(fieldConfigs) {
 }
 
 // ─── HOOK: useVoice ──────────────────────────────────────────────────────────
-function useVoice({ onNoteCreate }) {
-    const vapiRef = useRef(null);
-    const [callStatus, setCallStatus] = useState(CallStatus.IDLE);
-    const [isSpeaking, setIsSpeaking] = useState(false);
-    const [log, setLog] = useState([]);
+// function useVoice({ onNoteCreate }) {
+//     const vapiRef = useRef(null);
+//     const [callStatus, setCallStatus] = useState(CallStatus.IDLE);
+//     const [isSpeaking, setIsSpeaking] = useState(false);
+//     const [log, setLog] = useState([]);
 
-    const addLog = (msg) => setLog((p) => [...p.slice(-19), `${new Date().toLocaleTimeString()} ${msg}`]);
+//     const addLog = (msg) => setLog((p) => [...p.slice(-19), `${new Date().toLocaleTimeString()} ${msg}`]);
 
-    useEffect(() => {
-        let vapi;
-        (async () => {
-            try {
-                const { default: Vapi } = await import("https://cdn.jsdelivr.net/npm/@vapi-ai/web/dist/vapi.js");
-                vapi = new Vapi(VAPI_PUBLIC_KEY);
-                vapi.on("call-start", () => { setCallStatus(CallStatus.ACTIVE); addLog("✅ Call started"); });
-                vapi.on("call-end", () => { setCallStatus(CallStatus.IDLE); setIsSpeaking(false); addLog("📴 Call ended"); });
-                vapi.on("speech-start", () => setIsSpeaking(true));
-                vapi.on("speech-end", () => setIsSpeaking(false));
-                vapi.on("message", (msg) => {
-                    if (msg.type === "function-call" && msg.functionCall?.name === "createNote") {
-                        const { subject, message } = msg.functionCall.parameters ?? {};
-                        if (subject && message) onNoteCreate({ subject, message });
-                        addLog(`📝 Note created: "${subject}"`);
-                    }
-                });
-                vapi.on("error", (e) => addLog(`❌ ${e?.message ?? e}`));
-                vapiRef.current = vapi;
-            } catch (e) {
-                addLog("⚠️ Vapi not loaded – check key");
-            }
-        })();
-        return () => vapiRef.current?.stop();
-    }, []);
+//     useEffect(() => {
+//         let vapi;
+//         (async () => {
+//             try {
+//                 const { default: Vapi } = await import("https://cdn.jsdelivr.net/npm/@vapi-ai/web/dist/vapi.js");
+//                 vapi = new Vapi(VAPI_PUBLIC_KEY);
+//                 vapi.on("call-start", () => { setCallStatus(CallStatus.ACTIVE); addLog("✅ Call started"); });
+//                 vapi.on("call-end", () => { setCallStatus(CallStatus.IDLE); setIsSpeaking(false); addLog("📴 Call ended"); });
+//                 vapi.on("speech-start", () => setIsSpeaking(true));
+//                 vapi.on("speech-end", () => setIsSpeaking(false));
+//                 vapi.on("message", (msg) => {
+//                     if (msg.type === "function-call" && msg.functionCall?.name === "createNote") {
+//                         const { subject, message } = msg.functionCall.parameters ?? {};
+//                         if (subject && message) onNoteCreate({ subject, message });
+//                         addLog(`📝 Note created: "${subject}"`);
+//                     }
+//                 });
+//                 vapi.on("error", (e) => addLog(`❌ ${e?.message ?? e}`));
+//                 vapiRef.current = vapi;
+//             } catch (e) {
+//                 addLog("⚠️ Vapi not loaded – check key");
+//             }
+//         })();
+//         return () => vapiRef.current?.stop();
+//     }, []);
 
-    const startCall = async () => {
-        if (!vapiRef.current) return addLog("⚠️ Vapi not initialized");
-        setCallStatus(CallStatus.CONNECTING);
-        addLog("📞 Connecting...");
-        try {
-            await vapiRef.current.start({
-                transcriber: { provider: "deepgram", model: "nova-2", language: "en-US" },
-                model: {
-                    provider: "openai", model: "gpt-4o",
-                    systemPrompt: `You are a voice assistant for a Notes app. When the user wants to create a note, call the createNote function with subject and message. Be concise.`,
-                    functions: [{
-                        name: "createNote",
-                        description: "Create a new note",
-                        parameters: {
-                            type: "object",
-                            properties: {
-                                subject: { type: "string", description: "Note title/subject" },
-                                message: { type: "string", description: "Note body content" },
-                            },
-                            required: ["subject", "message"],
-                        },
-                    }],
-                },
-                voice: { provider: "11labs", voiceId: "rachel" },
-                name: "Notes Assistant",
-            });
-        } catch (e) {
-            setCallStatus(CallStatus.IDLE);
-            addLog(`❌ ${e?.message ?? e}`);
-        }
-    };
+//     const startCall = async () => {
+//         if (!vapiRef.current) return addLog("⚠️ Vapi not initialized");
+//         setCallStatus(CallStatus.CONNECTING);
+//         addLog("📞 Connecting...");
+//         try {
+//             await vapiRef.current.start({
+//                 transcriber: { provider: "deepgram", model: "nova-2", language: "en-US" },
+//                 model: {
+//                     provider: "openai", model: "gpt-4o",
+//                     systemPrompt: `You are a voice assistant for a Notes app. When the user wants to create a note, call the createNote function with subject and message. Be concise.`,
+//                     functions: [{
+//                         name: "createNote",
+//                         description: "Create a new note",
+//                         parameters: {
+//                             type: "object",
+//                             properties: {
+//                                 subject: { type: "string", description: "Note title/subject" },
+//                                 message: { type: "string", description: "Note body content" },
+//                             },
+//                             required: ["subject", "message"],
+//                         },
+//                     }],
+//                 },
+//                 voice: { provider: "11labs", voiceId: "rachel" },
+//                 name: "Notes Assistant",
+//             });
+//         } catch (e) {
+//             setCallStatus(CallStatus.IDLE);
+//             addLog(`❌ ${e?.message ?? e}`);
+//         }
+//     };
 
-    const endCall = () => {
-        addLog("📞 Ending...");
-        setCallStatus(CallStatus.ENDING);
-        vapiRef.current?.stop();
-    };
+//     const endCall = () => {
+//         addLog("📞 Ending...");
+//         setCallStatus(CallStatus.ENDING);
+//         vapiRef.current?.stop();
+//     };
 
-    return { callStatus, isSpeaking, log, startCall, endCall, isActive: callStatus === CallStatus.ACTIVE };
-}
+//     return { callStatus, isSpeaking, log, startCall, endCall, isActive: callStatus === CallStatus.ACTIVE };
+// }
 
 // ─── COLORS ──────────────────────────────────────────────────────────────────
 const ACCENT_COLORS = [
@@ -271,7 +271,7 @@ export default function PremiumNotes() {
     };
 
     // ── Voice
-    const voice = useVoice({ onNoteCreate: createNote });
+    // const voice = useVoice({ onNoteCreate: createNote });
 
     const toggleVoice = () => {
         const next = !showVoicePanel;

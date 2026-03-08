@@ -53,6 +53,7 @@ import FileIcon from "./fileicon"
 import LiquidGlassVideo from "./glassvediowallpaper"
 import Figma from "./figma"
 import PremiumNotes from "./notesapp"
+import GestureDock from "./gestureDock"
 
 interface WindowState {
   id: string
@@ -99,7 +100,7 @@ export function Desktop() {
   const [commandToAutoRun, setCommandToAutoRun] = useState<{ command: string; args?: Record<string, any> } | null>(null)
 
   const desktopRef = useRef<HTMLDivElement>(null)
-  const [showCursor, setShowCursor] = useState(true);
+  const [showCursor, setShowCursor] = useState(false);
 
 
   const [backgroundImage, setBackgroundImage] = useState('https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1200&h=800&fit=crop')
@@ -999,7 +1000,8 @@ export function Desktop() {
                   />
                 </span>
 
-                <span className="text-gray-400 hidden xs:inline">🔋</span>
+                <span className="text-gray-400 hidden xs:inline" onClick={() => setShowCursor(prev => !prev)}
+                >🖐️</span>
                 <span className="text-gray-400 hidden xs:inline">🔊</span>
                 <span className="text-gray-400 hidden sm:inline">Wi-Fi</span>
 
@@ -1028,11 +1030,17 @@ export function Desktop() {
             </div>
             {/* <CustomCursor /> */}
 
-            <FakeCursor
+            {/* <FakeCursor
               visible={showCursor}
               color={settings.folderColor}
               handControl={handControlCursor}
-            />
+            /> */}
+
+            {<GestureDock
+              automationAPI={automationAPI}
+              visible={showCursor}
+            />}
+
 
             <LoveCounter />
 
