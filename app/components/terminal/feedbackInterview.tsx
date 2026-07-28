@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import dayjs from "dayjs";
 import Link from "next/link";
 import Image from "next/image";
@@ -13,6 +13,7 @@ import {
 } from "@/lib/actions/general.action";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/actions/auth.action";
+import { useElevenTTS } from "@/hooks/ElevenLabs";
 
 interface FeedbackInterviewProps {
   id: string;
@@ -21,23 +22,31 @@ interface FeedbackInterviewProps {
 export default function FeedbackInverview({ id }: FeedbackInterviewProps) {
 
   const router = useRouter();
+  const hasFetchedRef = useRef(false);
 
   const [user, setUser] = useState<any>(null);
   const [interview, setInterview] = useState<any>(null);
   const [feedback, setFeedback] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  const { speak } = useElevenTTS();
 
   useEffect(() => {
+    // Prevent double fetch in React 18 StrictMode
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+
     async function fetchData() {
       try {
         const currentUser = await getCurrentUser();
         const interview = await getLastInterviewsByUserId(currentUser.id);
-        console.log("id",id)
+        console.log("id", id)
       
         setUser(currentUser);
 
         const interviewData = await getInterviewById(id);
-        console.log("interviewData",interviewData)
+        console.log("interviewData", interviewData)
         if (!interviewData) {
           return;
         }
@@ -63,13 +72,84 @@ export default function FeedbackInverview({ id }: FeedbackInterviewProps) {
     return <p className="text-white">Loading feedback...</p>;
   }
 
+  // Generate professional summary for TTS
+  const generateFeedbackSummary = () => {
+    if (!feedback) return "";
+    
+    let summary = `Interview Feedback Summary for ${interview?.role || 'your'} interview. `;
+    summary += `Overall Score: ${feedback.totalScore} out of 100. `;
+    summary += `${feedback.finalAssessment} `;
+    
+    if (feedback.categoryScores?.length > 0) {
+      summary += `Here's the breakdown: `;
+      feedback.categoryScores.forEach((cat: any, idx: number) => {
+        summary += `${cat.name}: ${cat.score} out of 100. ${cat.comment}. `;
+      });
+    }
+    
+    if (feedback.strengths?.length > 0) {
+      summary += `Your key strengths include: ${feedback.strengths.join(', ')}. `;
+    }
+    
+    if (feedback.areasForImprovement?.length > 0) {
+      summary += `Areas for improvement: ${feedback.areasForImprovement.join(', ')}. `;
+    }
+    
+    summary += `Keep practicing and you'll continue to improve!`;
+    return summary;
+  };
+
+  const handleSpeakFeedback = async () => {
+    if (isSpeaking) {
+      window.speechSynthesis?.cancel();
+      setIsSpeaking(false);
+      return;
+    }
+    
+    setIsSpeaking(true);
+    const summary = generateFeedbackSummary();
+    
+    try {
+      await speak(summary);
+    } catch (err) {
+      console.error('TTS error:', err);
+    } finally {
+      setIsSpeaking(false);
+    }
+  };
+
   return (
     <section className="section-feedback">
-      <div className="flex flex-row justify-center">
+      <div className="flex flex-row justify-center items-center gap-4">
         <h1 className="text-4xl font-semibold">
           Feedback on the Interview -{" "}
           <span className="capitalize">{interview?.role}</span> Interview
         </h1>
+        
+        {/* 🎙️ Speak Feedback Button */}
+        <button
+          onClick={handleSpeakFeedback}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-xl transition-all shadow-lg hover:shadow-xl disabled:opacity-50"
+          disabled={!feedback}
+          title={isSpeaking ? "Stop speaking" : "Listen to feedback summary"}
+        >
+          {isSpeaking ? (
+            <>
+              <svg className="w-5 h-5 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+                <rect x="6" y="4" width="4" height="16" rx="1" />
+                <rect x="14" y="4" width="4" height="16" rx="1" />
+              </svg>
+              <span>Stop</span>
+            </>
+          ) : (
+            <>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              </svg>
+              <span>Speak Feedback</span>
+            </>
+          )}
+        </button>
       </div>
 
       <div className="flex flex-row justify-center ">

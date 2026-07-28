@@ -64,7 +64,34 @@ export async function handleCommand({
   const [baseCommand, ...args] = trimmedCommand.toLowerCase().split(" ");
   let output: string | JSX.Element = "";
 
-  const pdfUrl = "/VIBHAV.pdf";
+  // 🔍 DETECT SEARCH INTENT - Auto-open Chrome on right side
+  const searchKeywords = ["search", "research", "google", "lookup", "look up", "find"];
+  const isSearchIntent = searchKeywords.some(keyword => 
+    trimmedCommand.toLowerCase().startsWith(keyword + " ") || 
+    trimmedCommand.toLowerCase() === keyword
+  );
+
+  if (isSearchIntent && automationAPI?.searchWeb) {
+    // Extract query from command
+    let searchQuery = trimmedCommand;
+    searchKeywords.forEach(keyword => {
+      if (searchQuery.toLowerCase().startsWith(keyword + " ")) {
+        searchQuery = searchQuery.substring(keyword.length + 1);
+      } else if (searchQuery.toLowerCase() === keyword) {
+        searchQuery = ""; // No query provided
+      }
+    });
+
+    if (searchQuery.trim()) {
+      // Call browser automation - Chrome will open on right side
+      await automationAPI.searchWeb(searchQuery.trim());
+      output = `🔍 Searching: "${searchQuery.trim()}"\n✅ Chrome opened on right side (30% width)\n✅ Real-time Google search active`;
+    } else {
+      output = "Please provide a search query. Example: search React 19 features";
+    }
+  } else {
+    // Original switch statement for other commands
+    const pdfUrl = "/VIBHAV.pdf";
 
   switch (baseCommand) {
     case "name":
@@ -77,19 +104,35 @@ export async function handleCommand({
       output = <PinterestImageGrid />;
       break;
     case "interview":
+      // List all user interviews
       output = <SmartyInterview />;
       break;
-    case "newinterview":           // dynamic not direct
+      
+    case "newinterview":
+      // Create new interview - will auto-trigger startinterview
       output = <NewInterview />;
       break;
-    case "startinterview":                                            // dynamic not direct
-      output = <StartNewInterview id={parsedArgs} />;
+      
+    case "startinterview":
+      // Start specific interview with ID
+      // parsedArgs can be: { id: "xxx" } or just "xxx"
+      const startId = parsedArgs?.id || parsedArgs;
+      if (!startId) {
+        output = "Error: Please provide interview ID. Usage: startinterview <id>";
+      } else {
+        output = <StartNewInterview id={startId} />;
+      }
       break;
 
     case "feedback":
-      alert(parsedArgs)
-      output = <FeedbackInverview id={"9VKMpsv5X5lBe0vVzIig"} />
-      break
+      // Dynamic feedback ID from parsedArgs or query DB for latest
+      const feedbackId = parsedArgs?.id || parsedArgs;
+      if (!feedbackId) {
+        output = "Error: Please provide feedback ID. Usage: feedback <interview_id>";
+      } else {
+        output = <FeedbackInverview id={feedbackId} />;
+      }
+      break;
 
     case "table": // New command for DataTableViewer
       output = <DynamicAgGridConfigurator />
@@ -268,27 +311,32 @@ export async function handleCommand({
         return;
       }
 
-    // try {
-    //   const res = await fetch("/api/gemini/generate", {
-    //     method: "POST",
-    //     headers: { "Content-Type": "application/json" },
-    //     body: JSON.stringify({ prompt: trimmedCommand }),
-    //   });
-    //   const data = await res.json();
-    //   output = data.content || "Sorry, I couldn't generate a response.";
-    //   // speak("Please check Your balance , Quota Exceeded")
-    // } catch (err) {
-    //   output = "Error fetching response from Gemini.";
-    // }
-
-    // setHistory((prev) => {
-    //   const newHistory = [...prev];
-    //   newHistory.pop();
-    //   return [...newHistory, { type: "output", value: output }];
-    // });
-    // setCurrentInput("");
-    // return;
+    // Call terminalAI API for unknown commands
+    try {
+      const res = await fetch("/api/terminalAI", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          messages: [{ type: "input", value: trimmedCommand }] 
+        }),
+      });
+      const data = await res.json();
+      
+      // Remove "Thinking..." message
+      setHistory((prev) => prev.filter((entry) => entry.value !== "Thinking..."));
+      
+      if (data.success) {
+        output = data.response;
+      } else {
+        output = `Error: ${data.error || "Failed to generate response."}`;
+      }
+    } catch (err: any) {
+      // Remove "Thinking..." message
+      setHistory((prev) => prev.filter((entry) => entry.value !== "Thinking..."));
+      output = `Error communicating with AI: ${err.message || String(err)}`;
+    }
   }
+  } // End of else block for non-search commands
 
   setHistory((prev) => [...prev, { type: "output", value: output }]);
   setCurrentInput("");

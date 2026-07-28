@@ -46,6 +46,15 @@ export interface CursorAutomationAPI {
   parseTextCommand: (text: string) => AutomationCommand | null;
   executeTextCommand: (text: string) => Promise<boolean>;
 
+  // Browser automation
+  searchWeb: (query: string) => Promise<boolean>;
+  openBrowserResearch: (query: string) => Promise<boolean>;
+  closeBrowser: () => Promise<boolean>;
+  
+  // GLM Browser integration
+  glmNavigate: (url: string) => Promise<boolean>;
+  glmAutomate: (sequence: any[]) => Promise<boolean>;
+
   // State getters
   getState: () => AutomationState;
   getCursorPosition: () => CursorPosition;
@@ -613,6 +622,44 @@ export function useCursorAutomation(
     }
   }, [clickElement, log]);
 
+  // Browser: Search web using GLM browser tool (NO third-party APIs)
+  const searchWeb = useCallback(async (query: string): Promise<boolean> => {
+    try {
+      log(`🌐 GLM Browser Search: ${query}`, 'info');
+      speak?.(`Searching ${query}`);
+
+      // GLM Browser API - Direct Google navigation
+      try {
+        const response = await fetch('/api/glm-browser', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'search',
+            query: query
+          })
+        });
+
+        const data = await response.json();
+        
+        if (data.success) {
+          log(`✅ GLM Browser: Google search ready`, 'success');
+        }
+      } catch (apiError) {
+        log(`GLM API call failed, using direct navigation: ${apiError}`, 'warn');
+      }
+
+      // Open Chrome with Google search URL (all sources, proper search)
+      openApplication('chrome', undefined, undefined, undefined, { searchQuery: query });
+
+      log(`✅ Chrome opened for: ${query}`, 'success');
+      return true;
+    } catch (error) {
+      log(`Error searching: ${error}`, 'error');
+      openApplication('chrome', undefined, undefined, undefined, { searchQuery: query });
+      return false;
+    }
+  }, [log, speak, openApplication]);
+
   // Execute single command
   const executeCommand = useCallback(async (command: AutomationCommand): Promise<boolean> => {
     stateRef.current.currentCommand = command;
@@ -694,6 +741,13 @@ export function useCursorAutomation(
           return true
         }
 
+        case 'search':
+          if (command.params?.query) {
+            // Dynamically import to avoid circular dependency
+            result = await searchWeb(command.params.query);
+          }
+          break;
+
 
 
         default:
@@ -705,7 +759,7 @@ export function useCursorAutomation(
     } finally {
       stateRef.current.currentCommand = null;
     }
-  }, [moveTo, clickElement, openWindow, closeWindow, minimizeWindow, maximizeWindow, focusWindow, log]);
+  }, [moveTo, clickElement, openWindow, closeWindow, minimizeWindow, maximizeWindow, focusWindow, searchWeb, log]);
 
   // Execute sequence of commands
   const executeSequence = useCallback(async (commands: AutomationCommand[]): Promise<void> => {
@@ -837,6 +891,28 @@ export function useCursorAutomation(
       };
     }
 
+    // Pattern: "search <query>" or "research <query>"
+    if (lower.startsWith('search ') || lower.startsWith('research ')) {
+      const query = lower.startsWith('search ')
+        ? trimmed.substring(7).trim()
+        : trimmed.substring(9).trim();
+      return {
+        action: 'search',
+        params: { query }
+      };
+    }
+
+    // Pattern: "google <query>" or "look up <query>"
+    if (lower.startsWith('google ') || lower.startsWith('look up ')) {
+      const query = lower.startsWith('google ')
+        ? trimmed.substring(7).trim()
+        : trimmed.substring(8).trim();
+      return {
+        action: 'search',
+        params: { query }
+      };
+    }
+
     log(`Unable to parse command: ${text}`, 'error');
     return null;
   }, [log]);
@@ -864,6 +940,103 @@ export function useCursorAutomation(
     return openWindows.map(w => w.id);
   }, [openWindows]);
 
+  // Browser: Open browser for research (same as searchWeb)
+  const openBrowserResearch = useCallback(async (query: string): Promise<boolean> => {
+    return searchWeb(query);
+  }, [searchWeb]);
+
+  // Browser: Close Chrome
+  const closeBrowser = useCallback(async (): Promise<boolean> => {
+    try {
+      log(`Closing browser`, 'info');
+      
+      // Find Chrome window
+      const chromeWindow = openWindows.find(w => w.appName.toLowerCase() === 'chrome');
+      
+      if (chromeWindow) {
+        await closeWindow(chromeWindow.id);
+        speak?.('Browser closed');
+        return true;
+      } else {
+        log('No Chrome window found', 'warn');
+        return false;
+      }
+    } catch (error) {
+      log(`Error closing browser: ${error}`, 'error');
+      return false;
+    }
+  }, [log, openWindows, closeWindow, speak]);
+
+  // GLM Browser: Navigate to URL with automation
+  const glmNavigate = useCallback(async (url: string): Promise<boolean> => {
+    try {
+      log(`🚀 GLM Navigate: ${url}`, 'info');
+      
+      // Call GLM Browser API
+      const response = await fetch('/api/glm-browser', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'navigate',
+          url: url
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        // Open Chrome with direct URL
+        openApplication('chrome', undefined, undefined, undefined, { directUrl: data.url });
+        log(`✅ GLM Navigation successful: ${data.url}`, 'success');
+        speak?.(`Navigating to ${url}`);
+        return true;
+      } else {
+        throw new Error(data.error || 'Navigation failed');
+      }
+    } catch (error) {
+      log(`GLM Navigate error: ${error}`, 'error');
+      // Fallback: open browser directly
+      openApplication('chrome', undefined, undefined, undefined, { directUrl: url });
+      return false;
+    }
+  }, [log, speak, openApplication]);
+
+  // GLM Browser: Execute automation sequence
+  const glmAutomate = useCallback(async (sequence: any[]): Promise<boolean> => {
+    try {
+      log(`🤖 GLM Automate: ${sequence.length} steps`, 'info');
+      
+      // Call GLM Browser API for automation
+      const response = await fetch('/api/glm-browser', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'automate',
+          sequence: sequence
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        log(`✅ GLM Automation completed: ${data.message}`, 'success');
+        
+        // Navigate to the final URL if provided
+        if (sequence.length > 0 && sequence[0].type === 'navigate' && sequence[0].value) {
+          const url = sequence[0].value;
+          openApplication('chrome', undefined, undefined, undefined, { directUrl: url.startsWith('http') ? url : `https://${url}` });
+        }
+        
+        return true;
+      } else {
+        throw new Error(data.error || 'Automation failed');
+      }
+    } catch (error) {
+      log(`GLM Automate error: ${error}`, 'error');
+      return false;
+    }
+  }, [log, openApplication]);
+
   return {
     moveTo,
     clickElement,
@@ -877,6 +1050,11 @@ export function useCursorAutomation(
     clearQueue,
     parseTextCommand,
     executeTextCommand,
+    searchWeb,
+    openBrowserResearch,
+    closeBrowser,
+    glmNavigate,
+    glmAutomate,
     getState,
     getCursorPosition,
     getAllWindows

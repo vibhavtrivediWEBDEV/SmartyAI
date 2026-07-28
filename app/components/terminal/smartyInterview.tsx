@@ -35,23 +35,30 @@ useEffect(() => {
     
     async function fetchUser() {
         try {
+                    console.log('🔍 Fetching current user...');
                     // 1️⃣ Get current user
                     const user = await getCurrentUser();
-                    console.log("user",user)
-                    if (!user?.id) return;
+                    console.log("✅ User fetched:", user);
+                    
+                    if (!user?.id) {
+                      console.error('❌ No user ID found');
+                      return;
+                    }
+                    
                     setUserId(user.id);
+                    console.log('✅ User ID set:', user.id);
             
-            
-                    const interview = await getInterviewsByUserId( user?.id);
-                    console.log("interview",interview)
-                
+                    console.log('🔍 Fetching interviews for user:', user.id);
+                    const interview = await getInterviewsByUserId(user.id);
+                    console.log("✅ Interviews fetched:", interview);
             
                     setUserInterviews(interview || []);
             
                   } catch (err) {
-                    console.error("Error fetching data", err);
+                    console.error("❌ Error fetching data:", err);
                   } finally {
                     setLoading(false);
+                    console.log('🏁 Loading complete');
                   }
     
      
@@ -69,28 +76,68 @@ useEffect(() => {
   };
 
   const createInterview = async () => {
-    if (!formData.role.trim()) return alert("Role is required");
-    if (!userId) return;
+    console.log('='.repeat(50));
+    console.log('🎯 CREATE INTERVIEW CALLED');
+    console.log('='.repeat(50));
+    console.log('📝 Form data:', formData);
+    console.log('👤 User ID:', userId);
+    
+    if (!formData.role.trim()) {
+      console.error('❌ Role is empty');
+      alert("Role is required");
+      return;
+    }
+    
+    if (!userId) {
+      console.error('❌ User ID is null - cannot create interview');
+      alert("Please log in first! User ID not found.");
+      return;
+    }
 
     setCreating(true);
+    console.log('🚀 Creating interview...');
+    
     try {
+      const requestBody = { ...formData, userid: userId };
+      console.log('📦 Request body:', requestBody);
+      
       const res = await fetch("/api/vapi/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, userid: userId }),
+        body: JSON.stringify(requestBody),
       });
 
-      if (!res.ok) throw new Error("Failed to create interview");
-    //   alert("Interview created successfully!");
-   
-    runCommandInTerminal('newinterview');
+      console.log('📡 Response status:', res.status);
+      console.log('📡 Response OK:', res.ok);
+      
+      const data = await res.json();
+      console.log('📦 Response data:', data);
+
+      if (!res.ok) {
+        console.error('❌ API Error:', data);
+        throw new Error(data.error || "Failed to create interview");
+      }
+
+      console.log('✅ Interview created successfully!');
+      console.log('📦 Interview ID:', data.interviewId);
+      
+      if (data.interviewId) {
+        console.log('🔄 Auto-starting interview with ID:', data.interviewId);
+        // Automatically start the interview
+        runCommandInTerminal('startinterview', data.interviewId);
+      } else {
+        console.log('🔄 Opening newinterview window...');
+        runCommandInTerminal('newinterview');
+      }
+      
       setFormVisible(false);
       setFormData({ type: "basic", role: "", level: "beginner", techstack: "", amount: "5" });
-    } catch (err) {
-      console.error(err);
-      alert("Error creating interview");
+    } catch (err: any) {
+      console.error('❌ Error creating interview:', err);
+      alert(`Error creating interview: ${err.message || 'Unknown error'}`);
     } finally {
       setCreating(false);
+      console.log('🏁 createInterview finished');
     }
   };
 

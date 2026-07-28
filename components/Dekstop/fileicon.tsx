@@ -10,6 +10,7 @@ interface FileIconProps {
     initialY: number
     onPositionChange: (x: number, y: number) => void
     onDoubleClick: () => void
+    onSingleClick?: () => void
     desktopRef: React.RefObject<HTMLDivElement>
     size?: number
 }
@@ -23,12 +24,14 @@ const iconMap: Record<IconType, string> = {
 }
 
 const FileIcon: React.FC<FileIconProps> = ({
+    id,
     name,
     icon,
     initialX,
     initialY,
     onPositionChange,
     onDoubleClick,
+    onSingleClick,
     desktopRef,
     size = 64,
 }) => {
@@ -76,11 +79,19 @@ const FileIcon: React.FC<FileIconProps> = ({
         }
     })
 
+    const handleClick = (e: React.MouseEvent) => {
+        // If it's a trash icon and single click handler is provided
+        if (icon === 'trash' && onSingleClick) {
+            onSingleClick()
+        }
+    }
+
     return (
         <div
             className="absolute flex flex-col items-center cursor-pointer select-none"
             style={{ left: position.x, top: position.y }}
             onMouseDown={handleMouseDown}
+            onClick={handleClick}
             onDoubleClick={onDoubleClick}
         >
             <img

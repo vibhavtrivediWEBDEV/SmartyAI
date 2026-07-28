@@ -1,6 +1,4 @@
-import { generateText } from "ai";
-import { google } from "@ai-sdk/google";
-
+import { createAIService } from '@/lib/ai'
 import { db } from "@/firebase/admin";
 import { getRandomInterviewCover } from "@/lib/utils";
 
@@ -8,10 +6,10 @@ export async function POST(request: Request) {
   const { subject, topic, difficulty, userId } = await request.json();
 
   try {
-    // Generate a comprehensive summary and key questions for the teaching session
-    const { text: generatedContent } = await generateText({
-      model: google("gemini-2.0-flash-001"),
-      prompt: `Create a comprehensive teaching summary for a ${difficulty} level lesson on ${topic} in ${subject}.
+    // Use AI abstraction layer (auto-detects: OpenAI, Bedrock, or Gemini)
+    const aiService = createAIService()
+    
+    const prompt = `Create a comprehensive teaching summary for a ${difficulty} level lesson on ${topic} in ${subject}.ay
         
         Please generate:
         1. A detailed summary of the key concepts that should be covered in this lesson (around 300-500 words)
@@ -28,8 +26,14 @@ export async function POST(request: Request) {
         }
         
         The content will be read by a voice assistant, so avoid using special characters like "/" or "*" that might affect speech.
-      `,
-    });
+      `;
+
+    const response = await aiService.complete(prompt, {
+      temperature: 0.7,
+      maxTokens: 1500
+    })
+    
+    const generatedContent = response.content
 
     console.log("Raw generated content:", generatedContent);
     

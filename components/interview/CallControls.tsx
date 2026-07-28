@@ -20,7 +20,12 @@ const CallControls = ({
   return (
     <div className="w-full flex justify-center gap-4 mt-4">
       {callStatus !== CallStatus.ACTIVE ? (
-        <button className="relative btn-call" onClick={handleCall} disabled={callStatus === CallStatus.CONNECTING}>
+        <button
+          data-call-start
+          className="relative btn-call"
+          onClick={handleCall}
+          disabled={callStatus === CallStatus.CONNECTING}
+        >
           <span className="relative">
             {callStatus === CallStatus.INACTIVE || callStatus === CallStatus.FINISHED ? "Start Interview" : "Connecting..."}
           </span>

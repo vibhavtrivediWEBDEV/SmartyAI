@@ -22,6 +22,7 @@ interface WindowProps {
   initialHeight: number
   isMinimized: boolean
   isMaximized?: boolean
+  isPanel?: boolean
   zIndex: number
   onClose: (id: string) => void
   onMinimize: (id: string) => void
@@ -42,6 +43,7 @@ export function Window({
   initialHeight,
   isMinimized,
   isMaximized: initialIsMaximized = false,
+  isPanel = false,
   zIndex,
   onClose,
   onMinimize,
@@ -183,9 +185,25 @@ export function Window({
   )
 
   const handleMouseUp = useCallback(() => {
+    // 🆕 Check if window was dragged to right edge (panel snap)
+    if (isDragging && !isMobile) {
+      const viewportWidth = window.innerWidth;
+      const PANEL_THRESHOLD = viewportWidth * 0.15; // If within 15% of right edge
+      
+      if (x > viewportWidth - width - PANEL_THRESHOLD) {
+        // Snap to panel mode
+        const panelWidth = Math.floor(viewportWidth * 0.30);
+        setX(viewportWidth - panelWidth);
+        setWidth(panelWidth);
+        setY(0);
+        setHeight(window.innerHeight);
+        // Note: We don't have setIsPanel here, would need to pass through props
+        // For now, the visual snap is enough
+      }
+    }
     setIsDragging(false)
     setIsResizing(false)
-  }, [])
+  }, [isDragging, isMobile, x, width])
 
   // --- Resize Mouse Down (disabled on mobile) ---
   const handleResizeMouseDown = useCallback(
@@ -278,8 +296,13 @@ export function Window({
       data-window-title={title}
       data-window-app={appName}
       data-window-type="window"
-      className={`shadow-2xl flex flex-col overflow-hidden backdrop-blur-2xl ${isMobile ? "fixed inset-0 rounded-none" : "absolute rounded-xl"
-        }`}
+      className={`shadow-2xl flex flex-col overflow-hidden backdrop-blur-2xl ${
+        isMobile 
+          ? "fixed inset-0 rounded-none" 
+          : isPanel 
+            ? "fixed right-0 top-0 rounded-l-xl rounded-r-none" // Panel style
+            : "absolute rounded-xl"
+      }`}
       style={{
         ...(isMobile
           ? {
@@ -290,24 +313,27 @@ export function Window({
             width: "100vw",
             height: "100vh",
           }
-          : {
-            left: x,
-            top: y,
-            width,
-            height,
-          }),
+          : isPanel
+            ? {
+              right: 0,
+              top: 0,
+              width,
+              height: "100vh",
+            }
+            : {
+              left: x,
+              top: y,
+              width,
+              height,
+            }),
         zIndex,
         transformOrigin: "center center",
         userSelect: isDragging || isResizing ? "none" : "auto",
         display: isMinimized
           ? "none"
-          : isMaximized
-            ? "flex"
-            : "block",
+          : "flex",
         background: settings.darkMode ? `hsl(${themeColor})` : '',
         border: "1px solid rgba(255, 255, 255, 0.2)",
-        maxHeight: isMobile ? "100vh" : height,  // 👈 Add maxHeight constraint
-        maxWidth: isMobile ? "100vw" : width,
       }}
       onMouseDown={() => onFocus(id)}
       onTouchStart={() => onFocus(id)}
@@ -384,10 +410,11 @@ export function Window({
         // 🎯 AUTOMATION: Content area ID
         id={`${id}-content`}
         data-automation="window-content"
-        className="flex-1 overflow-auto scroll-smooth overscroll-contain"
+        className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth overscroll-contain"
         style={{
           WebkitOverflowScrolling: "touch",
           minHeight: 0,
+          maxHeight: "calc(100% - 40px)",
           background: "transparent",
         }}
       >

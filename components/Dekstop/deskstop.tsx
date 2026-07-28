@@ -34,7 +34,7 @@ import Webpage from "./webpage"
 import DotGrid from "../animationComponents/dotGrid"
 import { fetchGitHubRepositories, createFolderIconsFromRepositories } from "@/lib/github-data"
 import Vscode from "./VsCode"
-import Browser from "./chrome"
+import { BrowserContent } from "./Browser"
 import Spotify from "./spotify"
 import Maps from "./Maps"
 import Youtube from "./yt"
@@ -54,12 +54,14 @@ import LiquidGlassVideo from "./glassvediowallpaper"
 import Figma from "./figma"
 import PremiumNotes from "./notesapp"
 import GestureDock from "./gestureDock"
+import { ProjectsFolder } from "./ProjectsFolder"
+import { EasterEggWindow } from "./EasterEggWindow"
 
 interface WindowState {
   id: string
   title: string
   icon: string // Path to icon image (for window title bar)
-  // component: React.ReactNode
+  component?: React.ReactNode // Window content
   appName: string
   x: number
   y: number
@@ -68,6 +70,7 @@ interface WindowState {
   isMinimized: boolean
   isMaximized: boolean
   zIndex: number
+  isPanel?: boolean // 🆕 Window snapped to panel (right side 30%)
 }
 
 interface IconItem {
@@ -95,13 +98,26 @@ export function Desktop() {
   const [desktopBg, setDesktopBg] = useState("dot")
   const [nextZIndex, setNextZIndex] = useState(1)
   const ref = useRef(1)
+  
+  // NEW: Panel system - right side 30% area for panel windows
+  const [panelWindows, setPanelWindows] = useState<WindowState[]>([])
+  const PANEL_WIDTH_PERCENT = 0.30 // 30% of viewport
+  
+  // NEW: Browser search state
+  const [browserSearchQuery, setBrowserSearchQuery] = useState<string | null>(null)
+  const [browserDirectUrl, setBrowserDirectUrl] = useState<string | null>(null)
+  
+  // 🆕 Track persistent window instances (by appName)
+  const persistentWindowRefs = useRef<Map<string, WindowState>>(new Map())
 
   const portfolioTextRef = useRef<HTMLHeadingElement>(null)
   const [commandToAutoRun, setCommandToAutoRun] = useState<{ command: string; args?: Record<string, any> } | null>(null)
 
+  // Track pending command execution to prevent duplicates
+  const pendingCommandRef = useRef<{ command: string; args?: any } | null>(null)
+
   const desktopRef = useRef<HTMLDivElement>(null)
   const [showCursor, setShowCursor] = useState(false);
-
 
   const [backgroundImage, setBackgroundImage] = useState('https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1200&h=800&fit=crop')
   const [themeColor, setThemeColor] = useState('240 5.9% 10%')
@@ -120,7 +136,11 @@ export function Desktop() {
   const [UserIcon, setuserIcons] = useState<IconItem[]>([
     { id: 1, name: 'Resume PDF', type: 'file', icon: "pdf", x: 1100, y: 50 },
     { id: 2, name: 'About Me', type: 'folder', icon: "folder", x: 1100, y: 150, folderItems: [] },
-    { id: 999, name: "Don't Look", type: 'trash', icon: "trash", x: 1100, y: 250 },
+    { id: 3, name: 'Projects', type: 'folder', icon: "folder", x: 1100, y: 250, folderColor: '#644AFB', folderItems: [
+      { label: 'SmartyAI', value: 'https://github.com/smarty-ai', type: 'url' },
+      { label: 'aiFlow', value: 'https://github.com/aiflow', type: 'url' },
+    ]},
+    { id: 999, name: "Don't Look", type: 'trash', icon: "trash", x: 1100, y: 350 },
   ])
   // news items
 
@@ -334,8 +354,13 @@ export function Desktop() {
           );
           title = "Terminal";
           iconPath = "/icons/terminal.png";
-          defaultWidth = 500;
-          defaultHeight = 300;
+          
+          // Dynamic sizing based on viewport
+          const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
+          const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
+          
+          defaultWidth = Math.min(Math.max(viewportWidth * 0.5, 500), 900); // 50% width, min 500, max 900
+          defaultHeight = Math.min(Math.max(viewportHeight * 0.6, 400), 700); // 60% height, min 400, max 700
           break;
 
 
@@ -409,11 +434,25 @@ export function Desktop() {
           defaultHeight = 250;
           break;
         case "chrome":
-          component = <Browser isAppOpen={true} />;
-          title = "chrome";
+        case "Chrome":
+          // Chrome uses arg directly for search (not stale state)
+          const chromeSearchQuery = arg?.searchQuery || null;
+          const chromeDirectUrl = arg?.directUrl || null;
+          
+          // Update state for future reference
+          if (chromeSearchQuery) setBrowserSearchQuery(chromeSearchQuery);
+          if (chromeDirectUrl) setBrowserDirectUrl(chromeDirectUrl);
+          
+          component = <BrowserContent 
+            searchQuery={chromeSearchQuery || undefined}
+            directUrl={chromeDirectUrl || undefined}
+            onLoad={() => console.log('✅ Browser loaded:', chromeSearchQuery)}
+            onError={(err) => console.error('❌ Browser error:', err)}
+          />;
+          title = "Web Browser";
           iconPath = "/icons/ai.png";
-          defaultWidth = 1000;
-          defaultHeight = 550;
+          defaultWidth = 800;
+          defaultHeight = 600;
           break;
         case "Spotify":
           component = <Spotify />;
@@ -520,16 +559,19 @@ export function Desktop() {
           defaultWidth = 500;
           defaultHeight = 300;
           break;
+        case "Projects":
+          component = <ProjectsFolder folderColor="#644AFB" />;
+          title = "Projects";
+          iconPath = "/icons/folder.png";
+          defaultWidth = 550;
+          defaultHeight = 400;
+          break;
         case "Don't Look":
-          component = (
-            <div className="p-4 text-gray-200">
-              You looked! Nothing to see here... yet.
-            </div>
-          );
+          component = <EasterEggWindow />;
           title = "Don't Look";
           iconPath = "/icons/trash.png";
-          defaultWidth = 400;
-          defaultHeight = 250;
+          defaultWidth = 500;
+          defaultHeight = 400;
           break;
         case "Photos":
           component = <div style={{ width: '100vw', height: '100vh' }}>
@@ -559,28 +601,86 @@ export function Desktop() {
         (win) => win.appName === appName
       );
 
+      // 🆕 Check if window exists (persistent behavior)
       if (existingWindow) {
-        setOpenWindows((prev) =>
-          prev.map((win) =>
-            win.id === existingWindow.id
-              ? {
-                ...win,
-                isMinimized: false,
-                isMaximized: true,     // 👈 maximize here
-                zIndex: nextZIndex
-              }
-              : win
-          )
-        );
-        setNextZIndex((prev) => prev + 1);
-        return
-
+        // If window exists but is minimized, restore it to same position
+        if (existingWindow.isMinimized) {
+          setOpenWindows((prev) =>
+            prev.map((win) =>
+              win.id === existingWindow.id
+                ? {
+                  ...win,
+                  isMinimized: false,
+                  zIndex: nextZIndex
+                }
+                : win
+            )
+          );
+          setNextZIndex((prev) => prev + 1);
+        } else {
+          // Just bring to front
+          setOpenWindows((prev) =>
+            prev.map((win) =>
+              win.id === existingWindow.id
+                ? { ...win, zIndex: nextZIndex }
+                : win
+            )
+          );
+          setNextZIndex((prev) => prev + 1);
+        }
+        
+        // 🆕 Update search query for Chrome if passed - create fresh component
+        if (appName === 'chrome' || appName === 'Chrome') {
+          const newSearchQuery = arg?.searchQuery || null;
+          const newDirectUrl = arg?.directUrl || null;
+          
+          // Update the browser search query state
+          setBrowserSearchQuery(newSearchQuery);
+          setBrowserDirectUrl(newDirectUrl);
+          
+          // 🆕 Update the component in window state with new search query
+          const freshComponent = <BrowserContent 
+            searchQuery={newSearchQuery || undefined}
+            directUrl={newDirectUrl || undefined}
+            onLoad={() => console.log('✅ Browser loaded:', newSearchQuery)}
+            onError={(err) => console.error('❌ Browser error:', err)}
+          />;
+          
+          setOpenWindows((prev) =>
+            prev.map((win) =>
+              win.id === existingWindow.id
+                ? { ...win, component: freshComponent }
+                : win
+            )
+          );
+        }
+        return;
       }
 
 
       windowCounter += 1;
 
       const isAlwaysMax = ['vscode', 'game', 'App Store'].includes(appName)
+      
+      // 🆕 Panel apps - Chrome opens in right panel (30% width, full height)
+      const isPanelApp = ['chrome', 'Chrome'].includes(appName)
+      const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
+      const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 1080;
+      
+      let windowX = initialX !== undefined ? initialX : Math.random() * 100 + 50;
+      let windowY = initialY !== undefined ? initialY : Math.random() * 50 + 50;
+      let windowWidth = defaultWidth;
+      let windowHeight = defaultHeight;
+      let isPanel = false;
+
+      if (isPanelApp) {
+        // Panel positioning: right side 30%, full height
+        isPanel = true;
+        windowWidth = Math.floor(viewportWidth * PANEL_WIDTH_PERCENT);
+        windowHeight = viewportHeight;
+        windowX = viewportWidth - windowWidth; // Right edge
+        windowY = 0; // Top
+      }
 
       const z = ref.current + 100;
 
@@ -590,29 +690,27 @@ export function Desktop() {
         title,
         icon: iconPath,
         appName: appName,
-        component,
-        x:
-          initialX !== undefined
-            ? initialX
-            : Math.random() * 100 + 50,
-        y:
-          initialY !== undefined
-            ? initialY
-            : Math.random() * 50 + 50,
-        width: defaultWidth,
-        height: defaultHeight,
+        component, // Store component in window state
+        x: windowX,
+        y: windowY,
+        width: windowWidth,
+        height: windowHeight,
         isMinimized: false,
         isMaximized: isAlwaysMax,
-
         zIndex: z,
+        isPanel,
       };
 
       setOpenWindows((prev) => [...prev, newWindow]);
       setNextZIndex((prev) => prev + 1);
+      
+      // 🆕 Store as persistent reference
+      persistentWindowRefs.current.set(appName, newWindow);
     },
     [
-      commandToAutoRun
-
+      commandToAutoRun,
+      browserSearchQuery,
+      browserDirectUrl
     ]
   );
 
@@ -643,7 +741,6 @@ export function Desktop() {
     console.log('Try: window.debugAutomation.testCommand("open terminal")');
     console.log('Or:  window.automationAPI.openWindow("Terminal")');
   }, [automationAPI]);
-
 
   //git hub vs code 
 
@@ -695,12 +792,34 @@ export function Desktop() {
 
 
   const runCommandInTerminal = useCallback(
-    (command: string, args: string) => {
-      console.log("execute command", command)
-      setCommandToAutoRun({ command, args }) // Set the command to be run
-      openApplication("Terminal", 150, 150, command, args) // Open the terminal (it will pick up the command)
+    (command: string, args: any) => {
+      // Prevent duplicate execution - check if same command is already pending
+      const commandKey = `${command}-${JSON.stringify(args)}`;
+      const pendingKey = pendingCommandRef.current 
+        ? `${pendingCommandRef.current.command}-${JSON.stringify(pendingCommandRef.current.args)}` 
+        : null;
+      
+      if (pendingKey === commandKey) {
+        console.log("⚠️ Command already pending, skipping duplicate:", command);
+        return;
+      }
+
+      console.log("execute command", command, args);
+      
+      // Mark command as pending
+      pendingCommandRef.current = { command, args };
+      
+      setCommandToAutoRun({ command, args });
+      
+      // Open the terminal with the command
+      openApplication("Terminal", 150, 150, command, args);
+      
+      // Clear pending after a short delay
+      setTimeout(() => {
+        pendingCommandRef.current = null;
+      }, 1000);
     },
-    [openApplication, commandToAutoRun]
+    [openApplication]
   )
 
 
@@ -1028,7 +1147,7 @@ export function Desktop() {
                 </span>
               </div>
             </div>
-            {/* <CustomCursor /> */}
+            <CustomCursor />
 
             {/* <FakeCursor
               visible={showCursor}
@@ -1131,12 +1250,13 @@ export function Desktop() {
                 title={win.title}
                 icon={win.icon}
                 appName={win.appName}
-                initialX={(win.x)}
+                initialX={win.x}
                 initialY={win.y}
                 initialWidth={win.width}
                 initialHeight={win.height}
                 isMinimized={win.isMinimized}
                 isMaximized={win.isMaximized}
+                isPanel={win.isPanel}
                 zIndex={50 + win.zIndex}
                 onClose={closeWindow}
                 onMinimize={minimizeWindow}

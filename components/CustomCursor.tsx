@@ -150,16 +150,33 @@ const CustomCursor = () => {
     window.addEventListener('mousedown', handleMouseDown);
     window.addEventListener('mouseup', handleMouseUp);
 
+    // Ensure cursor elements are always visible
+    gsap.set([cursor, spotlight, glow, particles, orb, ripple], { 
+      visibility: 'visible',
+      opacity: 1 
+    });
+
     const interactiveElements = document.querySelectorAll('a, button, input, select, textarea, [role="button"]');
     interactiveElements.forEach(element => {
       element.addEventListener('mouseenter', handleLinkHover);
       element.addEventListener('mouseleave', handleLinkLeave);
     });
 
+    // Visibility check - ensure cursor is always visible
+    const visibilityCheck = setInterval(() => {
+      if (cursor && cursor.style.visibility !== 'visible') {
+        gsap.set([cursor, spotlight, glow, particles, orb, ripple], { 
+          visibility: 'visible',
+          opacity: 1 
+        });
+      }
+    }, 1000);
+
     return () => {
       window.removeEventListener('mousemove', moveElements);
       window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mouseup', handleMouseUp);
+      clearInterval(visibilityCheck);
       interactiveElements.forEach(element => {
         element.removeEventListener('mouseenter', handleLinkHover);
         element.removeEventListener('mouseleave', handleLinkLeave);
@@ -169,21 +186,24 @@ const CustomCursor = () => {
 
   return (
     <>
+      {/* Main cursor dot - highest z-index to always be visible */}
       <div 
         ref={cursorRef}
-        className="fixed top-0 left-0 w-8 h-8 pointer-events-none z-[60]"
+        className="fixed top-0 left-0 w-8 h-8 pointer-events-none"
         style={{
           background: 'linear-gradient(135deg, #fa71cd, #fa71cd, #d4c0d9)',
           borderRadius: '50%',
           filter: 'blur(2px) brightness(1.3)',
-          boxShadow: '0 0 20px rgba(0, 255, 255, 0.5)'
+          boxShadow: '0 0 20px rgba(0, 255, 255, 0.5)',
+          zIndex: 99999
         }}
       />
       
       <div 
         ref={spotlightRef}
-        className="fixed top-0 left-0 w-96 h-96 pointer-events-none z-[51]"
+        className="fixed top-0 left-0 w-96 h-96 pointer-events-none"
         style={{
+          zIndex: 99990,
           background: 'radial-gradient(circle, rgba(0, 255, 255, 0.15) 0%, rgba(0, 255, 135, 0.08) 30%, transparent 70%)',
           borderRadius: '50%',
           opacity: 0.6,
@@ -193,17 +213,19 @@ const CustomCursor = () => {
       
       <div 
         ref={glowRef}
-        className="fixed top-0 left-0 w-[600px] h-[600px] pointer-events-none z-[50]"
+        className="fixed top-0 left-0 w-[600px] h-[600px] pointer-events-none"
         style={{
           background: 'radial-gradient(circle, rgba(0, 255, 255, 0.05) 0%, rgba(0, 255, 135, 0.03) 40%, transparent 70%)',
           borderRadius: '50%',
           filter: 'blur(30px)',
+          zIndex: 99986
         }}
       />
       <div 
         ref={particlesRef}
-        className="fixed top-0 left-0 w-80 h-80 pointer-events-none z-[52] opacity-30"
+        className="fixed top-0 left-0 w-80 h-80 pointer-events-none opacity-30"
         style={{
+          zIndex: 99988,
           background: `
             repeating-conic-gradient(
               from 0deg,
@@ -222,8 +244,9 @@ const CustomCursor = () => {
       {/* Orbiting effect */}
       <div 
         ref={orbRef}
-        className="fixed top-0 left-0 w-72 h-72 pointer-events-none z-[53] opacity-40"
+        className="fixed top-0 left-0 w-72 h-72 pointer-events-none opacity-40"
         style={{
+          zIndex: 99989,
           background: `
             conic-gradient(
               from 0deg,
@@ -241,8 +264,9 @@ const CustomCursor = () => {
       {/* Ripple effect */}
       <div 
         ref={rippleRef}
-        className="fixed top-0 left-0 w-64 h-64 pointer-events-none z-[54] opacity-20"
+        className="fixed top-0 left-0 w-64 h-64 pointer-events-none opacity-20"
         style={{
+          zIndex: 99987,
           border: '2px solid rgba(0, 255, 255, 0.5)',
           borderRadius: '50%',
         }}

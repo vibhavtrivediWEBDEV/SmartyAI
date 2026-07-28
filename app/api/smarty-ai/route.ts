@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import OpenAI from 'openai'
-
-// OpenAI client
-const openai = new OpenAI({ apiKey: process.env.OPEN_API_KEY! })
+import { createAIService } from '@/lib/ai'
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,10 +10,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing question parameter' }, { status: 400 })
     }
 
-    // Ask GPT to answer the question in a beginner-friendly way
-    const systemMessage = {
-      role: 'system',
-      content: `
+    // Create AI service (auto-detects provider from env)
+    const aiService = createAIService()
+
+    // Ask AI to answer the question in a beginner-friendly way
+    const messages = [
+      {
+        role: 'system',
+        content: `
 You are Smarty, a friendly and helpful teacher who explains concepts in a mix of Hindi and English (Hinglish).
 
 Guidelines:
@@ -32,28 +33,26 @@ Guidelines:
 
 Your tone should be warm, friendly and slightly playful - like a cool teacher who students love.
       `.trim(),
-    }
-    
-    const userMessage = {
-      role: 'user',
-      content: `
+      },
+      {
+        role: 'user',
+        content: `
 Question: ${question}
 ${subject ? `Subject area: ${subject}` : ''}
       `.trim(),
-    }
+      }
+    ]
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [systemMessage, userMessage],
-      temperature: 0.7, // Higher temperature for more creative responses
-      max_tokens: 800,
+    const response = await aiService.chat(messages, {
+      temperature: 0.7,
+      maxTokens: 800,
     })
-
-    const answer = completion.choices[0].message.content.trim()
     
     return NextResponse.json({
       success: true,
-      answer: answer,
+      answer: response.content,
+      provider: response.provider,
+      model: response.model,
       funFact: generateRandomFunFact(subject)
     })
     

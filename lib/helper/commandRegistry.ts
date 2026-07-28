@@ -59,6 +59,38 @@ export const COMMAND_REGISTRY = {
             "terminal kholo"
         ]
     },
+    "6": {
+        key: "browser.search",
+        description: "Search the web and open Chrome browser (right side, 30% width)",
+        variables: ["query"],
+        examples: [
+            "search React 19 features",
+            "research AI trends 2024",
+            "Google TypeScript best practices",
+            "find info about Next.js 15",
+            "web search climate change"
+        ]
+    },
+    "7": {
+        key: "browser.navigate",
+        description: "Navigate to specific URL in Chrome browser",
+        variables: ["url"],
+        examples: [
+            "navigate to https://react.dev",
+            "open URL https://github.com",
+            "go to https://vercel.com"
+        ]
+    },
+    "8": {
+        key: "browser.close",
+        description: "Close Chrome browser window",
+        variables: [],
+        examples: [
+            "close browser",
+            "close Chrome",
+            "shut down browser"
+        ]
+    }
 
 
 };

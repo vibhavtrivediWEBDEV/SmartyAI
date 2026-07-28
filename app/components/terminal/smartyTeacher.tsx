@@ -7,17 +7,19 @@ import SmartyAIAgent from "@/components/SmartyAIAgent"
 import { getCurrentUser } from "@/lib/actions/auth.action"
 
 export default function SmartyTeacherWrapper() {
-  const [name, setName] = useState("")
-  const [subject, setSubject] = useState("")
+  const [name, setName] = useState<string>("")
+  const [subject, setSubject] = useState<string>("")
   const [submitted, setSubmitted] = useState(false)
-const [User,setUser] =useState({})
+  const [User,setUser] =useState<any>(null)
 
   useEffect(() => {
     async function fetchUser() {
       const user = await getCurrentUser()
       console.log("user",user)
-      setName(user?.name)
-     
+      if (user?.name) {
+        setName(user.name)
+      }
+      setUser(user)
     }
     fetchUser()
   }, [])

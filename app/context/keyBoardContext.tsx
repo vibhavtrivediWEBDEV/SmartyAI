@@ -254,10 +254,10 @@ export function KeyboardProvider({ children, onUndo, onRedo, onSave, onFind, onS
             break
 
 
-          case "v":
-            event.preventDefault()
-            pasteItems()
-            break
+          // case "v":
+          //   event.preventDefault()
+          //   pasteItems()
+          //   break
 
           case "a":
             event.preventDefault()

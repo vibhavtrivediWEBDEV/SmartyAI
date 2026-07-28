@@ -185,14 +185,16 @@ export async function executeCommand({
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ prompt: trimmedCommand }),
+          body: JSON.stringify({ 
+            messages: [{ type: "input", value: trimmedCommand }] 
+          }),
         });
 
         const data = await response.json();
         console.log("data",data)
 
         if (data.success) {
-          output = data.content;
+          output = data.response;
         } else {
           output = `Error: ${data.error || "Failed to generate response."}`;
         }

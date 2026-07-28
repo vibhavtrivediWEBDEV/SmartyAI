@@ -1,4 +1,4 @@
-// hooks/useVoiceAutomation.ts
+// hooks/useDekstopAgent.ts (Updated to use smart voice pipeline with ElevenLabs)
 
 import { useState, useEffect, useRef } from "react";
 import { vapi } from "@/lib/vapi.sdk";
@@ -7,7 +7,8 @@ import { useCursorAutomation } from "./useCursorAutomation";
 import { resolveSequence } from "@/lib/helper/helper";
 import { extractAppActionFromResponse, extractCommandFromResponse } from "@/lib/helper/commandExtractor";
 import { getFormattedCommands, getFormattedCommandsWithExamples } from "@/lib/helper/commandRegistry";
-import { isValid } from "zod";
+import { createAIService } from "@/lib/ai";
+import { useElevenTTS } from "./ElevenLabs";
 
 export enum CallStatus {
     INACTIVE = "INACTIVE",
@@ -16,9 +17,10 @@ export enum CallStatus {
 
 interface Message {
     type: string;
-    transcriptType: string;
+    transcriptType?: string;
     role: "user" | "assistant";
-    transcript: string;
+    transcript?: string;
+    content?: string;
 }
 
 interface UseVoiceAutomationProps {
@@ -36,6 +38,10 @@ export function useVoiceAutomation({
     const [lastTranscript, setLastTranscript] = useState<string>("");
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [executionLog, setExecutionLog] = useState<string[]>([]);
+    const [useCustomPipeline, setUseCustomPipeline] = useState(false);
+    
+    // 🎙️ ElevenLabs TTS hook for premium voice
+    const { speak: speakWithElevenLabs } = useElevenTTS();
 
     const addLog = (message: string) => {
         const timestamp = new Date().toLocaleTimeString();
@@ -53,6 +59,205 @@ export function useVoiceAutomation({
 
     const isProcessing = useRef(false);
     const lastUserText = useRef<string>("");
+    const messagesHistory = useRef<{role: "user" | "assistant", content: string}[]>([]);
+    const recognitionRef = useRef<any>(null);
+
+    // 🎯 Detect which pipeline to use based on USE_AI_PROVIDER
+    useEffect(() => {
+        // Check NEXT_PUBLIC_ version first (available in browser)
+        const provider = process.env.NEXT_PUBLIC_USE_AI_PROVIDER || "openai";
+        const isBedrock = provider === "bedrock";
+        
+        setUseCustomPipeline(isBedrock);
+        addLog(`🎤 Voice pipeline initialized: ${isBedrock ? 'Custom (Bedrock/GLM)' : 'Vapi'}`);
+        addLog(`   USE_AI_PROVIDER=${provider}`);
+    }, []);
+
+    // 🔥 CUSTOM PIPELINE: Bedrock/GLM Voice Implementation
+    const startCustomVoicePipeline = async () => {
+        try {
+            const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+            
+            if (!SpeechRecognition) {
+                throw new Error("Speech recognition not supported in this browser");
+            }
+
+            // 🎤 Request microphone permission
+            addLog("🎤 Requesting microphone access...");
+            try {
+                await navigator.mediaDevices.getUserMedia({ audio: true });
+                addLog("✅ Microphone access granted");
+            } catch (permError: any) {
+                throw new Error(`Microphone access denied: ${permError.message}. Please allow microphone access in browser settings.`);
+            }
+
+            setCallStatus(CallStatus.ACTIVE);
+            addLog("🎤 Starting custom voice pipeline (Bedrock/GLM + ElevenLabs)");
+
+            recognitionRef.current = new SpeechRecognition();
+            recognitionRef.current.continuous = true;
+            recognitionRef.current.interimResults = true;
+            recognitionRef.current.lang = "en-US";
+            recognitionRef.current.maxAlternatives = 1;
+
+            recognitionRef.current.onspeechstart = () => {
+                addLog("🎤 Speech detected, listening...");
+            };
+
+            recognitionRef.current.onresult = async (event: any) => {
+                const last = event.results.length - 1;
+                const transcript = event.results[last][0].transcript;
+                const isFinal = event.results[last].isFinal;
+
+                if (isFinal && transcript.trim()) {
+                    // Prevent duplicate processing
+                    if (isProcessing.current) {
+                        addLog(`⚠️ Already processing, skipping...`);
+                        return;
+                    }
+                    
+                    isProcessing.current = true;
+                    addLog(`🎤 User: "${transcript}"`);
+                    setLastTranscript(transcript);
+                    lastUserText.current = transcript;
+
+                    // Get AI response using Bedrock/GLM
+                    try {
+                        const aiService = createAIService();
+                        
+                        const formattedCommands = getFormattedCommandsWithExamples();
+                        const systemPrompt = `
+You are VibhavOS Assistant - a friendly AI helping users navigate Vibhav's portfolio desktop.
+
+Your default behavior:
+- Keep responses brief and conversational (1-2 sentences max)
+- Speak in Hindi/Hinglish/English as natural
+- When user wants an action, respond in machine-readable format:
+  
+  For app actions: appName: <name> | action: <open/close/minimize/maximize>
+  For commands: COMMAND: <INDEX> | <VARIABLE>: <VALUE>
+
+Available commands:
+${formattedCommands}
+
+Supported apps: Terminal, Settings, Safari, Chrome, VS Code, Spotify, Calendar, Maps, YouTube, Excel, Mail, PDF, Finder, Photos
+
+If just chatting, respond naturally in 1 sentence.
+If unclear, ask ONE short question.
+                        `;
+
+                        // Add user message to history
+                        messagesHistory.current.push({ role: "user", content: transcript });
+
+                        const response = await aiService.chat([
+                            { role: "system", content: systemPrompt },
+                            ...messagesHistory.current,
+                        ], {
+                            temperature: 0.1,
+                            maxTokens: 150,  // Increased for better responses
+                        });
+
+                        const assistantMessage = response.content.trim();
+                        addLog(`🤖 Assistant: "${assistantMessage}"`);
+
+                        messagesHistory.current.push({ role: "assistant", content: assistantMessage });
+
+                        // Check if it's an automation command
+                        if (lastUserText.current) {
+                            executeVoiceCommand(lastUserText.current, assistantMessage);
+                        }
+
+                        // Speak response using ElevenLabs
+                        await speak(assistantMessage);
+                        
+                        // Reset processing flag after speaking
+                        isProcessing.current = false;
+
+                    } catch (error: any) {
+                        addLog(`❌ AI Error: ${error.message}`);
+                        await speak("Sorry, I couldn't process that.");
+                        isProcessing.current = false;
+                    }
+                }
+            };
+
+            recognitionRef.current.onerror = (event: any) => {
+                addLog(`❌ Speech recognition error: ${event.error}`);
+                
+                // Handle specific errors
+                if (event.error === 'no-speech') {
+                    addLog(`⚠️ No speech detected. Please speak louder or check your microphone.`);
+                    // Don't stop pipeline, keep listening
+                } else if (event.error === 'audio-capture') {
+                    addLog(`❌ No microphone found. Please connect a microphone.`);
+                    setCallStatus(CallStatus.INACTIVE);
+                } else if (event.error === 'not-allowed') {
+                    addLog(`❌ Microphone access denied. Please allow in browser settings.`);
+                    setCallStatus(CallStatus.INACTIVE);
+                } else if (event.error === 'network') {
+                    addLog(`❌ Network error. Check your internet connection.`);
+                    // Retry logic could go here
+                } else {
+                    setCallStatus(CallStatus.INACTIVE);
+                }
+            };
+
+            recognitionRef.current.onend = () => {
+                addLog(`🎤 Speech recognition ended naturally`);
+                // Don't auto-restart - let user control via button
+                setCallStatus(CallStatus.INACTIVE);
+            };
+
+            recognitionRef.current.start();
+            addLog(`✅ Voice pipeline active - speak now!`);
+            addLog(`💡 Tip: Speak within 8 seconds or it will timeout`);
+
+        } catch (error: any) {
+            addLog(`❌ Failed to start custom pipeline: ${error.message}`);
+            setCallStatus(CallStatus.INACTIVE);
+        }
+    };
+
+    const stopCustomVoicePipeline = () => {
+        if (recognitionRef.current) {
+            recognitionRef.current.stop();
+            recognitionRef.current = null;
+        }
+        window.speechSynthesis?.cancel();
+        setCallStatus(CallStatus.INACTIVE);
+        addLog("🎤 Custom pipeline stopped");
+    };
+
+    // 🔊 Text-to-speech with ElevenLabs (fallback to browser TTS)
+    const speak = async (text: string) => {
+        setIsSpeaking(true);
+        addLog(`🔊 Speaking: "${text.substring(0, 50)}..."`);
+        
+        try {
+            // Use ElevenLabs for premium voice quality
+            await speakWithElevenLabs(text);
+            addLog(`✅ ElevenLabs TTS complete`);
+        } catch (error) {
+            addLog(`⚠️ ElevenLabs failed, using browser TTS`);
+            // Fallback to browser TTS if ElevenLabs fails
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 1.1;
+            utterance.pitch = 1.0;
+            
+            const voices = window.speechSynthesis.getVoices();
+            const voice = voices.find(v => v.name.includes("Google") || v.lang.startsWith("en"));
+            if (voice) utterance.voice = voice;
+
+            utterance.onend = () => setIsSpeaking(false);
+            utterance.onerror = () => setIsSpeaking(false);
+
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(utterance);
+            return;
+        }
+        
+        setIsSpeaking(false);
+    };
 
     // 🔥 Execute voice command with new extraction
     // const executeVoiceCommand = async (userTranscript: string, assistantResponse: string) => {
@@ -252,17 +457,21 @@ export function useVoiceAutomation({
 
     const startCall = async () => {
         try {
+            if (useCustomPipeline) {
+                // 🎯 Use custom Bedrock/GLM pipeline
+                await startCustomVoicePipeline();
+            } else {
+                // 🎯 Use Vapi pipeline
+                addLog("📞 Connecting to Vapi voice assistant...");
 
-            addLog("📞 Connecting to voice assistant...");
+                const formattedCommands = getFormattedCommandsWithExamples();
 
-            const formattedCommands = getFormattedCommandsWithExamples();
-
-
-            await vapi.start(desktopAssistant, {
-                variableValues: {
-                    commands: formattedCommands,
-                },
-            });
+                await vapi.start(desktopAssistant, {
+                    variableValues: {
+                        commands: formattedCommands,
+                    },
+                });
+            }
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
             addLog(`❌ Failed to start call: ${errorMsg}`);
@@ -271,8 +480,12 @@ export function useVoiceAutomation({
     };
 
     const endCall = () => {
-        addLog("📞 Ending call...");
-        vapi.stop();
+        if (useCustomPipeline) {
+            stopCustomVoicePipeline();
+        } else {
+            addLog("📞 Ending Vapi call...");
+            vapi.stop();
+        }
     };
 
     return {

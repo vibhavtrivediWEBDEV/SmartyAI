@@ -1,27 +1,29 @@
-import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
-
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPEN_API_KEY, // Make sure this is set in your .env.local
-});
+import { NextRequest, NextResponse } from 'next/server'
+import { createAIService } from '@/lib/ai'
 
 export async function POST(request: NextRequest) {
   try {
-    const { messages } = await request.json();
+    const { messages } = await request.json()
 
     if (!messages || !Array.isArray(messages)) {
-      return NextResponse.json({ error: 'Messages array is required' }, { status: 400 });
+      return NextResponse.json({ error: 'Messages array is required' }, { status: 400 })
     }
+
+    // Create AI service (auto-detects provider from env)
+    const aiService = createAIService()
 
     // Convert { type: 'input' | 'output', value: string } to { role: 'user' | 'assistant', content }
     const mappedMessages = messages.map((msg) => {
       return {
         role: msg.type === 'input' ? 'user' : 'assistant',
         content: typeof msg.value === 'string' ? msg.value : JSON.stringify(msg.value),
-      };
-    });
-
+      }
+    })
+    
+    // Ensure at least one user message for Bedrock compatibility
+    const userMessages = mappedMessages.length > 0 
+      ? mappedMessages 
+      : [{ role: 'user' as const, content: 'Hello' }]
     
     // Inject system prompt at the beginning
     const fullMessages = [
@@ -34,21 +36,22 @@ He has built several real-world projects like subscription apps, doctor platform
 Always respond as Vibhav himself, using his tone and experience.
         `,
       },
-       ...mappedMessages,
-    ];
+      ...userMessages,
+    ]
 
-console.log("fullMessages",fullMessages)
-
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: fullMessages,
+    const response = await aiService.chat(fullMessages, {
       temperature: 0.7,
-      max_tokens: 1000,
-    });
+      maxTokens: 1000,
+    })
 
-    return NextResponse.json({ success: true, response: completion.choices[0].message.content });
+    return NextResponse.json({ 
+      success: true, 
+      response: response.content,
+      provider: response.provider,
+      model: response.model
+    })
   } catch (error: any) {
-    console.error('OpenAI error:', error);
-    return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
+    console.error('AI error:', error)
+    return NextResponse.json({ success: false, error: error.message || String(error) }, { status: 500 })
   }
 }

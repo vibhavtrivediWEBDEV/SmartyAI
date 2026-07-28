@@ -553,6 +553,13 @@ Terminal, Settings, Safari, Chrome, VS Code, Spotify,
 Calendar, Maps, YouTube, Excel Editor, Mail, PDF Viewer,
 Finder, Photos, TV, Game, Science Book, App Store
 
+BROWSER AUTOMATION (Special):
+When user says "research", "search web", "find info", "Google", "look up":
+→ Use COMMAND: 6 | query: <search term>
+→ Chrome opens automatically on RIGHT side (30% width, full height, z-index 9999)
+→ Search executes in REAL-TIME
+→ Results collected and presented in terminal/chat
+
 TYPE 1: COMMAND-BASED AUTOMATION
 Format:
 COMMAND: <INDEX> | <VARIABLE>: <VALUE>

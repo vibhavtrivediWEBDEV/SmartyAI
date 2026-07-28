@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🎤 Web Speech API Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        button:hover { background: #45a049; }
+        button:disabled { background: #ccc; }
+        #status {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 5px;
+        }
+        #transcript {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin: 20px 0;
+        }
+        .log {
+            font-family: monospace;
+            background: #1e1e1e;
+            color: #0f0;
+            padding: 15px;
+            border-radius: 5px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎤 Web Speech API Test</h1>
+    
+    <div>
+        <button id="startBtn">🎯 Start Listening</button>
+        <button id="stopBtn" disabled>⏹️ Stop</button>
+    </div>
+    
+    <div id="status">Status: Ready</div>
+    <div id="transcript">Say something...</div>
+    
+    <h3>Console Log:</h3>
+    <div class="log" id="log"></div>
+
+    <script>
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = null;
+        let isListening = false;
+
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const status = document.getElementById('status');
+        const transcript = document.getElementById('transcript');
+        const log = document.getElementById('log');
+
+        function addLog(message) {
+            const time = new Date().toLocaleTimeString();
+            const line = `[${time}] ${message}\n`;
+            log.textContent += line;
+            log.scrollTop = log.scrollHeight;
+            console.log(message);
+        }
+
+        if (!SpeechRecognition) {
+            status.textContent = '❌ Speech Recognition NOT supported in this browser';
+            startBtn.disabled = true;
+        } else {
+            addLog('✅ Speech Recognition supported');
+
+            startBtn.onclick = async () => {
+                try {
+                    addLog('🎤 Requesting microphone access...');
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    stream.getTracks().forEach(track => track.stop());
+                    addLog('✅ Microphone access granted');
+
+                    recognition = new SpeechRecognition();
+                    recognition.continuous = false;
+                    recognition.interimResults = true;
+                    recognition.lang = 'en-US';
+
+                    recognition.onstart = () => {
+                        isListening = true;
+                        status.textContent = 'Status: 🎤 Listening...';
+                        addLog('🎤 Recognition started');
+                        startBtn.disabled = true;
+                        stopBtn.disabled = false;
+                    };
+
+                    recognition.onresult = (event) => {
+                        const result = event.results[event.results.length - 1];
+                        const text = result[0].transcript;
+                        
+                        if (result.isFinal) {
+                            transcript.textContent = text;
+                            addLog(`✅ Final: "${text}"`);
+                        } else {
+                            transcript.textContent = text + '...';
+                            addLog(`🔄 Interim: "${text}"`);
+                        }
+                    };
+
+                    recognition.onerror = (event) => {
+                        addLog(`❌ Error: ${event.error}`);
+                        status.textContent = `Status: Error - ${event.error}`;
+                        
+                        if (event.error === 'no-speech') {
+                            addLog('⚠️ No speech detected. Speak louder or move closer to mic.');
+                        }
+                    };
+
+                    recognition.onend = () => {
+                        isListening = false;
+                        status.textContent = 'Status: Ended';
+                        addLog('🎤 Recognition ended');
+                        startBtn.disabled = false;
+                        stopBtn.disabled = true;
+                    };
+
+                    recognition.start();
+                    addLog('🚀 Starting recognition...');
+
+                } catch (error) {
+                    addLog(`❌ Error: ${error.message}`);
+                    status.textContent = `Status: Error - ${error.message}`;
+                }
+            };
+
+            stopBtn.onclick = () => {
+                if (recognition && isListening) {
+                    recognition.stop();
+                    addLog('⏹️ Stopped by user');
+                }
+            };
+        }
+    </script>
+</body>
+</html>

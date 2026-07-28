@@ -237,12 +237,54 @@ export function Dock({
     return () => window.removeEventListener("resize", check)
   }, [])
 
-  // ── Desktop: show on hover near bottom ───────────────────────────────
+  // ── Desktop: show on hover near bottom (macOS-style: requires bottom edge + upward motion) ───────────────────────
   useEffect(() => {
     if (isMobile) return
+    
+    let lastY = 0
+    let lastTime = 0
+    let wasAtBottom = false
+    
     const onMove = (e: MouseEvent) => {
-      setIsVisible(window.innerHeight - e.clientY < 80)
+      const currentY = e.clientY
+      const currentTime = Date.now()
+      const distanceFromBottom = window.innerHeight - currentY
+      
+      // Check if mouse is at the very bottom edge (within 8px)
+      if (distanceFromBottom <= 8) {
+        wasAtBottom = true
+      }
+      
+      // Calculate vertical velocity (negative = moving up)
+      const dy = lastY - currentY
+      const dt = currentTime - lastTime
+      const velocity = dt > 0 ? dy / dt : 0
+      
+      // Show dock only if:
+      // 1. Mouse was at bottom edge (within 8px) AND
+      // 2. Mouse is now moving upward (velocity > 0.3) OR
+      // 3. Mouse is still near bottom edge (within 15px)
+      
+      // When mouse is near bottom (within 12px), show dock
+      if (distanceFromBottom <= 12) {
+        setIsVisible(true)
+      }
+      // When mouse was at bottom and is moving up, reveal dock
+      else if (wasAtBottom && velocity > 0.3 && dy > 20) {
+        setIsVisible(true)
+        // Reset wasAtBottom after revealing
+        setTimeout(() => { wasAtBottom = false }, 500)
+      }
+      // When mouse is moving away from bottom (more than 100px), hide dock
+      else if (distanceFromBottom > 100) {
+        setIsVisible(false)
+        wasAtBottom = false
+      }
+      
+      lastY = currentY
+      lastTime = currentTime
     }
+    
     window.addEventListener("mousemove", onMove)
     return () => window.removeEventListener("mousemove", onMove)
   }, [isMobile])

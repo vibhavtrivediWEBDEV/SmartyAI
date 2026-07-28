@@ -59,49 +59,24 @@ export function TerminalUI({ automationAPI, autoRunCommand, autoRunCommandArgs, 
     }
   }, [history])
 
-  // Auto-run command
+  // Auto-run command - SINGLE EFFECT (removed duplicates)
   useEffect(() => {
     if (autoRunCommand) {
+      console.log("terminalUI - autoRunCommand", autoRunCommand);
+      
       handleCommand({
-
         command: autoRunCommand,
         history,
         setHistory,
         setCurrentInput,
         parsedArgs: autoRunCommandArgs,
-      })
-      if (onCommandExecuted) {
-        onCommandExecuted()
-      }
-    }
-  }, [autoRunCommand, onCommandExecuted])
-
-
-  // Scroll to bottom on new output
-  useEffect(() => {
-    if (outputRef.current) {
-      outputRef.current.scrollTop = outputRef.current.scrollHeight
-    }
-  }, [history])
-
-
-  // Effect to handle auto-running commands
-  useEffect(() => {
-    console.log("terminalUI - autoRunCommand", autoRunCommand);
-    if (autoRunCommand) {
-      handleCommand({
-        command: autoRunCommand,
-        history,
-        setHistory,
-        setCurrentInput,
-        parsedArgs: autoRunCommandArgs, // Pass the parsedArgs here
-
       });
+      
       if (onCommandExecuted) {
         onCommandExecuted();
       }
     }
-  }, [autoRunCommand, onCommandExecuted]);
+  }, [autoRunCommand, autoRunCommandArgs, onCommandExecuted]);
 
 
   const handleCommandExecution = (cmd: string) => {

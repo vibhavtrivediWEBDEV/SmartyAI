@@ -1,5 +1,9 @@
+'use client'
+
+import { useState, useEffect } from 'react';
 import InterviewCard from "@/components/InterviewCard";
 import { Interview } from "@/types";
+import { getFeedbackByInterviewId } from "@/lib/actions/general.action";
 
 interface UserInterviewsProps {
   interviews: Interview[];
@@ -8,6 +12,33 @@ interface UserInterviewsProps {
 
 const UserInterviews = ({ interviews, userId  }: UserInterviewsProps) => {
   const hasPastInterviews = interviews?.length > 0;
+  const [feedbackMap, setFeedbackMap] = useState<Record<string, any>>({});
+
+  // Fetch feedback for each interview
+  useEffect(() => {
+    async function fetchFeedbacks() {
+      if (!interviews || !userId) return;
+
+      const feedbackPromises = interviews.map(async (interview) => {
+        const feedback = await getFeedbackByInterviewId({
+          interviewId: interview.id,
+          userId: userId
+        });
+        return { interviewId: interview.id, feedback };
+      });
+
+      const feedbackResults = await Promise.all(feedbackPromises);
+      const newFeedbackMap: Record<string, any> = {};
+      feedbackResults.forEach(({ interviewId, feedback }) => {
+        if (feedback) {
+          newFeedbackMap[interviewId] = feedback;
+        }
+      });
+      setFeedbackMap(newFeedbackMap);
+    }
+
+    fetchFeedbacks();
+  }, [interviews, userId]);
 
   return (
     <section className="flex flex-col gap-6 mt-8">
@@ -24,6 +55,7 @@ const UserInterviews = ({ interviews, userId  }: UserInterviewsProps) => {
               type={interview.type}
               techstack={interview.techstack}
               createdAt={interview.createdAt}
+              feedback={feedbackMap[interview.id]}
             />
           ))
         ) : (

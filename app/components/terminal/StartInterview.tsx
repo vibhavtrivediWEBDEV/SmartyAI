@@ -51,6 +51,25 @@ console.log("startInterview -ID",id)
     fetchUser();
   }, []);
 
+  // Auto-start interview when component is ready
+  const [autoStarted, setAutoStarted] = useState(false);
+  
+  useEffect(() => {
+    if (!loading && lastInterview && user && !autoStarted) {
+      setAutoStarted(true);
+      // Small delay to ensure Agent is mounted
+      setTimeout(() => {
+        const startButton = document.querySelector('[data-call-start]') as HTMLButtonElement;
+        if (startButton) {
+          console.log('🎬 Auto-starting interview...');
+          startButton.click();
+        } else {
+          console.log('⚠️ Start button not found');
+        }
+      }, 1000);
+    }
+  }, [loading, lastInterview, user, autoStarted]);
+
   if (loading) return <p className="text-white p-4">Loading...</p>;
 
   if (!lastInterview) {

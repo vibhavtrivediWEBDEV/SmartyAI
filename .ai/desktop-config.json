@@ -1,0 +1,223 @@
+{
+  "name": "SmartyAI macOS Desktop",
+  "description": "Browser-based macOS-like desktop with voice automation and gesture control",
+  "version": "1.0.0",
+  "architecture": {
+    "pattern": "Component-based React with centralized state",
+    "framework": "Next.js 14",
+    "styling": "Tailwind CSS",
+    "animations": "GSAP",
+    "voice": "VAPI AI",
+    "database": "Firebase",
+    "ui_components": "shadcn/ui"
+  },
+  "core_systems": {
+    "desktop_manager": {
+      "file": "components/Dekstop/deskstop.tsx",
+      "purpose": "Main desktop container managing all windows and apps",
+      "state": {
+        "openWindows": "Array<WindowState>",
+        "nextZIndex": "number",
+        "icons": "Array<IconItem>"
+      },
+      "key_function": "openApplication(appName, x?, y?, command?, arg?)"
+    },
+    "window_component": {
+      "file": "components/Dekstop/window.tsx",
+      "purpose": "Draggable, resizable window with macOS-like animations",
+      "features": [
+        "Drag and drop (mouse + touch)",
+        "8-direction resize",
+        "Minimize to dock",
+        "Maximize transition",
+        "Close animation",
+        "Mobile auto-maximize"
+      ]
+    },
+    "dock": {
+      "file": "components/Dekstop/dock.tsx",
+      "purpose": "Bottom app launcher with gesture support",
+      "features": [
+        "App icons",
+        "Minimized window indicators",
+        "Gesture toggle button"
+      ]
+    },
+    "automation_engine": {
+      "file": "hooks/useCursorAutomation.ts",
+      "purpose": "Programmatic control over all UI interactions",
+      "api": [
+        "moveTo(elementId)",
+        "clickElement(elementId)",
+        "typeIntoElement(elementId, text, options)",
+        "openWindow(appName)",
+        "closeWindow(identifier)",
+        "minimizeWindow(identifier)",
+        "maximizeWindow(identifier)",
+        "focusWindow(identifier)",
+        "executeSequence(commands)",
+        "executeTextCommand(text)"
+      ]
+    },
+    "voice_automation": {
+      "file": "hooks/useDekstopAgent.ts",
+      "purpose": "Voice command processing via VAPI",
+      "flow": [
+        "User speaks",
+        "VAPI processes",
+        "AI outputs: AUTOMATE: key | var: val",
+        "Client parses",
+        "Automation executes sequence"
+      ]
+    },
+    "gesture_control": {
+      "file": "components/Dekstop/gestureDock.tsx",
+      "purpose": "Touch gesture recognition",
+      "gestures": {
+        "3_finger_pinch": "Maximize focused window",
+        "5_finger_spread": "Open Launchpad",
+        "4_finger_swipe_up": "Show all windows"
+      }
+    }
+  },
+  "applications": {
+    "count": 20,
+    "all_open_through": "openApplication()",
+    "available_apps": [
+      { "name": "Terminal", "component": "TerminalUI", "features": ["AI integration", "auto-run commands"] },
+      { "name": "Settings", "component": "SettingsPanel", "features": ["wallpaper", "themes", "fonts", "folder colors"] },
+      { "name": "VSCode", "component": "Vscode", "features": ["code editor"] },
+      { "name": "Chrome", "component": "Browser", "features": ["web browser"] },
+      { "name": "Spotify", "component": "Spotify", "features": ["music player"] },
+      { "name": "Maps", "component": "Maps", "features": ["Google Maps"] },
+      { "name": "Youtube", "component": "Youtube", "features": ["video player"] },
+      { "name": "Photos", "component": "DomeGallery", "features": ["3D image gallery"] },
+      { "name": "Calendar", "component": "Calender", "features": ["date picker"] },
+      { "name": "Finder", "component": "ProjectExplorerWindow", "features": ["file explorer"] },
+      { "name": "App Store", "component": "AppLaunchpad", "features": ["launchpad overlay"] },
+      { "name": "PDF Viewer", "component": "PdfViewer", "features": ["document viewer"] },
+      { "name": "Excel Editor", "component": "ExcelEditor", "features": ["spreadsheet editor"] },
+      { "name": "Mail", "component": "MailSender", "features": ["email composer"] },
+      { "name": "Figma", "component": "Figma", "features": ["design tool mockup"] },
+      { "name": "Notes", "component": "PremiumNotes", "features": ["note-taking"] },
+      { "name": "TV", "component": "InfiniteMenu", "features": ["news aggregator"] },
+      { "name": "Safari", "component": "AISearch", "features": ["AI-powered search"] },
+      { "name": "Game", "component": "GamePage", "features": ["interactive game"] },
+      { "name": "Website", "component": "Webpage", "features": ["portfolio demo"] }
+    ]
+  },
+  "automation_system": {
+    "actions": [
+      "open",
+      "close",
+      "move",
+      "click",
+      "type",
+      "setValue",
+      "maximize",
+      "minimize",
+      "focus"
+    ],
+    "sequence_definition": "data/dekstop.json",
+    "command_registry": "lib/helper/commandRegistry.ts",
+    "sequence_resolver": "lib/helper/helper.ts",
+    "format": {
+      "example": {
+        "settings.wallpaper.change": [
+          { "action": "open", "target": "Settings", "delay": 500 },
+          { "action": "click", "target": "wallpaper_input", "delay": 1700 },
+          { "action": "type", "target": "wallpaper_input", "params": { "text": "{{prompt}}" } },
+          { "action": "close", "target": "Settings" }
+        ]
+      }
+    }
+  },
+  "voice_commands": {
+    "format": "AUTOMATE: command_key | variable: value",
+    "examples": [
+      {
+        "voice": "Change wallpaper to mountains",
+        "model_output": "AUTOMATE: settings.wallpaper.change | prompt: mountains"
+      },
+      {
+        "voice": "Turn on dark mode",
+        "model_output": "AUTOMATE: settings.appearance.toggleDarkMode"
+      },
+      {
+        "voice": "Set font size to 16",
+        "model_output": "AUTOMATE: settings.font.changeSize | fontSize: 16"
+      }
+    ],
+    "available_commands": [
+      { "key": "settings.wallpaper.change", "variables": ["prompt"] },
+      { "key": "settings.appearance.toggleDarkMode", "variables": [] },
+      { "key": "settings.appearance.folderColor", "variables": ["hexColor"] },
+      { "key": "settings.font.changeSize", "variables": ["fontSize"] },
+      { "key": "settings.appearance.changeTheme", "variables": ["themeId"] }
+    ]
+  },
+  "critical_patterns": {
+    "react_closure_fix": {
+      "problem": "useCallback captures stale openWindows array",
+      "solution": "useRef pattern to access current state",
+      "code_example": "const openWindowsRef = useRef(openWindows); useEffect(() => { openWindowsRef.current = openWindows; }, [openWindows]);"
+    },
+    "element_identification": {
+      "requirement": "All interactive elements must have id attributes",
+      "example": "<button id=\"toggle_dark_mode\" ...>"
+    },
+    "window_identification": {
+      "requirement": "Windows must have data-window-app attribute",
+      "example": "<div data-window-app={appName} ...>"
+    }
+  },
+  "file_structure": {
+    "components/Dekstop": "All desktop UI components",
+    "hooks/useCursorAutomation.ts": "Core automation hook",
+    "hooks/useDekstopAgent.ts": "Voice automation",
+    "lib/helper/helper.ts": "Sequence resolver",
+    "lib/helper/commandRegistry.ts": "Command definitions",
+    "data/dekstop.json": "Automation sequences",
+    "constants/index.ts": "System prompts"
+  },
+  "debugging": {
+    "console_logs": [
+      "🎤 User: {transcript}",
+      "🤖 Assistant: {response}",
+      "📦 Extracted: {command}",
+      "⚡ Executing {N} actions",
+      "✅ Automation completed"
+    ],
+    "common_issues": [
+      {
+        "issue": "Window not found",
+        "cause": "Stale closure",
+        "fix": "Use openWindowsRef.current"
+      },
+      {
+        "issue": "Element not found",
+        "cause": "Missing id attribute",
+        "fix": "Add id=\"unique_id\" to element"
+      },
+      {
+        "issue": "Voice command not parsing",
+        "cause": "Model speaking JSON",
+        "fix": "Lower temperature to 0.1"
+      }
+    ]
+  },
+  "key_principles": [
+    "One function opens all apps: openApplication()",
+    "Central state for windows: openWindows array",
+    "Ref pattern for callbacks: openWindowsRef.current",
+    "IDs for automation: Every target needs id attribute",
+    "Sequence-based automation: JSON-defined actions",
+    "Retry for timing: Wait for DOM before operations"
+  ],
+  "documentation": {
+    "architecture": ".ai/DESKTOP_ARCHITECTURE.md",
+    "voice_guide": ".ai/VOICE_AUTOMATION_GUIDE.md",
+    "fixes": ".ai/AUTOMATION_FIXES.md",
+    "quick_ref": ".ai/QUICK_REFERENCE.md"
+  }
+}

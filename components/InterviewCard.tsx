@@ -94,14 +94,30 @@ export default function InterviewCard({
         </div>
 
         {/* Footer */}
-        <div className="flex flex-row justify-between items-center mt-5">
-          {/* <AsyncImageFromDescription description={techstack} alt={techstack} /> */}
-          <Button className="btn-primary" onClick={()=> runCommandInTerminal("startinterview",interviewId)}>
-         
-              {feedback ? "Check Feedback" : interviewId}
-        
-          </Button>
-          <p>{interviewId}</p>
+        <div className="flex flex-row gap-2 mt-5">
+          {feedback ? (
+            <>
+              <Button 
+                className="btn-primary flex-1" 
+                onClick={() => runCommandInTerminal("feedback", interviewId)}
+              >
+                View Feedback
+              </Button>
+              <Button 
+                className="btn-secondary flex-1" 
+                onClick={() => runCommandInTerminal("startinterview", interviewId)}
+              >
+                Retake
+              </Button>
+            </>
+          ) : (
+            <Button 
+              className="btn-primary w-full" 
+              onClick={()=> runCommandInTerminal("startinterview",interviewId)}
+            >
+              Start Interview
+            </Button>
+          )}
         </div>
       </div>
     </div>

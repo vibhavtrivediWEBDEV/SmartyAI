@@ -486,7 +486,21 @@
 }
 
 
-.nocursor { cursor:none !important; }
+/* Hide native cursor only on desktop container - custom cursor will show */
+.nocursor { 
+  cursor: none !important; 
+}
+
+/* Ensure interactive elements still show pointer cursor when custom cursor hovers */
+.nocursor a:hover,
+.nocursor button:hover,
+.nocursor input:hover,
+.nocursor select:hover,
+.nocursor textarea:hover,
+.nocursor [role="button"]:hover,
+.nocursor .cursor-pointer:hover {
+  cursor: none !important;
+}
 
 
 .keyboardWrapper {

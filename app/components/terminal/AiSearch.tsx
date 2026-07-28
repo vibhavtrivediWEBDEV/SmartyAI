@@ -63,6 +63,32 @@ export function AISearch() {
     if (!query.trim()) return
 
     const userQuery = query.trim()
+    
+    // 🔍 DETECT SEARCH INTENT - Auto-open Chrome on right side
+    const searchKeywords = ["search", "research", "google", "lookup", "look up", "find"];
+    const isWebSearchIntent = searchKeywords.some(keyword => 
+      userQuery.toLowerCase().includes(keyword)
+    );
+
+    if (isWebSearchIntent) {
+      // Extract search query
+      let searchQuery = userQuery;
+      searchKeywords.forEach(keyword => {
+        searchQuery = searchQuery.replace(new RegExp(`\\b${keyword}\\b`, 'gi'), '').trim();
+      });
+
+      if (searchQuery.trim() && typeof window !== 'undefined') {
+        // Call browser automation
+        if ((window as any).automationAPI?.searchWeb) {
+          await (window as any).automationAPI.searchWeb(searchQuery.trim());
+          setResponseContent("🔍 Chrome opened on right side for web search!\n✅ Real-time Google search active");
+        } else {
+          setResponseContent("⚠️ Browser automation not available. Please ensure automation API is loaded.");
+        }
+        return; // Don't continue with normal AI search
+      }
+    }
+
     setQuery("")
     setIsLoading(true)
     setResponseContent("")
