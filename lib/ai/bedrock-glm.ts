@@ -184,13 +184,16 @@ export class BedrockService implements AIService {
 
   private handleError(error: any): never {
     console.error('❌ Bedrock GLM Error:', error);
+    console.error('   Error details:', JSON.stringify(error, null, 2));
     
     if (error.message?.includes('credentials') || error.Code === 'InvalidSignature') {
       throw new Error('AWS Bedrock credentials are invalid. Check AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in .env');
     }
     
     if (error.message?.includes('model') || error.Code === 'ValidationException') {
-      throw new Error('Invalid model ID or model not accessible. Check BEDROCK_MODEL in .env');
+      console.error('   Model ID used:', this.modelId);
+      console.error('   Region:', this.config.region || region);
+      throw new Error(`Invalid model ID '${this.modelId}' or model not accessible in region '${region}'. Check BEDROCK_MODEL in .env`);
     }
     
     throw new Error(`Bedrock GLM Error: ${error.message || 'Unknown error'}`);
