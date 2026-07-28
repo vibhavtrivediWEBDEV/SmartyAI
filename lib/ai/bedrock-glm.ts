@@ -15,7 +15,6 @@ const region = process.env.AWS_REGION || 'ap-south-1';
 const profilePrefix = region.startsWith('eu-') ? 'eu' : region.startsWith('ap-') ? 'apac' : 'us';
 
 // Use environment variable or default to GLM-5
-// Alternative models: `${profilePrefix}.deepseek.v3.2` or `anthropic.claude-3-5-sonnet-20241022-v2:0`
 const GLM_MODEL_ID = process.env.BEDROCK_MODEL || 'zai.glm-5';
 
 export class BedrockService implements AIService {
