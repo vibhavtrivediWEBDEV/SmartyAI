@@ -57,8 +57,8 @@ OPENAI_MODEL=gpt-4o-mini  # Optional: gpt-4o, gpt-4-turbo
 
 ```bash
 USE_AI_PROVIDER=bedrock
-AWS_ACCESS_KEY_ID=YOUR_ACCESS_KEY_ID
-AWS_SECRET_ACCESS_KEY=YOUR_SECRET_ACCESS_KEY
+AWS_ACCESS_KEY_ID=your_access_key_id_here
+AWS_SECRET_ACCESS_KEY=your_secret_access_key_here
 AWS_REGION=ap-south-1
 BEDROCK_MODEL=anthropic.claude-3-5-sonnet-20241022-v2:0
 
@@ -248,8 +248,8 @@ curl http://localhost:3000/health
 aws sts get-caller-identity
 
 # Update .env
-AWS_ACCESS_KEY_ID=YOUR_ACCESS_KEY_ID
-AWS_SECRET_ACCESS_KEY=YOUR_SECRET_ACCESS_KEY
+AWS_ACCESS_KEY_ID=your_access_key_id_here
+AWS_SECRET_ACCESS_KEY=your_secret_access_key_here
 ```
 
 ### "Model not found"
