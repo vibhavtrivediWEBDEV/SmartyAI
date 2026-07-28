@@ -70,9 +70,11 @@ export function getAIConfig(): AIConfig {
       }
 
     case 'bedrock':
+      const bedrockModel = process.env.BEDROCK_MODEL || 'zai.glm-5';
+      console.log(`🤖 Bedrock config: model=${bedrockModel}, region=${process.env.AWS_REGION || 'ap-south-1'}`);
       return {
         provider: 'bedrock',
-        model: process.env.BEDROCK_MODEL || 'zai.glm-5',
+        model: bedrockModel,
         region: process.env.AWS_REGION || 'ap-south-1',
         awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID,
         awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
@@ -105,11 +107,11 @@ export function getModelForUseCase(useCase: 'chat' | 'vision' | 'voice' | 'fast'
       smart: 'gpt-4o'
     },
     bedrock: {
-      chat: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-      vision: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-      voice: 'anthropic.claude-3-5-haiku-20241022-v1:0',
-      fast: 'anthropic.claude-3-5-haiku-20241022-v1:0',
-      smart: 'anthropic.claude-3-5-sonnet-20241022-v2:0'
+      chat: process.env.BEDROCK_MODEL || 'zai.glm-5',
+      vision: process.env.BEDROCK_MODEL || 'zai.glm-5',
+      voice: process.env.BEDROCK_MODEL || 'zai.glm-5',
+      fast: process.env.BEDROCK_MODEL || 'zai.glm-5',
+      smart: process.env.BEDROCK_MODEL || 'zai.glm-5'
     },
     gemini: {
       chat: 'gemini-1.5-flash',
