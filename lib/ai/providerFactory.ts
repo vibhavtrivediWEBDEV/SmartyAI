@@ -70,11 +70,9 @@ export function getAIConfig(): AIConfig {
       }
 
     case 'bedrock':
-      const bedrockModel = process.env.BEDROCK_MODEL || 'zai.glm-5';
-      console.log(`🤖 Bedrock config: model=${bedrockModel}, region=${process.env.AWS_REGION || 'ap-south-1'}`);
       return {
         provider: 'bedrock',
-        model: bedrockModel,
+        model: process.env.BEDROCK_MODEL || 'zai.glm-5',
         region: process.env.AWS_REGION || 'ap-south-1',
         awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID,
         awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
