@@ -29,6 +29,8 @@ export interface AIConfig {
   model?: string
   baseUrl?: string
   region?: string
+  awsAccessKeyId?: string
+  awsSecretAccessKey?: string
 }
 export interface ChatOptions {
   model?: string

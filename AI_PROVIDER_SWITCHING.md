@@ -53,28 +53,24 @@ OPENAI_MODEL=gpt-4o-mini  # Optional: gpt-4o, gpt-4-turbo
 
 ---
 
-### AWS Bedrock (Anthropic Claude)
+### AWS Bedrock (GLM-5)
 
 ```bash
 USE_AI_PROVIDER=bedrock
 AWS_ACCESS_KEY_ID=your_access_key_id_here
 AWS_SECRET_ACCESS_KEY=your_secret_access_key_here
 AWS_REGION=ap-south-1
-BEDROCK_MODEL=anthropic.claude-3-5-sonnet-20241022-v2:0
+BEDROCK_MODEL=zai.glm-5
 
-# Required: Run Bedrock proxy locally
-ANTHROPIC_BASE_URL=http://localhost:3000
-ANTHROPIC_API_KEY=dummy
+# No proxy needed - Direct SDK integration
 ```
 
 **Pricing** (ap-south-1):
-- Claude 3.5 Sonnet: $3.00 / 1M input tokens
-- Claude 3.5 Haiku: $0.25 / 1M input tokens
+- GLM-5: Competitive pricing via Bedrock
 
 **Models Available**:
-- `anthropic.claude-3-5-sonnet-20241022-v2:0` - Smart, balanced
-- `anthropic.claude-3-5-haiku-20241022-v1:0` - Fast, cheap
-- `anthropic.claude-3-opus-20240229-v1:0` - Most powerful
+- `zai.glm-5` - GLM-5 model (default)
+- Works with any Bedrock-compatible model
 
 ---
 
@@ -232,15 +228,15 @@ OPENAI_API_KEY=sk-proj-...
 
 ### "Cannot connect to Bedrock proxy"
 
+```bash"
+
 ```bash
-# Start proxy
-cd ~/bedrock-proxy
-npm start
+# Verify AWS credentials
+aws sts get-caller-identity
 
-# Verify proxy running
-curl http://localhost:3000/health
-```
-
+# Check environment variables
+echo $AWS_ACCESS_KEY_ID
+echo $AWS_SECRET_ACCESS_KEY
 ### "AWS credentials are invalid"
 
 ```bash
@@ -305,9 +301,9 @@ app/api/gemini/generate/route.ts
 ## Next Steps
 
 1. Set `USE_AI_PROVIDER=bedrock` in `.env`
-2. Ensure Bedrock proxy is running on `localhost:3000`
+2. Add AWS credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
 3. Test with `/api/stream` endpoint
-4. Monitor costs in AWS Console
+4. Deploy to Vercel - Works serverlessly!
 
 ---
 

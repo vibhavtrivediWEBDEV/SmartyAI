@@ -10,6 +10,8 @@
     },
     "dependencies": {
         "@ai-sdk/google": "^1.1.25",
+        "@aws-sdk/client-bedrock": "^3.1097.0",
+        "@aws-sdk/client-bedrock-runtime": "^3.1097.0",
         "@google/genai": "^1.17.0",
         "@google/generative-ai": "^0.24.1",
         "@gsap/react": "^2.1.2",
@@ -32,6 +34,7 @@
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "dayjs": "^1.11.13",
+        "dotenv": "^17.4.2",
         "firebase": "^11.4.0",
         "firebase-admin": "^13.2.0",
         "framer-motion": "^12.9.7",

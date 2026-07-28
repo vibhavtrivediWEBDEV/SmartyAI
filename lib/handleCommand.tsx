@@ -160,7 +160,7 @@ export async function handleCommand({
       output = <SmartyTeacherWrapper />;
       break;
     case "ai-book":
-      output = <ScienceBook name="vibhav" subject=" " messages={[]} status={null} />;
+      output = <ScienceBook name="vibhav" subject=" " messages={[]} callStart={null} status="NOT_STARTED" />;
       break;
 
     case "projects":

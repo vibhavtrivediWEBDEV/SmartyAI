@@ -72,9 +72,7 @@ export function getAIConfig(): AIConfig {
     case 'bedrock':
       return {
         provider: 'bedrock',
-        model: process.env.BEDROCK_MODEL || 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-        baseUrl: process.env.ANTHROPIC_BASE_URL || 'http://localhost:3000',
-        apiKey: process.env.ANTHROPIC_API_KEY || 'dummy',
+        model: process.env.BEDROCK_MODEL || 'zai.glm-5',
         region: process.env.AWS_REGION || 'ap-south-1',
         awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID,
         awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY

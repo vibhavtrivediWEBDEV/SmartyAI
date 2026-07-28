@@ -11,7 +11,8 @@ const Layout = async ({ children }: { children: ReactNode }) => {
   // Skip auth check if USE_AI_PROVIDER is bedrock (dev mode)
   const isDevMode = process.env.USE_AI_PROVIDER === 'bedrock' || process.env.NEXT_PUBLIC_USE_AI_PROVIDER === 'bedrock';
   
-  if (!isUserAuthenticated && !isDevMode) redirect("/sign-in");
+  // Redirect to sign-up page for new users
+  if (!isUserAuthenticated && !isDevMode) redirect("/sign-up");
 
   return (
     <div className="">

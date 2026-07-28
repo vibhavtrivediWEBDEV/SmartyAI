@@ -5,7 +5,7 @@
 import { getAIProvider, getAIConfig } from './providerFactory'
 import { AIService } from './aiService'
 import { OpenAIService } from './openai'
-import { BedrockService } from './bedrock'
+import { BedrockService } from './bedrock-glm'
 import { GeminiService } from './gemini'
 
 // Re-export types
@@ -25,7 +25,7 @@ export function createAIService(): AIService {
       return new OpenAIService(config)
     
     case 'bedrock':
-      console.log('✅ Using AWS Bedrock (via Anthropic proxy)')
+      console.log('✅ Using AWS Bedrock GLM-5 (Direct SDK)')
       return new BedrockService(config)
     
     case 'gemini':
@@ -78,5 +78,5 @@ export function resetAIService(): void {
 export * from './providerFactory'
 export * from './aiService'
 export { OpenAIService } from './openai'
-export { BedrockService } from './bedrock'
+export { BedrockService } from './bedrock-glm'
 export { GeminiService } from './gemini'
