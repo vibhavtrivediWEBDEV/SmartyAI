@@ -52,12 +52,43 @@ export function useElevenTTS() {
         } catch (err) {
             console.error('ElevenLabs TTS error:', err);
 
-            // Fallback to browser TTS
-            console.log('🔊 Falling back to browser TTS');
+            // Fallback to browser TTS with improved settings
+            console.log('🔊 Falling back to improved browser TTS');
+            
+            // Cancel any ongoing speech
+            window.speechSynthesis.cancel();
+            
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'en-US';
-            utterance.rate = 1.0;
+            utterance.rate = 0.85; // Slower for clarity
             utterance.pitch = 1.0;
+            utterance.volume = 1.0;
+            
+            // Wait for voices to load and pick a good one
+            const setVoice = () => {
+                const voices = window.speechSynthesis.getVoices();
+                // Prefer high-quality English voices
+                const preferredVoice = voices.find(v => 
+                    v.name.includes('Google US English') ||
+                    v.name.includes('Samantha') ||
+                    v.name.includes('Microsoft David') ||
+                    v.name.includes('Microsoft Zira') ||
+                    (v.name.includes('Google') && v.lang === 'en-US')
+                ) || voices.find(v => v.lang === 'en-US') || voices[0];
+                
+                if (preferredVoice) {
+                    utterance.voice = preferredVoice;
+                    console.log('🔊 Using voice:', preferredVoice.name);
+                }
+            };
+            
+            // Load voices if not ready
+            if (window.speechSynthesis.getVoices().length === 0) {
+                window.speechSynthesis.onvoiceschanged = setVoice;
+            } else {
+                setVoice();
+            }
+            
             window.speechSynthesis.speak(utterance);
         }
     }, []);

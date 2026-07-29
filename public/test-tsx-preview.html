@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>TSX Preview Test - TypeScript Components</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        h1 { color: #333; margin-bottom: 10px; }
+        .subtitle { color: #666; margin-bottom: 20px; }
+        .editor {
+            width: 100%;
+            height: 350px;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 14px;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            box-sizing: border-box;
+            background: #fafafa;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 28px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-right: 10px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        .secondary-btn {
+            background: #f0f0f0;
+            color: #333;
+        }
+        #preview {
+            margin-top: 20px;
+            padding: 30px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            min-height: 250px;
+            background: white;
+        }
+        #console {
+            margin-top: 20px;
+            padding: 15px;
+            background: #1e1e1e;
+            color: #00ff00;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+            max-height: 250px;
+            overflow-y: auto;
+        }
+        .log-entry { margin: 5px 0; }
+        .log-error { color: #ff6b6b; }
+        .log-warn { color: #ffd93d; }
+        .log-info { color: #6bcfff; }
+        .log-success { color: #00c853; font-weight: bold; }
+        .badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 TSX Preview Test <span class="badge">TypeScript</span></h1>
+        <p class="subtitle">Test TypeScript React components with interfaces, generics, and type annotations</p>
+        
+        <div>
+            <label for="code-editor"><strong>TSX Code Editor:</strong></label>
+            <br><br>
+            <select id="preset-selector">
+                <option value="tsx-interface">Interface Props</option>
+                <option value="tsx-generics">Generic Components</option>
+                <option value="tsx-hooks">Typed Hooks</option>
+                <option value="tsx-complex">Complex TSX</option>
+                <option value="custom">Custom TSX</option>
+            </select>
+            <br><br>
+            <textarea id="code-editor" class="editor" spellcheck="false"></textarea>
+        </div>
+        
+        <div>
+            <button onclick="runCode()">▶️ Run TSX Preview</button>
+            <button class="secondary-btn" onclick="clearConsole()">🗑️ Clear Console</button>
+        </div>
+        
+        <div id="preview">
+            <p style="color: #999; text-align: center; padding: 50px;">
+                Click "Run TSX Preview" to see the rendered component...
+            </p>
+        </div>
+        
+        <div id="console">
+            <div class="log-entry">Console output will appear here...</div>
+        </div>
+    </div>
+
+    <!-- Load React and Babel -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script>
+        // TSX preset code samples
+        const presets = {
+            'tsx-interface': `interface GreetingProps {
+  name: string;
+  age?: number;
+  greeting?: string;
+}
+
+function Greeting({ name, age = 25, greeting = "Hello" }: GreetingProps) {
+  const [count, setCount] = React.useState<number>(0);
+  
+  return (
+    <div style={{ padding: "20px", background: "#f0f8ff", borderRadius: "12px" }}>
+      <h1 style={{ color: "#667eea" }}>{greeting}, {name}!</h1>
+      {age && <p style={{ fontSize: "18px" }}>Age: {age}</p>}
+      <div style={{ marginTop: "20px" }}>
+        <p>Interaction count: <strong style={{ color: "#764ba2" }}>{count}</strong></p>
+        <button 
+          onClick={() => setCount(count + 1)}
+          style={{
+            padding: "10px 20px",
+            fontSize: "16px",
+            background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+            color: "white",
+            border: "none",
+            borderRadius: "8px",
+            cursor: "pointer"
+          }}
+        >
+          Click Me! 👆
+        </button>
+      </div>
+    </div>
+  );
+}`,
+
+            'tsx-generics': `interface ListProps<T> {
+  items: T[];
+  renderItem: (item: T, index: number) => React.ReactNode;
+}
+
+function List<T>({ items, renderItem }: ListProps<T>) {
+  return (
+    <ul style={{ 
+      listStyle: "none", 
+      padding: "0",
+      background: "#f5f5f5",
+      borderRadius: "12px",
+      padding: "20px"
+    }}>
+      {items.map((item, index) => (
+        <li key={index} style={{ 
+          padding: "12px", 
+          margin: "8px 0",
+          background: "white",
+          borderRadius: "8px",
+          boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
+        }}>
+          {renderItem(item, index)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function App() {
+  const users: Array<{ id: number; name: string; role: string }> = [
+    { id: 1, name: "Alice", role: "Admin" },
+    { id: 2, name: "Bob", role: "User" },
+    { id: 3, name: "Charlie", role: "Moderator" }
+  ];
+  
+  return (
+    <div style={{ padding: "20px" }}>
+      <h2 style={{ color: "#667eea" }}>👥 User List with Generics</h2>
+      <List 
+        items={users}
+        renderItem={(user) => (
+          <div>
+            <strong>{user.name}</strong>
+            <span style={{ 
+              marginLeft: "10px",
+              background: user.role === "Admin" ? "#667eea" : "#999",
+              color: "white",
+              padding: "4px 8px",
+              borderRadius: "4px",
+              fontSize: "12px"
+            }}>
+              {user.role}
+            </span>
+          </div>
+        )}
+      />
+    </div>
+  );
+}`,
+
+            'tsx-hooks': `interface User {
+  id: number;
+  name: string;
+  email: string;
+}
+
+function UserDashboard() {
+  const [users, setUsers] = React.useState<User[]>([]);
+  const [loading, setLoading] = React.useState<boolean>(true);
+  const [selectedUser, setSelectedUser] = React.useState<User | null>(null);
+  
+  React.useEffect(() => {
+    // Simulate API call
+    setTimeout(() => {
+      setUsers([
+        { id: 1, name: "John Doe", email: "john@example.com" },
+        { id: 2, name: "Jane Smith", email: "jane@example.com" },
+        { id: 3, name: "Bob Wilson", email: "bob@example.com" }
+      ]);
+      setLoading(false);
+    }, 1000);
+  }, []);
+  
+  if (loading) {
+    return (
+      <div style={{ padding: "40px", textAlign: "center" }}>
+        <div style={{ fontSize: "48px" }}>⏳</div>
+        <p style={{ fontSize: "18px", color: "#666" }}>Loading users...</p>
+      </div>
+    );
+  }
+  
+  return (
+    <div style={{ padding: "20px" }}>
+      <h2 style={{ color: "#667eea" }}>📊 User Dashboard</h2>
+      <p style={{ marginBottom: "20px" }}>Total users: <strong>{users.length}</strong></p>
+      
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "16px" }}>
+        {users.map(user => (
+          <div 
+            key={user.id}
+            onClick={() => setSelectedUser(user)}
+            style={{
+              padding: "20px",
+              background: selectedUser?.id === user.id ? "#667eea" : "#f5f5f5",
+              color: selectedUser?.id === user.id ? "white" : "#333",
+              borderRadius: "12px",
+              cursor: "pointer",
+              transition: "all 0.2s"
+            }}
+          >
+            <h3 style={{ margin: "0 0 10px 0" }}>{user.name}</h3>
+            <p style={{ margin: 0, opacity: 0.8 }}>{user.email}</p>
+          </div>
+        ))}
+      </div>
+      
+      {selectedUser && (
+        <div style={{ marginTop: "20px", padding: "15px", background: "#e8f0fe", borderRadius: "8px" }}>
+          <strong>Selected:</strong> {selectedUser.name} ({selectedUser.email})
+        </div>
+      )}
+    </div>
+  );
+}`,
+
+            'tsx-complex': `interface ApiResponse<T> {
+  data: T;
+  status: "success" | "error";
+  message?: string;
+}
+
+interface Product {
+  id: number;
+  name: string;
+  price: number;
+  inStock: boolean;
+}
+
+function ProductCard({ product }: { product: Product }) {
+  const [quantity, setQuantity] = React.useState<number>(1);
+  
+  return (
+    <div style={{
+      border: "2px solid #e0e0e0",
+      borderRadius: "12px",
+      padding: "20px",
+      background: "white",
+      transition: "transform 0.2s",
+      cursor: "pointer"
+    }}>
+      <h3 style={{ color: "#333", marginBottom: "10px" }}>{product.name}</h3>
+      <p style={{ fontSize: "24px", fontWeight: "bold", color: "#667eea" }}>
+        ${product.price.toFixed(2)}
+      </p>
+      <div style={{ 
+        display: "inline-block",
+        padding: "4px 12px",
+        borderRadius: "4px",
+        background: product.inStock ? "#e8f5e9" : "#ffebee",
+        color: product.inStock ? "#2e7d32" : "#c62828",
+        fontSize: "14px",
+        marginBottom: "15px"
+      }}>
+        {product.inStock ? "✓ In Stock" : "✗ Out of Stock"}
+      </div>
+      
+      {product.inStock && (
+        <div style={{ marginTop: "15px" }}>
+          <label>Quantity: </label>
+          <input 
+            type="number"
+            value={quantity}
+            onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+            min={1}
+            style={{ 
+              width: "60px", 
+              padding: "5px",
+              marginLeft: "10px"
+            }}
+          />
+          <button
+            onClick={() => alert(\`Added \${quantity} \${product.name}(s) to cart!\`)}
+            style={{
+              marginTop: "10px",
+              width: "100%",
+              padding: "10px",
+              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+              color: "white",
+              border: "none",
+              borderRadius: "8px",
+              cursor: "pointer"
+            }}
+          >
+            Add to Cart
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function App() {
+  const products: Product[] = [
+    { id: 1, name: "Laptop", price: 999.99, inStock: true },
+    { id: 2, name: "Headphones", price: 149.99, inStock: true },
+    { id: 3, name: "Mouse", price: 29.99, inStock: false },
+    { id: 4, name: "Keyboard", price: 79.99, inStock: true }
+  ];
+  
+  return (
+    <div style={{ padding: "20px" }}>
+      <h2 style={{ color: "#667eea", marginBottom: "20px" }}>🛒 Product Catalog</h2>
+      <div style={{ 
+        display: "grid", 
+        gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", 
+        gap: "20px" 
+      }}>
+        {products.map(product => (
+          <ProductCard key={product.id} product={product} />
+        ))}
+      </div>
+    </div>
+  );
+}`,
+
+            'custom': `// Write your own TSX code here!
+// Try using interfaces, generics, and typed hooks
+
+interface MyProps {
+  title: string;
+}
+
+function App({ title }: MyProps) {
+  const [value, setValue] = React.useState<string>("");
+  
+  return (
+    <div style={{ padding: "20px" }}>
+      <h2 style={{ color: "#667eea" }}>{title}</h2>
+      <p>Edit this TSX code and click Run!</p>
+    </div>
+  );
+}`
+        };
+
+        // Load default preset
+        document.getElementById('code-editor').value = presets['tsx-interface'];
+
+        // Handle preset selection
+        document.getElementById('preset-selector').addEventListener('change', function(e) {
+            document.getElementById('code-editor').value = presets[e.target.value];
+        });
+
+        // Console logging
+        function logToConsole(type, message) {
+            const consoleDiv = document.getElementById('console');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            consoleDiv.appendChild(entry);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+
+        function clearConsole() {
+            document.getElementById('console').innerHTML = '<div class="log-entry">Console cleared...</div>';
+        }
+
+        // Transform imports (same as reactBundler.ts)
+        function transformImports(code) {
+            logToConsole('info', 'Transforming imports...');
+            
+            // Transform: import { useState } from "react"
+            code = code.replace(/import\s+\{([^}]+)\}\s+from\s+['"]react['"];?\n?/g, (match, imports) => {
+                const importList = imports.split(',').map(i => i.trim()).filter(i => i);
+                logToConsole('info', `Transformed imports: ${importList.join(', ')}`);
+                return `const { ${importList.join(', ')} } = React;\n`;
+            });
+
+            return code;
+        }
+
+        // Strip TypeScript syntax (comprehensive)
+        function stripTypeScript(code) {
+            logToConsole('info', 'Stripping TypeScript syntax...');
+            
+            // Remove interface declarations (entire block)
+            code = code.replace(/^interface\s+[A-Z][a-zA-Z0-9_]*(?:<[^>]+>)?[\s\S]*?\n\}/gm, '');
+            
+            // Remove type declarations
+            code = code.replace(/^type\s+[A-Z][a-zA-Z0-9_]*[\s\S]*?;/gm, '');
+            
+            // Remove type annotations from function parameters: (param: Type)
+            code = code.replace(/\:\s*[A-Z][a-zA-Z0-9_]*(?:<[^>]+>)?(?:\s*\|\s*[A-Z][a-zA-Z0-9_]*)*(?=[,\)\:\=\;\n])/g, '');
+            
+            // Remove type annotations from variable declarations: const x: Type =
+            code = code.replace(/(\b(?:const|let|var)\s+[a-zA-Z_][a-zA-Z0-9_]*)\s*\:\s*[A-Z][a-zA-Z0-9_]*(?:<[^>]+>)?/g, '$1');
+            
+            // Remove generic type parameters from function calls: functionName<Type>(...)
+            code = code.replace(/([a-zA-Z_][a-zA-Z0-9_]*)<[^>]+>(\s*\()/g, '$1$2');
+            
+            // Remove type annotations in object properties
+            code = code.replace(/([a-zA-Z_][a-zA-Z0-9_]*)\s*\:\s*[A-Z][a-zA-Z0-9_]*(?:<[^>]+>)?\s*([,\}])/g, '$1$2');
+            
+            // Remove Array<Type> syntax -> array
+            code = code.replace(/Array<([^>]+)>/g, 'Array');
+            
+            // Remove union types: string | number -> remove annotation
+            code = code.replace(/\:\s*[A-Z][a-zA-Z0-9_]*(?:\s*\|\s*[A-Z][a-zA-Z0-9_]*)*(?=[,\)\=\;\n])/g, '');
+            
+            // Clean up any remaining type annotations with generics
+            code = code.replace(/\:\s*[A-Z][a-zA-Z0-9_]*(?:<[^>]+>)?(?:\[\])?(?=\s*[,\)\;\=\n])/g, '');
+            
+            logToConsole('info', '✅ TypeScript stripped');
+            return code;
+        }
+
+        // Main run function
+        function runCode() {
+            const code = document.getElementById('code-editor').value;
+            const previewDiv = document.getElementById('preview');
+            
+            logToConsole('info', 'Starting TSX preview generation...');
+            logToConsole('info', `Code length: ${code.length} characters`);
+
+            // Clear previous preview
+            previewDiv.innerHTML = '<div id="react-root"></div>';
+
+            try {
+                // Step 1: Transform imports
+                let transformedCode = transformImports(code);
+                logToConsole('info', '✅ Imports transformed');
+
+                // Step 2: Strip TypeScript
+                transformedCode = stripTypeScript(transformedCode);
+                logToConsole('info', '✅ TypeScript stripped');
+
+                logToConsole('info', 'Transformed code:');
+                console.log(transformedCode);
+
+                // Step 3: Wrap code with auto-mount logic BEFORE Babel transpilation
+                const wrappedJsxCode = `
+                    ${transformedCode}
+                    
+                    // Auto-mount logic - using React.createElement instead of JSX
+                    const rootElement = document.getElementById('react-root');
+                    const root = ReactDOM.createRoot(rootElement);
+                    
+                    // Detect which component to render
+                    if (typeof App !== 'undefined') {
+                        root.render(React.createElement(App));
+                        logToConsole('info', '✅ App component mounted successfully');
+                    } else if (typeof Greeting !== 'undefined') {
+                        root.render(React.createElement(Greeting, { name: "TypeScript User", age: 30 }));
+                        logToConsole('info', '✅ Greeting component mounted successfully');
+                    } else if (typeof UserDashboard !== 'undefined') {
+                        root.render(React.createElement(UserDashboard));
+                        logToConsole('info', '✅ UserDashboard component mounted successfully');
+                    } else if (typeof ProductCard !== 'undefined') {
+                        // For testing products
+                        root.render(React.createElement(ProductCard, { 
+                            product: { id: 1, name: "Test Product", price: 99.99, inStock: true } 
+                        }));
+                        logToConsole('info', '✅ ProductCard component mounted successfully');
+                    } else {
+                        logToConsole('warn', '⚠️ No component found to mount');
+                    }
+                `;
+
+                // Step 4: Transpile the ENTIRE wrapped code with Babel
+                logToConsole('info', 'Transpiling with Babel (classic runtime)...');
+                const babelResult = Babel.transform(wrappedJsxCode, {
+                    // Use classic runtime to output React.createElement instead of jsx-runtime imports
+                    presets: [['react', { runtime: 'classic' }]],
+                    plugins: []
+                });
+
+                logToConsole('info', '✅ Babel transpilation successful');
+                logToConsole('info', 'Transpiled code:');
+                console.log(babelResult.code);
+
+                // Execute the fully transpiled code
+                logToConsole('info', 'Executing transpiled code...');
+                eval(babelResult.code);
+
+                logToConsole('success', '🎉 TSX Preview generated successfully!');
+
+            } catch (error) {
+                logToConsole('error', '❌ Error: ' + error.message);
+                console.error(error);
+                previewDiv.innerHTML = `
+                    <div style="padding: 20px; background: #fee; color: #c00; border-radius: 8px;">
+                        <h3>Preview Error</h3>
+                        <pre style="white-space: pre-wrap; word-wrap: break-word;">${error.message}</pre>
+                    </div>
+                `;
+            }
+        }
+
+        // Test on load
+        window.addEventListener('load', () => {
+            logToConsole('info', '✅ Page loaded');
+            logToConsole('info', '✅ React loaded: ' + (typeof React !== 'undefined'));
+            logToConsole('info', '✅ ReactDOM loaded: ' + (typeof ReactDOM !== 'undefined'));
+            logToConsole('info', '✅ Babel loaded: ' + (typeof Babel !== 'undefined'));
+            logToConsole('info', 'Ready! Click "Run TSX Preview" to test TypeScript components.');
+        });
+    </script>
+</body>
+</html>

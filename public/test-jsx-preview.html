@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>JSX/TSX Preview - Standalone Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .editor {
+            width: 100%;
+            height: 300px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 14px;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #0051D5;
+        }
+        #preview {
+            margin-top: 20px;
+            padding: 20px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            min-height: 200px;
+            background: white;
+        }
+        #console {
+            margin-top: 20px;
+            padding: 15px;
+            background: #1e1e1e;
+            color: #00ff00;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            margin: 5px 0;
+        }
+        .log-error { color: #ff6b6b; }
+        .log-warn { color: #ffd93d; }
+        .log-info { color: #6bcfff; }
+        .success {
+            color: #00c853;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 JSX/TSX Preview - Standalone Test</h1>
+        <p>Test your JSX/TSX code directly in the browser!</p>
+        
+        <div>
+            <label for="code-editor"><strong>Code Editor:</strong></label>
+            <br><br>
+            <select id="preset-selector">
+                <option value="jsx-simple">Simple JSX Counter</option>
+                <option value="tsx-typescript">TypeScript Counter</option>
+                <option value="jsx-import">JSX with Import</option>
+                <option value="custom">Custom Code</option>
+            </select>
+            <br><br>
+            <textarea id="code-editor" class="editor" spellcheck="false"></textarea>
+        </div>
+        
+        <div>
+            <button onclick="runCode()">▶️ Run Preview</button>
+            <button onclick="clearConsole()">🗑️ Clear Console</button>
+        </div>
+        
+        <div id="preview">
+            <p style="color: #999;">Click "Run Preview" to see the result...</p>
+        </div>
+        
+        <div id="console">
+            <div class="log-entry">Console output will appear here...</div>
+        </div>
+    </div>
+
+    <!-- Load React and Babel -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script>
+        // Preset code samples
+        const presets = {
+            'jsx-simple': `function App() {
+  const [count, setCount] = React.useState(0);
+  
+  return (
+    <div style={{ padding: "20px" }}>
+      <h1>🧪 Simple Counter</h1>
+      <p style={{ fontSize: "48px", color: "#007AFF" }}>{count}</p>
+      <button 
+        onClick={() => setCount(count + 1)}
+        style={{
+          padding: "10px 20px",
+          fontSize: "16px",
+          background: "#007AFF",
+          color: "white",
+          border: "none",
+          borderRadius: "8px",
+          cursor: "pointer"
+        }}
+      >
+        Increment
+      </button>
+    </div>
+  );
+}`,
+            'tsx-typescript': `interface CounterProps {
+  initialValue?: number;
+}
+
+function Counter({ initialValue = 0 }: CounterProps) {
+  const [count, setCount] = React.useState<number>(initialValue);
+  
+  return (
+    <div style={{ padding: "20px" }}>
+      <h1>🎯 TypeScript Counter</h1>
+      <p style={{ fontSize: "48px" }}>{count}</p>
+      <div>
+        <button 
+          onClick={() => setCount(count + 1)}
+          style={{ fontSize: "24px", marginRight: "10px" }}
+        >
+          ➕
+        </button>
+        <button 
+          onClick={() => setCount(count - 1)}
+          style={{ fontSize: "24px" }}
+        >
+          ➖
+        </button>
+      </div>
+    </div>
+  );
+}`,
+            'jsx-import': `import { useState } from "react";
+
+function App() {
+  const [text, setText] = useState("Hello from React!");
+  
+  return (
+    <div style={{ padding: "20px" }}>
+      <h1>✅ Import Statement Test</h1>
+      <p style={{ fontSize: "24px" }}>{text}</p>
+      <input 
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        style={{ 
+          padding: "10px",
+          fontSize: "16px",
+          width: "100%",
+          maxWidth: "400px"
+        }}
+        placeholder="Type something..."
+      />
+    </div>
+  );
+}`,
+            'custom': `// Write your own JSX/TSX code here!
+function App() {
+  return (
+    <div style={{ padding: "20px" }}>
+      <h1>Your Custom Component</h1>
+      <p>Edit this code and click Run!</p>
+    </div>
+  );
+}`
+        };
+
+        // Load default preset
+        document.getElementById('code-editor').value = presets['jsx-simple'];
+
+        // Handle preset selection
+        document.getElementById('preset-selector').addEventListener('change', function(e) {
+            document.getElementById('code-editor').value = presets[e.target.value];
+        });
+
+        // Console logging
+        function logToConsole(type, message) {
+            const consoleDiv = document.getElementById('console');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            consoleDiv.appendChild(entry);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+
+        function clearConsole() {
+            document.getElementById('console').innerHTML = '<div class="log-entry">Console cleared...</div>';
+        }
+
+        // Transform imports (same as reactBundler.ts)
+        function transformImports(code) {
+            logToConsole('info', 'Transforming imports...');
+            
+            // Transform: import { useState } from "react"
+            code = code.replace(/import\s+\{([^}]+)\}\s+from\s+['"]react['"];?\n?/g, (match, imports) => {
+                const importList = imports.split(',').map(i => i.trim()).filter(i => i);
+                logToConsole('info', `Transformed imports: ${importList.join(', ')}`);
+                return `const { ${importList.join(', ')} } = React;\n`;
+            });
+
+            return code;
+        }
+
+        // Strip TypeScript (simplified version)
+        function stripTypeScript(code) {
+            logToConsole('info', 'Stripping TypeScript syntax...');
+            
+            // Remove interface/type declarations
+            code = code.replace(/^(interface|type)\s+[A-Z][a-zA-Z0-9_]*[\s\S]*?\n\n/gm, '');
+            
+            // Remove type annotations from destructuring params
+            code = code.replace(/(\{[^}]+\})\s*:\s*[A-Z][a-zA-Z0-9_]*(?:<[^>]+>)?/g, '$1');
+            
+            // Remove generic type parameters
+            code = code.replace(/<[A-Z][a-zA-Z0-9_]*(?:\s*,\s*[A-Z][a-zA-Z0-9_]*)*>(\s*\()/g, '$1');
+            
+            return code;
+        }
+
+        // Main run function
+        function runCode() {
+            const code = document.getElementById('code-editor').value;
+            const previewDiv = document.getElementById('preview');
+            
+            logToConsole('info', 'Starting preview generation...');
+            logToConsole('info', `Code length: ${code.length} characters`);
+
+            // Clear previous preview
+            previewDiv.innerHTML = '<div id="react-root"></div>';
+
+            try {
+                // Step 1: Transform imports
+                let transformedCode = transformImports(code);
+                logToConsole('info', '✅ Imports transformed');
+
+                // Step 2: Strip TypeScript
+                transformedCode = stripTypeScript(transformedCode);
+                logToConsole('info', '✅ TypeScript stripped');
+
+                logToConsole('info', 'Transformed code:');
+                console.log(transformedCode);
+
+                // Step 3: Wrap code with auto-mount logic BEFORE Babel transpilation
+                const wrappedJsxCode = `
+                    ${transformedCode}
+                    
+                    // Auto-mount logic - using React.createElement instead of JSX
+                    const rootElement = document.getElementById('react-root');
+                    const root = ReactDOM.createRoot(rootElement);
+                    
+                    // Detect which component to render
+                    if (typeof App !== 'undefined') {
+                        root.render(React.createElement(App));
+                        logToConsole('info', '✅ App component mounted successfully');
+                    } else if (typeof Counter !== 'undefined') {
+                        root.render(React.createElement(Counter));
+                        logToConsole('info', '✅ Counter component mounted successfully');
+                    } else {
+                        logToConsole('warn', '⚠️ No component found to mount');
+                    }
+                `;
+
+                // Step 4: Transpile the ENTIRE wrapped code with Babel
+                logToConsole('info', 'Transpiling with Babel...');
+                const babelResult = Babel.transform(wrappedJsxCode, {
+                    // Use classic runtime to output React.createElement instead of jsx-runtime imports
+                    presets: [['react', { runtime: 'classic' }]],
+                    plugins: []
+                });
+
+                logToConsole('info', '✅ Babel transpilation successful');
+                logToConsole('info', 'Transpiled code:');
+                console.log(babelResult.code);
+
+                // Execute the fully transpiled code
+                eval(babelResult.code);
+
+                logToConsole('info', '🎉 Preview generated successfully!');
+
+            } catch (error) {
+                logToConsole('error', '❌ Error: ' + error.message);
+                console.error(error);
+                previewDiv.innerHTML = `
+                    <div style="padding: 20px; background: #fee; color: #c00; border-radius: 8px;">
+                        <h3>Preview Error</h3>
+                        <pre>${error.message}</pre>
+                    </div>
+                `;
+            }
+        }
+
+        // Test on load
+        window.addEventListener('load', () => {
+            logToConsole('info', '✅ Page loaded');
+            logToConsole('info', '✅ React loaded: ' + (typeof React !== 'undefined'));
+            logToConsole('info', '✅ ReactDOM loaded: ' + (typeof ReactDOM !== 'undefined'));
+            logToConsole('info', '✅ Babel loaded: ' + (typeof Babel !== 'undefined'));
+            logToConsole('info', 'Ready! Click "Run Preview" to test.');
+        });
+    </script>
+</body>
+</html>

@@ -152,7 +152,6 @@ npm run dev
 
 # Check console:
 # ✅ Using AWS Bedrock (via Anthropic proxy)
-# 📦 Model: anthropic.claude-3-5-sonnet-20241022-v2:0
 ```
 
 ### Test API Route
@@ -252,7 +251,6 @@ AWS_SECRET_ACCESS_KEY=your_secret_access_key_here
 
 ```bash
 # Check model name
-BEDROCK_MODEL=anthropic.claude-3-5-sonnet-20241022-v2:0
 
 # List available models
 aws bedrock list-foundation-models --region ap-south-1

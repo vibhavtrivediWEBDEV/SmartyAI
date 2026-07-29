@@ -5,6 +5,8 @@ import { interviewer } from "@/constants";
 import { createFeedback } from "@/lib/actions/general.action";
 import { Question, QuestionHandler } from "@/lib/services/QuestionHandler";
 import { useTerminal } from "@/app/context/terminalContext";
+import { createAIService } from "@/lib/ai";
+import { useElevenTTS } from "./ElevenLabs";
 
 export enum CallStatus {
   INACTIVE = "INACTIVE",
@@ -53,22 +55,39 @@ export function useCallManager({
   const [isReviewingAnswer, setIsReviewingAnswer] = useState(false);
   const [lastUserAnswer, setLastUserAnswer] = useState<string | null>(null);
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
+  const [useCustomPipeline, setUseCustomPipeline] = useState(false);
   
   // Coding state
   const [showCodeEditor, setShowCodeEditor] = useState(false);
   const [isCoding, setIsCoding] = useState(false);
   const [currentCodingQuestion, setCurrentCodingQuestion] = useState<string | null>(null);
 
-          const { runCommandInTerminal } = useTerminal();
+  // 🎙️ ElevenLabs TTS for premium voice
+  const { speak: speakWithElevenLabs } = useElevenTTS();
 
-  
+  const { runCommandInTerminal } = useTerminal();
+
   // Ref to track if the component is mounted
   const isMounted = useRef(true);
+  const recognitionRef = useRef<any>(null);
+  const messagesHistory = useRef<{role: "user" | "assistant", content: string}[]>([]);
+  const isProcessing = useRef(false);
+
+  // 🎯 Detect which pipeline to use based on USE_AI_PROVIDER
+  useEffect(() => {
+    const provider = process.env.NEXT_PUBLIC_USE_AI_PROVIDER || "openai";
+    const isBedrock = provider === "bedrock";
+    setUseCustomPipeline(isBedrock);
+    console.log(`🎤 Interview pipeline: ${isBedrock ? 'Custom (GLM + ElevenLabs)' : 'Vapi'}`);
+  }, []);
 
   // Clean up on unmount
   useEffect(() => {
     return () => {
       isMounted.current = false;
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
     };
   }, []);
 
@@ -292,36 +311,149 @@ export function useCallManager({
     }
   }, [rawQuestions]);
 
-  // Start the call
-  const handleCall = async () => {
-    setCallStatus(CallStatus.CONNECTING);
+  // 🎙️ Speak with AI response (GLM + ElevenLabs)
+  const speakResponse = async (text: string) => {
+    setIsSpeaking(true);
+    setLastMessage(text);
+    
+    // Use ElevenLabs for premium voice
+    try {
+      await speakWithElevenLabs(text);
+    } catch (error) {
+      console.error("ElevenLabs TTS error:", error);
+    }
+    
+    setIsSpeaking(false);
+  };
 
-    if (type === "generate") {
-      await vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!, {
-        variableValues: {
-          username: userName,
-          userid: userId,
-        },
-      });
-    } else {
-      let formattedQuestions = "";
-
-      if (processedQuestions.length) {
-        formattedQuestions = QuestionHandler.formatQuestionsForAPI(processedQuestions);
+  // 🔥 CUSTOM PIPELINE: Start GLM + ElevenLabs interview
+  const startCustomInterview = async () => {
+    try {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      
+      if (!SpeechRecognition) {
+        throw new Error("Speech recognition not supported");
       }
 
-      await vapi.start(interviewer, {
-        variableValues: {
-          questions: formattedQuestions,
-        },
-      });
+      // Request microphone
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      setCallStatus(CallStatus.ACTIVE);
+      
+      // Send greeting
+      const greeting = `Hello ${userName}! Welcome to this interview session. I'll be asking you a series of questions. Take your time to think and respond. Let's begin.`;
+      const greetingMessage = { role: "assistant" as const, content: greeting };
+      setMessages(prev => [...prev, greetingMessage]);
+      await speakResponse(greeting);
+      
+      // Ask first question
+      if (processedQuestions.length > 0) {
+        const firstQuestion = processedQuestions[0].text;
+        const questionMessage = { role: "assistant" as const, content: firstQuestion };
+        setMessages(prev => [...prev, questionMessage]);
+        await speakResponse(firstQuestion);
+      }
+      
+      // Start speech recognition for user responses
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = true;
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.lang = "en-US";
+      
+      recognitionRef.current.onresult = async (event: any) => {
+        const last = event.results.length - 1;
+        const transcript = event.results[last][0].transcript;
+        const isFinal = event.results[last].isFinal;
+        
+        if (isFinal && transcript.trim() && !isProcessing.current) {
+          isProcessing.current = true;
+          
+          // Add user message
+          const userMessage = { role: "user" as const, content: transcript };
+          setMessages(prev => [...prev, userMessage]);
+          setLastUserAnswer(transcript);
+          
+          // Get AI response
+          const aiService = createAIService();
+          const systemPrompt = `You are an AI interviewer conducting a ${type === 'generate' ? 'technical' : 'behavioral'} interview. 
+          
+Current question: ${processedQuestions[currentQuestionIndex]?.text || 'N/A'}
+
+Respond naturally and concisely. Acknowledge the candidate's response and either:
+1. Ask a follow-up question for clarification
+2. Provide brief feedback and ask if they want to move to the next question`;
+
+          messagesHistory.current.push({ role: "user", content: transcript });
+          
+          try {
+            const response = await aiService.chat([
+              { role: "system", content: systemPrompt },
+              ...messagesHistory.current.slice(-6)
+            ]);
+            
+            const aiResponse = response.content || "Thank you for your answer. Would you like to move to the next question?";
+            
+            messagesHistory.current.push({ role: "assistant", content: aiResponse });
+            const assistantMessage = { role: "assistant" as const, content: aiResponse };
+            setMessages(prev => [...prev, assistantMessage]);
+            await speakResponse(aiResponse);
+          } catch (error) {
+            console.error("GLM response error:", error);
+          }
+          
+          isProcessing.current = false;
+        }
+      };
+      
+      recognitionRef.current.start();
+    } catch (error) {
+      console.error("Custom interview error:", error);
+      // Fallback to Vapi
+      useCustomPipeline && setUseCustomPipeline(false);
+    }
+  };
+
+  // Start the call (Vapi or Custom pipeline)
+  const handleCall = async () => {
+    setCallStatus(CallStatus.CONNECTING);
+    
+    if (useCustomPipeline) {
+      await startCustomInterview();
+    } else {
+      if (type === "generate") {
+        await vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!, {
+          variableValues: {
+            username: userName,
+            userid: userId,
+          },
+        });
+      } else {
+        let formattedQuestions = "";
+
+        if (processedQuestions.length) {
+          formattedQuestions = QuestionHandler.formatQuestionsForAPI(processedQuestions);
+        }
+
+        await vapi.start(interviewer, {
+          variableValues: {
+            questions: formattedQuestions,
+          },
+        });
+      }
     }
   };
 
   // End the call
   const handleDisconnect = () => {
     setCallStatus(CallStatus.FINISHED);
-    vapi.stop();
+    
+    if (useCustomPipeline) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    } else {
+      vapi.stop();
+    }
   };
 
   // Function to review a regular (non-code) answer

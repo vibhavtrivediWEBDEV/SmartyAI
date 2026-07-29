@@ -186,7 +186,6 @@ npm run dev
 Check console logs:
 ```
 ✅ Using AWS Bedrock (via Anthropic proxy)
-📦 Model: anthropic.claude-3-5-sonnet-20241022-v2:0
 ```
 
 ### 3. Switch Providers

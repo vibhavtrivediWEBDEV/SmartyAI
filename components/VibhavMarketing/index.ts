@@ -1,0 +1,11 @@
+export { default as Hero } from "./Hero";
+export { default as Navigation } from "./Navigation";
+export { default as FeatureOverview } from "./FeatureOverview";
+export { default as ApplicationShowcase } from "./ApplicationShowcase";
+export { default as AISection } from "./AISection";
+export { default as ProductivitySection } from "./ProductivitySection";
+export { default as DashboardPreview } from "./DashboardPreview";
+export { default as PricingSection } from "./PricingSection";
+export { default as Testimonials } from "./Testimonials";
+export { default as Footer } from "./Footer";
+export { default as VibhavMarketingPage } from "./VibhavMarketingPage";
