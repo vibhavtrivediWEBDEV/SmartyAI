@@ -1380,9 +1380,8 @@ export function Desktop() {
               }}
             />}
 
-
+{/* counter */}
             <LoveCounter />
-
 
             {/* Central Portfolio Text */}
             {/* <h1
