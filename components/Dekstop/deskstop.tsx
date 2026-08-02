@@ -10,13 +10,13 @@ import { MailSender } from "@/app/components/terminal/mail-sender"
 import { PdfViewer } from "@/app/components/terminal/pdfviwer"
 import { DesktopIcon } from "./dekstopIcon"
 import { StickyNote } from "./stickyNote"
-import { ProjectExplorerWindow } from "./ProjectExpWindow"
+import { ProjectExplorerWindow, type ProjectFile } from "./ProjectExpWindow"
 import { PhotosApp } from "./photosApp"
 import { gsap } from "gsap"
 import { FolderIcon, Trash2Icon, CameraIcon, TerminalIcon, BookIcon, SearchIcon, TableIcon, MailIcon, ListTodoIcon, FileTextIcon } from 'lucide-react' // Import Lucide icons
 import { Dock } from "./dock"
 import { WavesDemo } from "./waveDemo.tsx"
-import Shuffle, { GooeyText } from "./textAnimation"
+import Shuffle from "./textAnimation"
 import AppLaunchpad from "./launchpad"
 import { FileDetailsViewer } from "./file-details-viewer"
 import { TerminalProvider } from "@/app/context/terminalContext"
@@ -32,7 +32,6 @@ import CustomCursor from "../CustomCursor"
 import GamePage from "./Game"
 import Webpage from "./webpage"
 import DotGrid from "../animationComponents/dotGrid"
-import { fetchGitHubRepositories, createFolderIconsFromRepositories } from "@/lib/github-data"
 import Vscode from "./VsCode"
 import { BrowserContent } from "./Browser"
 import Spotify from "./spotify"
@@ -54,8 +53,15 @@ import LiquidGlassVideo from "./glassvediowallpaper"
 import Figma from "./figma"
 import PremiumNotes from "./notesapp"
 import GestureDock from "./gestureDock"
+import { selectTopmostMatchingWindow } from "./gestureEngine"
 import { ProjectsFolder } from "./ProjectsFolder"
 import { EasterEggWindow } from "./EasterEggWindow"
+import { ResumeProfilePanel, type ResumeProfile } from "./ResumeProfilePanel"
+import { ATSResumeBuilder } from "./ATSResumeBuilder"
+import { getDesktopApp } from "@/lib/desktopApps"
+import SmartyInterview from "@/app/components/terminal/smartyInterview"
+import SmartyTeacherWrapper from "@/app/components/terminal/smartyTeacher"
+import { DynamicAgGridConfigurator } from "./dataTableViewer"
 
 interface WindowState {
   id: string
@@ -74,19 +80,33 @@ interface WindowState {
 }
 
 interface IconItem {
-  id: number
+  id: number | string
   name: string
   type: 'file' | 'folder' | 'trash'
   x: number
   y: number
-  icon?: React.ReactNode
+  icon?: any
   folderColor?: string
   folderItems?: Array<{ label: string; value: string; type: 'url' | 'text' }>
+  finderItem?: ProjectFile
 }
+
+interface BatteryManagerLike extends EventTarget {
+  level: number
+}
+
+interface NavigatorWithBattery extends Navigator {
+  getBattery?: () => Promise<BatteryManagerLike>
+}
+
+const MINIMIZED_APPS_STORAGE_KEY = "smarty.desktop.minimizedApps.v1"
 
 export function Desktop() {
   const { settings, updateSettings, updateGithubProfile } = useSettings()
-  const [handControlCursor, setHandControlCursor] = useState(false)
+  const [resumeProfile, setResumeProfile] = useState<ResumeProfile | null>(null)
+  const [resumeProfileLoading, setResumeProfileLoading] = useState(true)
+  const [batteryLevel, setBatteryLevel] = useState<number | null>(null)
+  const unlockedAppsRef = useRef(new Set<string>())
 
 
 
@@ -94,10 +114,23 @@ export function Desktop() {
 
   // const [username, setUsername] = useState('vibhavtrivediWEBDEV')
 
+  // 🆕 Preview window state for VS Code
+  const [previewContent, setPreviewContent] = useState<string | null>(null)
+  const [previewWindowTitle, setPreviewWindowTitle] = useState<string>('Preview')
+
+  // 🆕 Ref to hold openPreviewWindow function (avoids circular dependency)
+  const openPreviewWindowRef = useRef<((htmlContent: string, title?: string) => void) | null>(null)
+
   const [openWindows, setOpenWindows] = useState<WindowState[]>([])
+  const openWindowsRef = useRef<WindowState[]>([])
+  const windowCounterRef = useRef(0)
+  const restoredMinimizedAppsRef = useRef(false)
   const [desktopBg, setDesktopBg] = useState("dot")
-  const [nextZIndex, setNextZIndex] = useState(1)
-  const ref = useRef(1)
+  const topZIndexRef = useRef(1)
+  const claimTopZIndex = useCallback(() => {
+    topZIndexRef.current += 1
+    return topZIndexRef.current
+  }, [])
   
   // NEW: Panel system - right side 30% area for panel windows
   const [panelWindows, setPanelWindows] = useState<WindowState[]>([])
@@ -117,13 +150,12 @@ export function Desktop() {
   const pendingCommandRef = useRef<{ command: string; args?: any } | null>(null)
 
   const desktopRef = useRef<HTMLDivElement>(null)
-  const [showCursor, setShowCursor] = useState(false);
 
   const [backgroundImage, setBackgroundImage] = useState('https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1200&h=800&fit=crop')
   const [themeColor, setThemeColor] = useState('240 5.9% 10%')
 
 
-  const [icons, setIcons] = useState([
+  const [icons, setIcons] = useState<IconItem[]>([
     //   { id: 1, name: "Resume PDF", icon: <FileTextIcon />, x: 100, y: 400 },
     //   { id: 2, name: "About Me", icon: <FolderIcon />, x: 100, y: 550 },
     //   { id: 3, name: "ShowCraft", icon: <FolderIcon />, x: 1200, y: 100 },
@@ -133,15 +165,7 @@ export function Desktop() {
     //   { id: 7, name: "Don't Look", icon: <Trash2Icon />, x: 1300, y: 500 }
   ]);
 
-  const [UserIcon, setuserIcons] = useState<IconItem[]>([
-    { id: 1, name: 'Resume PDF', type: 'file', icon: "pdf", x: 1100, y: 50 },
-    { id: 2, name: 'About Me', type: 'folder', icon: "folder", x: 1100, y: 150, folderItems: [] },
-    { id: 3, name: 'Projects', type: 'folder', icon: "folder", x: 1100, y: 250, folderColor: '#644AFB', folderItems: [
-      { label: 'SmartyAI', value: 'https://github.com/smarty-ai', type: 'url' },
-      { label: 'aiFlow', value: 'https://github.com/aiflow', type: 'url' },
-    ]},
-    { id: 999, name: "Don't Look", type: 'trash', icon: "trash", x: 1100, y: 350 },
-  ])
+  const [UserIcon, setuserIcons] = useState<IconItem[]>([])
   // news items
 
 
@@ -186,6 +210,68 @@ export function Desktop() {
   }, []);
 
   useEffect(() => {
+    let battery: BatteryManagerLike | undefined
+    const updateBattery = () => setBatteryLevel(battery ? Math.round(battery.level * 100) : null)
+    void (navigator as NavigatorWithBattery).getBattery?.().then((manager) => {
+      battery = manager
+      updateBattery()
+      manager.addEventListener('levelchange', updateBattery)
+    })
+    return () => battery?.removeEventListener('levelchange', updateBattery)
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    fetch("/api/profile/resume")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Could not load resume profile")
+        return response.json()
+      })
+      .then((body) => {
+        if (active) setResumeProfile(body.resume)
+      })
+      .catch((error) => console.error(error))
+      .finally(() => {
+        if (active) setResumeProfileLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    const loadDesktopItems = async () => {
+      try {
+        const response = await fetch("/api/Projects")
+        const body = await response.json()
+        if (!response.ok) throw new Error(body.error || "Could not load Desktop items")
+        const selected = (body.data as ProjectFile[])
+          .filter((item) => item.showOnDesktop && !item.parentId && !item.isTrashed)
+          .map((item, index): IconItem => ({
+            id: item.id,
+            name: item.name,
+            type: item.type === "folder" ? "folder" : "file",
+            icon: item.type === "folder" ? "folder" : item.name.toLowerCase().endsWith(".pdf") ? "pdf" : "file",
+            x: 1100,
+            y: 50 + index * 100,
+            finderItem: item,
+          }))
+        if (active) setuserIcons(selected)
+      } catch (error) {
+        console.error(error)
+      }
+    }
+    void loadDesktopItems()
+    window.addEventListener("finder-desktop-change", loadDesktopItems)
+    return () => {
+      active = false
+      window.removeEventListener("finder-desktop-change", loadDesktopItems)
+    }
+  }, [])
+
+  useEffect(() => {
     if (!desktopRef.current || icons.length === 0) return;
 
     const paddingX = 80;
@@ -209,63 +295,6 @@ export function Desktop() {
 
     setIcons(arranged);
   }, [icons.length]); // Re-arrange whenever the number of icons changes
-
-  // github folders
-  useEffect(() => {
-    async function loadGitHubData() {
-      // Only load if GitHub profile is set
-      // if (!settings.githubProfile || settings.githubProfile.trim() === '') {
-      //   return
-      // }
-
-      try {
-        if (true) {
-          // wallpaper_input
-          // settings_sidebar_wallpaper
-          // new_wallpaper_1
-
-
-
-
-
-
-          // await automationAPI.openWindow('Terminal');
-          const repos = await fetchGitHubRepositories(settings.githubProfile)
-
-          const folderIcons = createFolderIconsFromRepositories(repos)
-
-          // Convert folder icons to the icon item structure
-          const repoFolders: IconItem[] = folderIcons.map(folder => ({
-            id: folder.id,
-            name: folder.name,
-            type: 'folder' as const,
-            icon: <FileTextIcon />,
-            x: folder.x,
-            y: folder.y,
-            folderColor: folder.color,
-            folderItems: folder.items,
-          }))
-
-          setIcons(prev => {
-            // Keep static icons (Resume, About Me, Trash)
-            const staticIcons = prev.filter(icon => icon.id < 10 || icon.id === 999)
-            // Insert repos between static icons and trash
-            const allIcons = [...staticIcons.slice(0, 2), ...repoFolders, ...staticIcons.slice(2)]
-            return allIcons
-          })
-
-        }
-
-      } catch (error) {
-        console.error('Failed to load GitHub data:', error)
-      }
-    }
-
-    loadGitHubData()
-
-  }, [settings.githubProfile]) // Watch for changes in githubProfile
-
-
 
   // const changeWallpaper = async () => {
   //   await automationAPI.executeSequence([
@@ -328,10 +357,28 @@ export function Desktop() {
   }
 
 
-  let windowCounter = 0;
-
   const openApplication = useCallback(
-    (appName: string, initialX?: number, initialY?: number, commandToRun?: string, arg?: any) => {
+    async (appName: string, initialX?: number, initialY?: number, commandToRun?: string, arg?: any) => {
+      if (
+        settings.appLockEnabled &&
+        settings.hasAppLockPassword &&
+        settings.lockedApps.some((name) => name.toLowerCase() === appName.toLowerCase()) &&
+        !unlockedAppsRef.current.has(appName.toLowerCase())
+      ) {
+        const password = window.prompt(`Enter the app-lock password to open ${appName}`)
+        if (!password) return
+        const response = await fetch('/api/settings/app-lock', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        })
+        if (!response.ok) {
+          toast.error('Incorrect app-lock password')
+          return
+        }
+        unlockedAppsRef.current.add(appName.toLowerCase())
+      }
+
       // alert(appName)
       let component: React.ReactNode | null = null;
       let title = "";
@@ -376,11 +423,43 @@ export function Desktop() {
         //   break;
 
         case "Science Book":
-          component = <ScienceBook />;
+          component = <ScienceBook name="vibhav" subject="" messages={[]} callStart={null} status="NOT_STARTED" />;
           title = "Science Book";
           iconPath = "/icons/book.png";
           defaultWidth = 700;
           defaultHeight = 600;
+          break;
+
+        case "AI Book":
+          component = <ScienceBook name="vibhav" subject="" messages={[]} callStart={null} status="NOT_STARTED" />;
+          title = "AI Book";
+          iconPath = "/icons/book.png";
+          defaultWidth = 800;
+          defaultHeight = 650;
+          break;
+
+        case "Interview":
+          component = <SmartyInterview />;
+          title = "Smarty Interview";
+          iconPath = "/app.svg";
+          defaultWidth = 900;
+          defaultHeight = 650;
+          break;
+
+        case "Data Table":
+          component = <DynamicAgGridConfigurator />;
+          title = "Data Table";
+          iconPath = "/icons/excel.png";
+          defaultWidth = 1000;
+          defaultHeight = 680;
+          break;
+
+        case "Smarty Teacher":
+          component = <SmartyTeacherWrapper />;
+          title = "Smarty Teacher";
+          iconPath = "/app.svg";
+          defaultWidth = 900;
+          defaultHeight = 680;
           break;
 
         case "game":
@@ -405,7 +484,10 @@ export function Desktop() {
           defaultHeight = 550;
           break;
         case "vscode":
-          component = <Vscode />;
+          component = <Vscode
+            initialFile={arg?.initialFile}
+            openPreviewWindow={(html, title) => openPreviewWindowRef.current?.(html, title)}
+          />;
           title = "VS code";
           iconPath = "/icons/ai.png";
           defaultWidth = 900;
@@ -428,10 +510,10 @@ export function Desktop() {
           component = <SettingsPanel
 
           />;
-          title = "Setting";
-          iconPath = "/icons/ai.png";
-          defaultWidth = 500;
-          defaultHeight = 250;
+          title = "System Settings";
+          iconPath = "/icons/settings.png";
+          defaultWidth = 920;
+          defaultHeight = 680;
           break;
         case "chrome":
         case "Chrome":
@@ -485,24 +567,24 @@ export function Desktop() {
           break;
         case "Excel Editor":
           component = <ExcelEditor />;
-          title = "Excel Editor";
+          title = "Smarty Excel AI";
           iconPath = "/icons/excel.png";
-          defaultWidth = 900;
-          defaultHeight = 600;
+          defaultWidth = Math.min(1240, Math.max(820, (typeof window !== "undefined" ? window.innerWidth : 1280) - 160));
+          defaultHeight = Math.min(780, Math.max(560, (typeof window !== "undefined" ? window.innerHeight : 820) - 160));
           break;
         case "Mail":
           component = <MailSender />;
-          title = "Mail Sender";
+          title = "Smarty Mail";
           iconPath = "/icons/mail.png";
-          defaultWidth = 600;
-          defaultHeight = 500;
+          defaultWidth = 900;
+          defaultHeight = 650;
           break;
         case "PDF Viewer":
           component = (
             <PdfViewer pdfUrl="https://ncert.nic.in/textbook/pdf/leph2ps.pdf" />
           );
           title = "PDF Viewer";
-          iconPath = "/icons/pdf.png";
+          iconPath = "/assets/pdfIcon.png";
           defaultWidth = 700;
           defaultHeight = 600;
           break;
@@ -511,7 +593,7 @@ export function Desktop() {
             <Webpage />
           );
           title = "Demo Portfolio";
-          iconPath = "/icons/pdf.png";
+          iconPath = "/assets/pdfIcon.png";
           defaultWidth = 900;
           defaultHeight = 600;
           break;
@@ -535,24 +617,36 @@ export function Desktop() {
           defaultWidth = 850;
           defaultHeight = 350;
           break;
+        case "ATS":
+          component = <ATSResumeBuilder />;
+          title = "ATS";
+          iconPath = "/assets/pdfIcon.png";
+          defaultWidth = Math.min(1200, Math.max(900, (typeof window !== "undefined" ? window.innerWidth : 1240) - 40));
+          defaultHeight = Math.min(760, Math.max(600, (typeof window !== "undefined" ? window.innerHeight : 800) - 60));
+          break;
+        case "Resume":
         case "Resume PDF":
-          component = <PdfViewer pdfUrl="/VIBHAV.pdf" />;
+          component = resumeProfile ? (
+            <PdfViewer pdfUrl={resumeProfile.fileUrl} />
+          ) : (
+            <ResumeProfilePanel
+              profile={null}
+              loading={resumeProfileLoading}
+              onUploaded={setResumeProfile}
+            />
+          );
           title = "Resume";
-          iconPath = "/icons/pdf.png";
+          iconPath = "/icons/folder.png";
           defaultWidth = 700;
           defaultHeight = 600;
           break;
         case "About Me":
           component = (
-            <div className="p-4 text-gray-200">
-              Hello, my name is Vibhav Trivedi, and I have around four years of experience as a full-stack developer. I mainly work with React, Node.js,three js MongoDB, Redux, and GraphQL. I’ve also work with Blockchain and Ai Automations in my projects.
-              <br /> <br />
-              Currently, I work as a Senior Developer at Applore Technologies, where I build large-scale, real-time applications. One of the main projects I worked on is SharpBuy, which is an AI-based supply chain platform for electronic parts between India and China. It allows buyers and sellers to communicate directly and place bids in real time using Socket.io.
-              <br /> <br />
-              Along with my professional work, I have built a personal project which is an AI-powered operating system with a macOS-like interface. It supports voice commands, has a built-in terminal, and allows users to manage files and applications. It also includes apps like YouTube, Spotify, and a calendar, and most actions can be performed using commands or voice without using the mouse or keyboard
-              <br /> <br />
-              I’ve also worked with Docker to containerize applications and set up CI/CD pipelines to make builds, testing, and deployments faster and more reliable.
-            </div>
+            <ResumeProfilePanel
+              profile={resumeProfile}
+              loading={resumeProfileLoading}
+              onUploaded={setResumeProfile}
+            />
           );
           title = "About Me";
           iconPath = "/icons/folder.png";
@@ -560,7 +654,14 @@ export function Desktop() {
           defaultHeight = 300;
           break;
         case "Projects":
-          component = <ProjectsFolder folderColor="#644AFB" />;
+          component = <ProjectsFolder
+            folderColor={settings.folderColor}
+            folderItems={(resumeProfile?.profile?.projects ?? []).flatMap<{ label: string; value: string; type: "url" | "text" }>((project) =>
+              project.links.length
+                ? project.links.map((link) => ({ label: project.name, value: link, type: "url" as const }))
+                : [{ label: project.name, value: project.description, type: "text" as const }]
+            )}
+          />;
           title = "Projects";
           iconPath = "/icons/folder.png";
           defaultWidth = 550;
@@ -591,18 +692,33 @@ export function Desktop() {
           defaultWidth = 900;
           defaultHeight = 650;
           break;
+        case "Preview":
+          // VS Code preview window - renders HTML content
+          component = <iframe
+            srcDoc={previewContent || '<html><body><p>No content</p></body></html>'}
+            className="w-full h-full border-0 bg-white"
+            title="Preview"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          />;
+          title = previewWindowTitle;
+          iconPath = "/icons/play.png";
+          defaultWidth = 800;
+          defaultHeight = 600;
+          break;
         default:
           console.warn(`Application "${appName}" not found.`);
           return;
       }
 
 
-      const existingWindow = openWindows.find(
-        (win) => win.appName === appName
+      const normalizedAppName = appName.trim().toLocaleLowerCase();
+      const existingWindow = openWindowsRef.current.find(
+        (win) => win.appName.trim().toLocaleLowerCase() === normalizedAppName
       );
 
       // 🆕 Check if window exists (persistent behavior)
       if (existingWindow) {
+        const topZIndex = claimTopZIndex();
         // If window exists but is minimized, restore it to same position
         if (existingWindow.isMinimized) {
           setOpenWindows((prev) =>
@@ -611,22 +727,20 @@ export function Desktop() {
                 ? {
                   ...win,
                   isMinimized: false,
-                  zIndex: nextZIndex
+                  zIndex: topZIndex
                 }
                 : win
             )
           );
-          setNextZIndex((prev) => prev + 1);
         } else {
           // Just bring to front
           setOpenWindows((prev) =>
             prev.map((win) =>
               win.id === existingWindow.id
-                ? { ...win, zIndex: nextZIndex }
+                ? { ...win, zIndex: topZIndex }
                 : win
             )
           );
-          setNextZIndex((prev) => prev + 1);
         }
         
         // 🆕 Update search query for Chrome if passed - create fresh component
@@ -654,11 +768,22 @@ export function Desktop() {
             )
           );
         }
+        if (appName === 'vscode' && arg?.initialFile) {
+          const freshComponent = <Vscode
+            initialFile={arg.initialFile}
+            openPreviewWindow={(html, title) => openPreviewWindowRef.current?.(html, title)}
+          />;
+          setOpenWindows((prev) =>
+            prev.map((win) =>
+              win.id === existingWindow.id ? { ...win, component: freshComponent, title: `VS Code — ${arg.initialFile.name}` } : win
+            )
+          );
+        }
         return;
       }
 
 
-      windowCounter += 1;
+      windowCounterRef.current += 1;
 
       const isAlwaysMax = ['vscode', 'game', 'App Store'].includes(appName)
       
@@ -682,11 +807,9 @@ export function Desktop() {
         windowY = 0; // Top
       }
 
-      const z = ref.current + 100;
-
-      console.log(`prev ${ref.current} - next ${z}`)
+      const z = claimTopZIndex();
       const newWindow: WindowState = {
-        id: `window-${windowCounter}`,
+        id: `window-${windowCounterRef.current}`,
         title,
         icon: iconPath,
         appName: appName,
@@ -701,8 +824,10 @@ export function Desktop() {
         isPanel,
       };
 
+      // Update the ref immediately so rapid clicks cannot launch duplicates
+      // before React commits the state update.
+      openWindowsRef.current = [...openWindowsRef.current, newWindow];
       setOpenWindows((prev) => [...prev, newWindow]);
-      setNextZIndex((prev) => prev + 1);
       
       // 🆕 Store as persistent reference
       persistentWindowRefs.current.set(appName, newWindow);
@@ -710,9 +835,49 @@ export function Desktop() {
     [
       commandToAutoRun,
       browserSearchQuery,
-      browserDirectUrl
+      browserDirectUrl,
+      previewContent,
+      previewWindowTitle,
+      resumeProfile,
+      resumeProfileLoading,
+      settings.folderColor,
+      settings.appLockEnabled,
+      settings.hasAppLockPassword,
+      settings.lockedApps,
     ]
   );
+
+  useEffect(() => {
+    openWindowsRef.current = openWindows
+  }, [openWindows])
+
+  useEffect(() => {
+    if (restoredMinimizedAppsRef.current) return
+    restoredMinimizedAppsRef.current = true
+
+    try {
+      const storedValue = window.localStorage.getItem(MINIMIZED_APPS_STORAGE_KEY)
+      const storedApps = storedValue ? JSON.parse(storedValue) : []
+      if (!Array.isArray(storedApps)) return
+
+      const appNames = [...new Set(storedApps.filter((name): name is string => typeof name === "string"))]
+      appNames.forEach((appName) => openApplication(appName))
+      setOpenWindows((prev) => prev.map((win) => (
+        appNames.includes(win.appName) ? { ...win, isMinimized: true } : win
+      )))
+    } catch (error) {
+      console.warn("Could not restore minimized apps from local storage.", error)
+    }
+  }, [openApplication])
+
+  useEffect(() => {
+    if (!restoredMinimizedAppsRef.current) return
+
+    const minimizedApps = [...new Set(
+      openWindows.filter((win) => win.isMinimized).map((win) => win.appName),
+    )]
+    window.localStorage.setItem(MINIMIZED_APPS_STORAGE_KEY, JSON.stringify(minimizedApps))
+  }, [openWindows])
 
 
 
@@ -722,6 +887,16 @@ export function Desktop() {
     setOpenWindows,
     speak
   );
+
+  useEffect(() => {
+    const handleAppStoreLaunch = (event: Event) => {
+      const appName = (event as CustomEvent<{ name?: string }>).detail?.name
+      if (appName) openApplication(appName)
+    }
+
+    window.addEventListener("smarty:open-app", handleAppStoreLaunch)
+    return () => window.removeEventListener("smarty:open-app", handleAppStoreLaunch)
+  }, [openApplication])
 
 
   useEffect(() => {
@@ -756,13 +931,14 @@ export function Desktop() {
     )
 
     if (!githubUrlItem) return
-    const z = nextZIndex + 1;
+    const z = claimTopZIndex();
 
     // 🚀 CREATE WINDOW WITH IFRAME
     const newWindow: WindowState = {
       id: `github-${repo.name}}`,
       title: repo.name,
       icon: "/icons/vscode.png", // optional
+      appName: `github-${repo.name}`,
 
       component: (
         <div className="w-full overflow-auto h-screen">
@@ -782,11 +958,11 @@ export function Desktop() {
       width: 1000,
       height: 650,
       isMinimized: false,
+      isMaximized: false,
       zIndex: z,
     }
 
     setOpenWindows(prev => [...prev, newWindow])
-    setNextZIndex(prev => prev + 1)
   }
 
 
@@ -826,27 +1002,42 @@ export function Desktop() {
 
   const openFileDetailsWindow = (file: any) => {
     console.log("Project ID:", file.projectId) // ✅ now accessible
-    const z = nextZIndex + 100;
+    const z = claimTopZIndex();
 
     const newWindow: WindowState = {
       id: `file-details-${file.name}-${Date.now()}`,
       title: `File: ${file.name}`,
       icon: "/icons/file.png",
-      component: <FileDetailsViewer file={file} projectId={file.projectId} />,
+      appName: `File Preview: ${file.id}`,
+      component: (
+        <FileDetailsViewer
+          file={file}
+          projectId={file.projectId}
+          onOpenInVSCode={(selectedFile) => openApplication("vscode", 60, 40, undefined, {
+            initialFile: {
+              id: selectedFile.id,
+              name: selectedFile.name,
+              content: selectedFile.content || "",
+              parentId: selectedFile.parentId ?? file.projectId ?? null,
+            },
+          })}
+        />
+      ),
       x: Math.random() * 150 + 100,
       y: Math.random() * 100 + 100,
       width: 700,
       height: 500,
       isMinimized: false,
+      isMaximized: false,
       zIndex: z,
     }
 
     setOpenWindows((prev) => [...prev, newWindow])
-    setNextZIndex((prev) => prev + 1)
   }
 
 
   const closeWindow = (id: string) => {
+    openWindowsRef.current = openWindowsRef.current.filter((win) => win.id !== id);
     setOpenWindows((prev) => prev.filter((win) => win.id !== id));
   };
 
@@ -857,11 +1048,30 @@ export function Desktop() {
   };
 
   const bringToFront = (id: string) => {
+    const topZIndex = claimTopZIndex();
     setOpenWindows((prev) =>
-      prev.map((win) => (win.id === id ? { ...win, zIndex: nextZIndex } : win)),
+      prev.map((win) => (win.id === id ? { ...win, zIndex: topZIndex } : win)),
     );
-    setNextZIndex((prev) => prev + 1);
   };
+
+  // 🆕 Function to open preview window with HTML content
+  const openPreviewWindow = useCallback((htmlContent: string, title: string = 'Preview') => {
+    setPreviewContent(htmlContent)
+    setPreviewWindowTitle(title)
+
+    // Check if preview window is already open
+    const existingPreview = openWindows.find(w => w.appName === 'Preview')
+    if (existingPreview) {
+      // Focus existing window
+      bringToFront(existingPreview.id)
+    } else {
+      // Open new preview window
+      openApplication('Preview', 100, 100)
+    }
+  }, [openWindows, openApplication, bringToFront])
+
+  // Set the ref so it can be used in openApplication
+  openPreviewWindowRef.current = openPreviewWindow
 
 
 
@@ -897,35 +1107,15 @@ export function Desktop() {
 
   // ______________________________________________________________________________________
 
-  // Dock icons using Lucide components
-  const dockAppIcons = [
-    { name: "Finder", icon: <FolderIcon /> }, // Using FolderIcon for Finder
-    { name: "Safari", icon: <SearchIcon /> }, // Using SearchIcon for Safari
-    { name: "Mail", icon: <MailIcon /> },
-    { name: "Messages", icon: <MailIcon /> }, // Using MailIcon for Messages
-    { name: "Maps", icon: <SearchIcon /> }, // Using SearchIcon for Maps
-    { name: "Photos", icon: <CameraIcon /> }, // Camera icon for Photos app
-    { name: "chrome", icon: <CameraIcon /> }, // Camera icon for FaceTime
-    { name: "Calendar", icon: <ListTodoIcon /> }, // Using ListTodoIcon for Calendar
-    { name: "Youtube", icon: <ListTodoIcon /> }, // Using ListTodoIcon for Reminders
-    { name: "Notes", icon: <FileTextIcon /> }, // Using FileTextIcon for Notes
-    { name: "Terminal", icon: <TerminalIcon /> },
-    { name: "App Store", icon: <SearchIcon /> }, // Using SearchIcon for App Store
-    { name: "Settings", icon: <ListTodoIcon /> }, // Using ListTodoIcon for Settings
-    { name: "TV", icon: <SearchIcon /> }, // Using SearchIcon for TV
-    { name: "vscode", icon: <SearchIcon /> },
-    { name: "figma", icon: <SearchIcon /> }, // Using SearchIcon for Music
-    { name: "Spotify", icon: <SearchIcon /> }, // Using SearchIcon for Spotify
-    { name: "Trash", icon: <Trash2Icon /> },
-
-    // { name: "Science Book", icon: <BookIcon /> },
-    // { name: "AI Search", icon: <SearchIcon /> },
-    // { name: "Excel Editor", icon: <TableIcon /> },
-    // { name: "Mail Sender", icon: <MailIcon /> },
-    // { name: "PDF Viewer", icon: <FileTextIcon /> },
-    // { name: "To-Do List", icon: <ListTodoIcon /> },
-    // { name: "Project Explorer", icon: <FolderIcon /> },
-  ];
+  // Finder and App Store stay available; every other Dock app is user-selected.
+  const dockAppIcons = Array.from(new Set([
+    "Finder",
+    ...(settings.pinnedDockApps ?? []),
+    "App Store",
+  ])).flatMap((name) => {
+    const app = getDesktopApp(name)
+    return app ? [{ name: app.name, icon: app.icon }] : []
+  })
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1001,16 +1191,16 @@ export function Desktop() {
 
   return (
     <>
-      <KeyboardProvider
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        onSave={handleSave}
-        onFind={handleFind}
-        onSelectAll={handleSelectAll}
-        onOpenApps={openApplication}
+        <KeyboardProvider
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onSave={handleSave}
+          onFind={handleFind}
+          onSelectAll={handleSelectAll}
+          onOpenApps={openApplication}
 
-      >
-        <TerminalProvider openApplication={openApplication} automationAPI={automationAPI} runCommandInTerminal={runCommandInTerminal}>
+        >
+          <TerminalProvider openApplication={openApplication} automationAPI={automationAPI} runCommandInTerminal={runCommandInTerminal}>
           {/*  */}
 
           {/**/}
@@ -1036,6 +1226,14 @@ export function Desktop() {
 
             }}
           >
+
+            <div
+              aria-hidden="true"
+              className="pointer-events-none fixed inset-0 z-[2147483646] bg-black"
+              style={{
+                opacity: Math.max(0, 1 - Math.min(settings.screenBrightness, settings.automaticBrightness && (new Date().getHours() >= 20 || new Date().getHours() < 7) ? 65 : 100) / 100) * 0.72,
+              }}
+            />
 
 
 
@@ -1119,10 +1317,12 @@ export function Desktop() {
                   />
                 </span>
 
-                <span className="text-gray-400 hidden xs:inline" onClick={() => setShowCursor(prev => !prev)}
+                <span className="text-gray-400 hidden xs:inline" onClick={() => updateSettings({ gestureControl: !settings.gestureControl })}
                 >🖐️</span>
-                <span className="text-gray-400 hidden xs:inline">🔊</span>
-                <span className="text-gray-400 hidden sm:inline">Wi-Fi</span>
+                <span className="text-gray-400 hidden xs:inline" onClick={() => updateSettings({ muted: !settings.muted })} title={settings.muted ? 'Unmute' : `Volume ${settings.soundVolume}%`}>{settings.muted ? '🔇' : '🔊'}</span>
+                <span className="text-gray-400 hidden sm:inline" onClick={() => updateSettings({ wifiEnabled: !settings.wifiEnabled })}>{settings.wifiEnabled ? 'Wi-Fi' : 'Wi-Fi Off'}</span>
+                <span className="text-gray-400 hidden md:inline" onClick={() => updateSettings({ bluetoothEnabled: !settings.bluetoothEnabled })}>{settings.bluetoothEnabled ? 'ᛒ' : 'ᛒ̸'}</span>
+                <span className="text-gray-400 hidden sm:inline" title={batteryLevel === null ? 'Battery API unavailable in this browser' : `Battery ${batteryLevel}%`}>🔋{settings.showBatteryPercentage && batteryLevel !== null ? `${batteryLevel}%` : ''}</span>
 
                 <span
                   className="text-gray-400 hover:text-white transition-colors"
@@ -1133,9 +1333,10 @@ export function Desktop() {
 
                 <span
                   className="text-gray-400 hover:text-white transition-colors"
-                  onClick={() => setHandControlCursor((prev) => !prev)}
+                  onClick={() => updateSettings({ gestureControl: !settings.gestureControl })}
+                  title={settings.gestureControl ? "Turn off Gesture Mode" : "Turn on Gesture Mode"}
                 >
-                  ⌘
+                  {settings.gestureControl ? "⌘●" : "⌘"}
                 </span>
 
                 {/* Always show time */}
@@ -1157,7 +1358,26 @@ export function Desktop() {
 
             {<GestureDock
               automationAPI={automationAPI}
-              visible={showCursor}
+              visible={settings.gestureControl}
+              onAppOperation={(app, operation) => {
+                if (operation === "open") {
+                  openApplication(app.name)
+                  return
+                }
+
+                const target = selectTopmostMatchingWindow(openWindowsRef.current, app.name)
+                if (!target) return
+
+                if (operation === "close") {
+                  closeWindow(target.id)
+                  return
+                }
+                if (operation === "minimize") {
+                  minimizeWindow(target.id)
+                  return
+                }
+                document.getElementById(`${target.id}-maximize`)?.click()
+              }}
             />}
 
 
@@ -1197,7 +1417,17 @@ export function Desktop() {
                 onPositionChange={(x, y) =>
                   updateIconPosition(icon.id, x, y)
                 }
-                onDoubleClick={() => openApplication(icon.name)}
+                onDoubleClick={() => {
+                  if (!icon.finderItem || ["Resume", "About Me", "Projects"].includes(icon.name)) {
+                    openApplication(icon.name)
+                  } else if (icon.finderItem.url) {
+                    window.open(icon.finderItem.url, "_blank", "noopener,noreferrer")
+                  } else if (icon.finderItem.type === "folder") {
+                    openApplication("Finder")
+                  } else {
+                    openFileDetailsWindow(icon.finderItem)
+                  }
+                }}
                 desktopRef={desktopRef}
               />
             ))}
@@ -1227,7 +1457,6 @@ export function Desktop() {
                 desktopRef={desktopRef}
                 folderColor={settings.folderColor}
                 folderItems={icon.folderItems}
-                themeColor={themeColor}
               />
             ))}
 
@@ -1287,6 +1516,7 @@ export function Desktop() {
                     id: win.id,
                     icon: win.icon,
                     title: win.title,
+                    appName: win.appName,
                     isMinimized: true,
                   }))
               ]}

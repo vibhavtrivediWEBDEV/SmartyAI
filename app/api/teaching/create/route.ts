@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/firebase/admin";
 import { teachingCovers } from "@/constants";
+import { getCurrentUser } from "@/lib/actions/auth.action";
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId, subject, topic, difficulty } = await request.json();
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    const { subject, topic, difficulty } = await request.json();
 
-    if (!userId || !subject || !topic) {
+    if (typeof subject !== "string" || !subject.trim() || subject.length > 200 || typeof topic !== "string" || !topic.trim() || topic.length > 300) {
       return NextResponse.json(
         { success: false, error: "Missing required fields" },
         { status: 400 }
@@ -18,7 +21,7 @@ export async function POST(request: NextRequest) {
 
     // Create a new teaching session
     const sessionData = {
-      userId,
+      userId: user.id,
       subject,
       topic,
       difficulty: difficulty || "Intermediate",

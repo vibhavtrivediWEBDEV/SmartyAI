@@ -5,7 +5,7 @@ import { createContext, useContext, type ReactNode } from "react"
 interface TerminalContextType {
   automationAPI: any
   openApplication: (appName: string, initialX?: number, initialY?: number) => void
-  runCommandInTerminal: (command: string, args?: Record<string, any>) => void
+  runCommandInTerminal: (command: string, args?: Record<string, any> | string) => void
 }
 
 const TerminalContext = createContext<TerminalContextType | undefined>(undefined)
@@ -22,7 +22,7 @@ interface TerminalProviderProps {
   children: ReactNode
   automationAPI: any;
   openApplication: (appName: string, initialX?: number, initialY?: number) => void
-  runCommandInTerminal: (command: string, args?: Record<string, any>) => void
+  runCommandInTerminal: (command: string, args?: Record<string, any> | string) => void
 }
 
 export function TerminalProvider({ children, automationAPI, openApplication, runCommandInTerminal }: TerminalProviderProps) {

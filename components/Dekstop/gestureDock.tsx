@@ -2,13 +2,8 @@
 
 /**
  * ╔═══════════════════════════════════════════════════════════════════════════════════╗
- * ║   GestureDock  ·  Vision Pro × Jarvis  ·  MediaPipe Hands + Face  ·  Next.js   ║
+ * ║   GestureDock  ·  Native hand control  ·  MediaPipe Hands  ·  Next.js          ║
  * ╠═══════════════════════════════════════════════════════════════════════════════════╣
- * ║                                                                                   ║
- * ║  EYE BLINK CONTROLS  (MediaPipe FaceMesh — works always, no hand needed)         ║
- * ║  😉 Left  eye blink  → LEFT CLICK  → open  hovered app                           ║
- * ║  😉 Right eye blink  → RIGHT CLICK → close hovered app                           ║
- * ║  Blink detection: EAR < 0.22 for 2-12 frames = intentional blink                 ║
  * ║                                                                                   ║
  * ║  DOCK SHOW / HIDE                                                                 ║
  * ║  ✋ Open palm  (all 4 fingers up, wrist y < 0.50)  → Show dock                   ║
@@ -24,11 +19,11 @@
  * ║  👉 Swipe: wrist Δx >  0.13 over 8 frames  → scroll right                       ║
  * ║                                                                                   ║
  * ║  PINCH OPERATIONS  (dock visible + app hovered OR lastHovered)                   ║
- * ║  👌 Index  + Thumb  dist < 0.07  → OPEN     → "open  [app]"                     ║
- * ║  🤏 Middle + Thumb  dist < 0.07  → CLOSE    → "close [app]"                     ║
- * ║  🤌 Ring   + Thumb  dist < 0.08  → MINIMIZE → "minimize [app]"                  ║
- * ║  🖐 Pinky  + Thumb  dist < 0.08  → MAXIMIZE → "maximize [app]"                  ║
- * ║  Conflict guard: other pairs must be > 0.09 apart                                ║
+ * ║  👌 Index  + Thumb  → OPEN     → "open  [app]"                                  ║
+ * ║  🤏 Middle + Thumb  → CLOSE    → "close [app]"                                  ║
+ * ║  🤌 Ring   + Thumb  → MINIMIZE → "minimize [app]"                               ║
+ * ║  🖐 Pinky  + Thumb  → MAXIMIZE → "maximize [app]"                               ║
+ * ║  Distances are normalized to palm width with conflict/release hysteresis.         ║
  * ║                                                                                   ║
  * ║  REACTIONS  (no dock needed)                                                      ║
  * ║  👍 Thumbs up   👎 Thumbs down   ✌️ Peace   ❤️ Heart   🤙 Shaka   🤟 Rock          ║
@@ -45,13 +40,25 @@
  */
 
 import React, {
-  useEffect, useRef, useState, useCallback, useMemo,
+  useEffect, useRef, useState, useCallback,
 } from "react";
+import {
+  AdaptiveCursorFilter,
+  GestureStateMachine,
+  StickyTargetSelector,
+  classifyPinch,
+  type GestureLandmark,
+  type GesturePhase,
+  type HitRect,
+} from "./gestureEngine";
+import { handsModeScriptUrls, releaseMediaPipeResources } from "./gestureCamera";
 
 // ─── SSR GUARD ────────────────────────────────────────────────────────────────
 const isBrowser = typeof window !== "undefined";
 const vw = () => (isBrowser ? window.innerWidth : 1440);
 const vh = () => (isBrowser ? window.innerHeight : 900);
+const MEDIAPIPE_HANDS_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240";
+const MEDIAPIPE_CAMERA_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862";
 
 // ─── APPS ─────────────────────────────────────────────────────────────────────
 export interface DockApp { id: string; name: string; iconUrl: string; color: string; glow: string; }
@@ -78,7 +85,7 @@ const DOCK_APPS: DockApp[] = [
 ];
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
-interface LM { x: number; y: number; z: number; }
+type LM = GestureLandmark;
 
 type GestureName =
   | "palm_up" | "fist" | "point"
@@ -92,51 +99,42 @@ type AppOperation = "open" | "close" | "minimize" | "maximize";
 // ─── MATH ─────────────────────────────────────────────────────────────────────
 const d2 = (a: LM, b: LM) => Math.hypot(a.x - b.x, a.y - b.y);
 
-// fingertip clearly above MCP knuckle = extended
-const ext = (lm: LM[], tip: number, mcp: number) => lm[tip].y < lm[mcp].y - 0.015;
-const fUp = (lm: LM[], f: 0 | 1 | 2 | 3) => ext(lm, [8, 12, 16, 20][f], [5, 9, 13, 17][f]);
-const nUp = (lm: LM[]) => ([0, 1, 2, 3] as (0 | 1 | 2 | 3)[]).filter(f => fUp(lm, f)).length;
-const thumbL = (lm: LM[]) => lm[4].x < lm[3].x;
-
-// ─── EYE ASPECT RATIO (blink detection) ──────────────────────────────────────
-// EAR = vertical_dist / horizontal_dist. Closed eye → EAR < threshold.
-const earFor = (lm: any[], u: number, lo: number, ci: number, co: number) => {
-  const v = d2(lm[u], lm[lo]);
-  const h = d2(lm[ci], lm[co]);
-  return h > 0 ? v / h : 1;
+// Orientation-independent extension test. Comparing radial distance from the
+// wrist works when a hand is tilted, unlike a screen-y-only test.
+const fUp = (lm: LM[], f: 0 | 1 | 2 | 3) => {
+  const tip = [8, 12, 16, 20][f];
+  const pip = [6, 10, 14, 18][f];
+  return d2(lm[tip], lm[0]) > d2(lm[pip], lm[0]) * 1.12;
 };
-// Left eye:  upper=159, lower=145, inner=33, outer=133
-// Right eye: upper=386, lower=374, inner=362, outer=263
-const EAR_CLOSED = 0.21;   // below this = eye shut
-const BLINK_MIN = 2;       // min frames closed = real blink
-const BLINK_MAX = 14;      // max frames closed (beyond = wink/hold, ignore)
-const BLINK_COOLMS = 380;    // ms between blink fires
+const nUp = (lm: LM[]) => ([0, 1, 2, 3] as (0 | 1 | 2 | 3)[]).filter(f => fUp(lm, f)).length;
+const thumbExtended = (lm: LM[]) => d2(lm[4], lm[0]) > d2(lm[3], lm[0]) * 1.12;
 
 // ─── GESTURE REGISTRY ────────────────────────────────────────────────────────
 interface GDef { name: GestureName; pri: number; ok: (lm: LM[], h: LM[][]) => boolean; }
 
-const GDEFS: GDef[] = [
-  // ── PINCHES: only distance of the relevant pair + other pairs NOT also close ──
-  { name: "pinch_open", pri: 110, ok: (lm) => d2(lm[4], lm[8]) < 0.07 && d2(lm[4], lm[12]) > 0.09 },
-  { name: "pinch_close", pri: 109, ok: (lm) => d2(lm[4], lm[12]) < 0.07 && d2(lm[4], lm[8]) > 0.09 && d2(lm[4], lm[16]) > 0.09 },
-  { name: "pinch_minimize", pri: 108, ok: (lm) => d2(lm[4], lm[16]) < 0.08 && d2(lm[4], lm[8]) > 0.09 && d2(lm[4], lm[12]) > 0.09 && d2(lm[4], lm[20]) > 0.09 },
-  { name: "pinch_maximize", pri: 107, ok: (lm) => d2(lm[4], lm[20]) < 0.08 && d2(lm[4], lm[8]) > 0.09 && d2(lm[4], lm[12]) > 0.09 && d2(lm[4], lm[16]) > 0.09 },
+const GDEFS = ([
+  // An open-hand lateral sweep is intentionally distinct from pointing, so
+  // moving the cursor quickly cannot accidentally change the selected app.
+  { name: "swipe_left", pri: 100, ok: (lm, h) => nUp(lm) >= 3 && h.length >= 8 && (lm[9].x - h[h.length - 8][9].x) < -0.13 },
+  { name: "swipe_right", pri: 99, ok: (lm, h) => nUp(lm) >= 3 && h.length >= 8 && (lm[9].x - h[h.length - 8][9].x) > 0.13 },
   // ── REACTIONS ──
-  { name: "thumbs_up", pri: 95, ok: (lm) => thumbL(lm) && nUp(lm) === 0 && lm[4].y < lm[9].y },
-  { name: "thumbs_down", pri: 94, ok: (lm) => thumbL(lm) && nUp(lm) === 0 && lm[4].y > lm[9].y },
+  { name: "thumbs_up", pri: 95, ok: (lm) => thumbExtended(lm) && nUp(lm) === 0 && lm[4].y < lm[2].y - 0.04 },
+  { name: "thumbs_down", pri: 94, ok: (lm) => thumbExtended(lm) && nUp(lm) === 0 && lm[4].y > lm[2].y + 0.04 },
   { name: "peace", pri: 90, ok: (lm) => fUp(lm, 0) && fUp(lm, 1) && !fUp(lm, 2) && !fUp(lm, 3) && d2(lm[8], lm[12]) > 0.06 },
   { name: "heart", pri: 86, ok: (lm) => fUp(lm, 0) && fUp(lm, 1) && !fUp(lm, 2) && !fUp(lm, 3) && d2(lm[8], lm[12]) < 0.06 },
   { name: "rock", pri: 84, ok: (lm) => fUp(lm, 0) && !fUp(lm, 1) && !fUp(lm, 2) && fUp(lm, 3) },
-  { name: "shaka", pri: 80, ok: (lm) => thumbL(lm) && fUp(lm, 3) && !fUp(lm, 0) && !fUp(lm, 1) && !fUp(lm, 2) },
+  { name: "shaka", pri: 80, ok: (lm) => thumbExtended(lm) && fUp(lm, 3) && !fUp(lm, 0) && !fUp(lm, 1) && !fUp(lm, 2) },
   // ── NAVIGATION ──
   { name: "point", pri: 82, ok: (lm) => fUp(lm, 0) && !fUp(lm, 1) && !fUp(lm, 2) && !fUp(lm, 3) },
-  { name: "palm_up", pri: 72, ok: (lm) => nUp(lm) >= 4 && lm[0].y < 0.50 },
-  { name: "fist", pri: 65, ok: (lm) => nUp(lm) === 0 && !thumbL(lm) },
-  { name: "swipe_left", pri: 55, ok: (lm, h) => h.length >= 8 && (lm[9].x - h[h.length - 8][9].x) < -0.13 },
-  { name: "swipe_right", pri: 55, ok: (lm, h) => h.length >= 8 && (lm[9].x - h[h.length - 8][9].x) > 0.13 },
-].sort((a, b) => b.pri - a.pri);
+  { name: "palm_up", pri: 72, ok: (lm) => nUp(lm) >= 4 && lm[0].y < 0.58 },
+  { name: "fist", pri: 65, ok: (lm) => nUp(lm) === 0 && !thumbExtended(lm) },
+] satisfies GDef[]).sort((a, b) => b.pri - a.pri);
 
-function detect(lm: LM[], hist: LM[][]): GestureName {
+function detectGesture(lm: GestureLandmark[], hist: GestureLandmark[][] = []): GestureName {
+  // Pinch classification computes all four normalized distances once rather
+  // than once per registry entry on every camera frame.
+  const pinch = classifyPinch(lm);
+  if (pinch !== "none") return pinch;
   for (const g of GDEFS) if (g.ok(lm, hist)) return g.name;
   return "none";
 }
@@ -169,17 +167,11 @@ const G_LABEL: Partial<Record<GestureName, string>> = {
 
 const REF_ROWS = [
   {
-    sec: "EYE CONTROLS", rows: [
-      { g: "eye_left", icon: "😉", hand: "Left eye blink", action: "Open app  (left click)", color: "#30D158" },
-      { g: "eye_right", icon: "😉", hand: "Right eye blink", action: "Close app (right click)", color: "#FF453A" },
-    ]
-  },
-  {
     sec: "APP OPERATIONS", rows: [
-      { g: "pinch_open", icon: "👌", hand: "Index+Thumb  close (< 0.07)", action: "OPEN app", color: "#30D158" },
-      { g: "pinch_close", icon: "🤏", hand: "Middle+Thumb close (< 0.07)", action: "CLOSE app", color: "#FF453A" },
-      { g: "pinch_minimize", icon: "🤌", hand: "Ring+Thumb   close (< 0.08)", action: "MINIMIZE app", color: "#FFD60A" },
-      { g: "pinch_maximize", icon: "🖐", hand: "Pinky+Thumb  close (< 0.08)", action: "MAXIMIZE app", color: "#0A84FF" },
+      { g: "pinch_open", icon: "👌", hand: "Index + thumb (palm-normalized)", action: "OPEN app", color: "#30D158" },
+      { g: "pinch_close", icon: "🤏", hand: "Middle + thumb (palm-normalized)", action: "CLOSE app", color: "#FF453A" },
+      { g: "pinch_minimize", icon: "🤌", hand: "Ring + thumb (palm-normalized)", action: "MINIMIZE app", color: "#FFD60A" },
+      { g: "pinch_maximize", icon: "🖐", hand: "Pinky + thumb (palm-normalized)", action: "MAXIMIZE app", color: "#0A84FF" },
     ]
   },
   {
@@ -219,6 +211,7 @@ export interface AutomationAPI { executeTextCommand: (t: string) => Promise<bool
 export interface GestureDockProps {
   visible?: boolean; onAppLaunch?: (a: DockApp) => void;
   accentColor?: string; automationAPI?: AutomationAPI;
+  onAppOperation?: (app: DockApp, operation: AppOperation) => void | Promise<void>;
 }
 
 function AppIcon({ app, size = 60 }: { app: DockApp; size?: number }) {
@@ -231,83 +224,150 @@ function AppIcon({ app, size = 60 }: { app: DockApp; size?: number }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
-export function GestureDock({ visible = true, onAppLaunch, accentColor = "#0A84FF", automationAPI }: GestureDockProps) {
+export function GestureDock({ visible = true, onAppLaunch, accentColor = "#0A84FF", automationAPI, onAppOperation }: GestureDockProps) {
 
   // ── State ───────────────────────────────────────────────────────────────────
   const [dockVisible, setDockVisible] = useState(false);
-  const [scrollOff, setScrollOff] = useState(0);
   const [hovIdx, setHovIdx] = useState<number | null>(null);
   const [opApp, setOpApp] = useState<{ app: DockApp; op: AppOperation } | null>(null);
   const [gesture, setGesture] = useState<GestureName>("none");
   const [particles, setParticles] = useState<Particle[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "active" | "error">("idle");
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [winSize, setWinSize] = useState({ w: vw(), h: vh() });
-  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const [activePinch, setActivePinch] = useState<GestureName>("none");
   const [pendingOp, setPendingOp] = useState<AppOperation | null>(null);
+  const [controlPhase, setControlPhase] = useState<GesturePhase>("IDLE");
   const [ringActive, setRingActive] = useState(false);
   const [ringColor, setRingColor] = useState(accentColor);
   const [handVis, setHandVis] = useState(false);
-  const [blinkL, setBlinkL] = useState(false);  // visual flash only
-  const [blinkR, setBlinkR] = useState(false);
 
   // ── Refs (zero re-render latency) ──────────────────────────────────────────
   const handsRef = useRef<any>(null);
-  const faceRef = useRef<any>(null);
   const camRef = useRef<any>(null);
   const vidRef = useRef<HTMLVideoElement | null>(null);
-  const dockRef = useRef<HTMLDivElement | null>(null);
+  const cursorElementRef = useRef<HTMLDivElement | null>(null);
   const histRef = useRef<LM[][]>([]);
   const lastGRef = useRef<GestureName>("none");
+  const gestureCandidateRef = useRef<{ gesture: GestureName; since: number }>({ gesture: "none", since: 0 });
+  const phaseRef = useRef<GesturePhase>("IDLE");
+  const pendingOpRef = useRef<AppOperation | null>(null);
   const coolRef = useRef(0);
-  const swipeCool = useRef(0);
   const pIdRef = useRef(0);
   const dockVRef = useRef(false);
   const hovRef = useRef<number | null>(null);
   const lastHovRef = useRef<number | null>(null); // survives cursor disappearing during pinch
   const visRef = useRef(visible);
   const winRef = useRef({ w: vw(), h: vh() });
-
-  // blink counters — raw ref, no setState = frame-accurate zero latency
-  const lClosed = useRef(0);
-  const rClosed = useRef(0);
-  const lWasOpen = useRef(true);
-  const rWasOpen = useRef(true);
-  const blinkCool = useRef(0);
+  const cursorRef = useRef<{ x: number; y: number } | null>(null);
+  const handVisRef = useRef(false);
+  const processingRef = useRef(false);
+  const cursorFilterRef = useRef(new AdaptiveCursorFilter());
+  const targetSelectorRef = useRef(new StickyTargetSelector(16));
+  const machineRef = useRef(new GestureStateMachine(180, 110, 180));
+  const dockRectRef = useRef<DOMRect | null>(null);
+  const iconRectsRef = useRef<HitRect[]>([]);
+  const iconIndicesRef = useRef<number[]>([]);
+  const cursorFrameRef = useRef<number | null>(null);
+  const pendingCursorRef = useRef<{ x: number; y: number } | null>(null);
+  const operationRef = useRef(onAppOperation);
+  const launchRef = useRef(onAppLaunch);
+  const dockShownAtRef = useRef(0);
 
   useEffect(() => { dockVRef.current = dockVisible; }, [dockVisible]);
-  useEffect(() => {
-    hovRef.current = hovIdx;
-    if (hovIdx !== null) lastHovRef.current = hovIdx;
-  }, [hovIdx]);
   useEffect(() => { visRef.current = visible; }, [visible]);
+  useEffect(() => { operationRef.current = onAppOperation; }, [onAppOperation]);
+  useEffect(() => { launchRef.current = onAppLaunch; }, [onAppLaunch]);
+  useEffect(() => {
+    localStorage.setItem("smarty-gesture-tracking-mode", "hands");
+  }, []);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("smarty:dock-visibility", { detail: { visible: dockVisible } }));
+    const frame = requestAnimationFrame(refreshDockGeometry);
+    return () => cancelAnimationFrame(frame);
+  }, [dockVisible]);
+
+  useEffect(() => {
+    const dock = document.querySelector<HTMLElement>("[data-smarty-dock='desktop']");
+    if (!dock) return;
+    refreshDockGeometry();
+    const observer = new ResizeObserver(refreshDockGeometry);
+    observer.observe(dock);
+    return () => observer.disconnect();
+  }, [visible]);
 
   useEffect(() => {
     if (!isBrowser) return;
-    const fn = () => { const s = { w: window.innerWidth, h: window.innerHeight }; setWinSize(s); winRef.current = s; };
+    const fn = () => {
+      winRef.current = { w: window.innerWidth, h: window.innerHeight };
+      refreshDockGeometry();
+    };
     window.addEventListener("resize", fn);
     return () => window.removeEventListener("resize", fn);
   }, []);
 
-  // ── Layout ─────────────────────────────────────────────────────────────────
-  const ITEM_W = 88;
-  const DOCK_ZONE = 240; // bottom px where cursor lives
-  const VISIBLE_N = useMemo(() => Math.max(5, Math.floor((winSize.w * 0.90) / ITEM_W)), [winSize.w]);
-  const maxScroll = Math.max(0, DOCK_APPS.length - VISIBLE_N);
-  const visApps = useMemo(() => DOCK_APPS.slice(scrollOff, scrollOff + VISIBLE_N), [scrollOff, VISIBLE_N]);
-
   // ── Helpers ─────────────────────────────────────────────────────────────────
+  function refreshDockGeometry() {
+    const dock = document.querySelector<HTMLElement>("[data-smarty-dock='desktop']");
+    dockRectRef.current = dock?.getBoundingClientRect() ?? null;
+    const items = dock ? Array.from(dock.querySelectorAll<HTMLElement>("[data-smarty-app]")) : [];
+    iconRectsRef.current = items.map((item) => {
+      const rect = item.getBoundingClientRect();
+      return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+    });
+    iconIndicesRef.current = items.map((item) => (
+      DOCK_APPS.findIndex(app => app.name.toLowerCase() === item.dataset.smartyApp?.toLowerCase())
+    ));
+  }
+
   const flashRing = useCallback((color: string, ms = 600) => {
     setRingColor(color); setRingActive(true);
     setTimeout(() => setRingActive(false), ms);
   }, []);
 
-  const execCmd = useCallback(async (cmd: string) => {
-    if (!automationAPI) return;
-    try { await automationAPI.executeTextCommand(cmd); }
-    catch (e) { console.error("[GestureDock]", e); }
-  }, [automationAPI]);
+  const updateHoverTarget = useCallback((index: number | null) => {
+    if (hovRef.current === index) return;
+    hovRef.current = index;
+    if (index !== null) lastHovRef.current = index;
+    setHovIdx(index);
+    window.dispatchEvent(new CustomEvent("smarty:dock-hover", {
+      detail: { appName: index === null ? null : DOCK_APPS[index].name },
+    }));
+  }, []);
+
+  const updateCursor = useCallback((next: { x: number; y: number } | null, timestamp = performance.now()) => {
+    if (!next) {
+      cursorRef.current = null;
+      pendingCursorRef.current = null;
+      cursorFilterRef.current.reset();
+      targetSelectorRef.current.reset();
+      if (cursorElementRef.current) cursorElementRef.current.style.opacity = "0";
+      updateHoverTarget(null);
+      return;
+    }
+    pendingCursorRef.current = next;
+    if (cursorFrameRef.current !== null) return;
+    cursorFrameRef.current = requestAnimationFrame(() => {
+      cursorFrameRef.current = null;
+      const pending = pendingCursorRef.current;
+      const dockRect = dockRectRef.current;
+      if (!pending || !dockRect) return;
+      const normalized = cursorFilterRef.current.filter(pending, timestamp);
+      const isVertical = dockRect.height > dockRect.width;
+      const screenPoint = isVertical
+        ? { x: dockRect.left + dockRect.width * 0.5, y: dockRect.top + normalized.y * dockRect.height }
+        : { x: dockRect.left + normalized.x * dockRect.width, y: dockRect.top + dockRect.height * 0.5 };
+      cursorRef.current = screenPoint;
+      const element = cursorElementRef.current;
+      if (element) {
+        element.style.opacity = "1";
+        element.style.transform = `translate3d(${screenPoint.x}px,${screenPoint.y}px,0) translate(-50%,-50%)`;
+      }
+      const localIndex = targetSelectorRef.current.update(screenPoint, iconRectsRef.current);
+      const appIndex = localIndex === null ? null : iconIndicesRef.current[localIndex];
+      updateHoverTarget(typeof appIndex === "number" && appIndex >= 0 ? appIndex : null);
+    });
+  }, [updateHoverTarget]);
 
   const spawnReaction = useCallback((g: GestureName) => {
     const r = REACTIONS[g]; if (!r) return;
@@ -322,232 +382,194 @@ export function GestureDock({ visible = true, onAppLaunch, accentColor = "#0A84F
   const triggerOp = useCallback((idx: number, op: AppOperation) => {
     const app = DOCK_APPS[idx]; if (!app) return;
     setOpApp({ app, op });
-    onAppLaunch?.(app);
-    flashRing(OP_COLOR[op], 2200);
-    execCmd(`${op} ${app.name}`);
-    setTimeout(() => setOpApp(null), 2200);
-  }, [onAppLaunch, flashRing, execCmd]);
+    flashRing(OP_COLOR[op], 650);
+    // Use exactly one execution path. Calling both callbacks and text
+    // automation was the source of duplicate app windows.
+    if (operationRef.current) void operationRef.current(app, op);
+    else if (op === "open" && launchRef.current) launchRef.current(app);
+    setTimeout(() => setOpApp(null), 700);
+  }, [flashRing]);
 
-  const scrollDock = useCallback((dir: "left" | "right") => {
-    const now = Date.now();
-    if (now - swipeCool.current < 500) return;
-    swipeCool.current = now;
-    setScrollOff(p => Math.max(0, Math.min(maxScroll, p + (dir === "right" ? 2 : -2))));
-  }, [maxScroll]);
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // BLINK PROCESSOR — runs every face frame (~30fps on alternating toggle)
-  // All counters are refs → zero setState latency during counting
-  // setState only fires on confirmed blink completion (eye re-opens)
-  // ─────────────────────────────────────────────────────────────────────────
-  const processBlinks = useCallback((fm: any[]) => {
-    if (!fm || fm.length < 468) return;
-    const now = Date.now();
-
-    const lEAR = earFor(fm, 159, 145, 33, 133);
-    const rEAR = earFor(fm, 386, 374, 362, 263);
-    const lCLOSED = lEAR < EAR_CLOSED;
-    const rCLOSED = rEAR < EAR_CLOSED;
-
-    // ── LEFT EYE ──
-    if (lCLOSED) {
-      lClosed.current++;
-    } else {
-      if (
-        lClosed.current >= BLINK_MIN &&
-        lClosed.current <= BLINK_MAX &&
-        lWasOpen.current &&
-        now - blinkCool.current > BLINK_COOLMS
-      ) {
-        blinkCool.current = now;
-        setBlinkL(true); setTimeout(() => setBlinkL(false), 180);
-        flashRing("#30D158", 450);
-        const idx = lastHovRef.current;
-        if (dockVRef.current && idx !== null) triggerOp(idx, "open");
-      }
-      lClosed.current = 0;
-      lWasOpen.current = true;
-    }
-
-    // ── RIGHT EYE ──
-    if (rCLOSED) {
-      rClosed.current++;
-    } else {
-      if (
-        rClosed.current >= BLINK_MIN &&
-        rClosed.current <= BLINK_MAX &&
-        rWasOpen.current &&
-        now - blinkCool.current > BLINK_COOLMS
-      ) {
-        blinkCool.current = now;
-        setBlinkR(true); setTimeout(() => setBlinkR(false), 180);
-        flashRing("#FF453A", 450);
-        const idx = lastHovRef.current;
-        if (dockVRef.current && idx !== null) triggerOp(idx, "close");
-      }
-      rClosed.current = 0;
-      rWasOpen.current = true;
-    }
-  }, [flashRing, triggerOp]);
+  const shiftTarget = useCallback((dir: "left" | "right") => {
+    const visibleIndices = Array.from(document.querySelectorAll<HTMLElement>("[data-smarty-dock='desktop'] [data-smarty-app]"))
+      .map((item) => DOCK_APPS.findIndex((app) => app.name.toLowerCase() === item.dataset.smartyApp?.toLowerCase()))
+      .filter((index) => index >= 0);
+    if (!visibleIndices.length) return;
+    const current = lastHovRef.current;
+    const currentPosition = current === null ? -1 : visibleIndices.indexOf(current);
+    const nextPosition = Math.max(0, Math.min(visibleIndices.length - 1, currentPosition + (dir === "right" ? 1 : -1)));
+    const next = visibleIndices[nextPosition];
+    updateHoverTarget(next);
+  }, [updateHoverTarget]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // HAND PROCESSOR
   // ─────────────────────────────────────────────────────────────────────────
   const processHand = useCallback((lm: LM[]) => {
     if (!visRef.current) return;
-    const w = winRef.current;
+    const now = performance.now();
 
     histRef.current.push(lm);
     if (histRef.current.length > 32) histRef.current.shift();
 
-    // ── Cursor from palm center lm[9] — NOT finger tip, so never shifts during pinch ──
-    const wy = lm[0].y;
-    if (wy > 0.47 && dockVRef.current) {
-      const cx = (1 - lm[9].x) * w.w;
-      const ny = Math.max(0, Math.min(1, (wy - 0.47) / 0.53));
-      const cy = w.h - DOCK_ZONE + ny * DOCK_ZONE * 0.88;
-      setCursor({ x: Math.max(4, Math.min(w.w - 4, cx)), y: cy });
+    const rawGesture = detectGesture(lm, histRef.current);
+    if (dockVRef.current && dockRectRef.current && (rawGesture === "point" || rawGesture in PINCH_OP)) {
+      updateCursor({
+        x: Math.max(0, Math.min(1, (1 - lm[9].x - 0.08) / 0.84)),
+        y: Math.max(0, Math.min(1, (lm[9].y - 0.12) / 0.76)),
+      }, now);
     } else {
-      setCursor(null);
+      updateCursor(null);
     }
 
-    const g = detect(lm, histRef.current);
-    setGesture(g);
+    const dockIsSettled = Date.now() - dockShownAtRef.current >= 300;
+    const machine = machineRef.current.update(now, true, dockIsSettled ? hovRef.current : null, lm);
+    if (machine.phase !== phaseRef.current) {
+      phaseRef.current = machine.phase;
+      setControlPhase(machine.phase);
+    }
+    if (machine.operation !== pendingOpRef.current) {
+      pendingOpRef.current = machine.operation;
+      setPendingOp(machine.operation);
+      setActivePinch(machine.operation ? rawGesture : "none");
+    }
+    if (machine.lockedTarget !== null && machine.lockedTarget !== hovRef.current) {
+      updateHoverTarget(machine.lockedTarget);
+    }
+    if (machine.commit) triggerOp(machine.commit.target, machine.commit.operation);
 
-    if (g in PINCH_OP) { setActivePinch(g); setPendingOp(PINCH_OP[g] ?? null); }
-    else { setActivePinch("none"); setPendingOp(null); }
-
-    const now = Date.now();
-    if (now < coolRef.current) return;
-
-    const isSw = g === "swipe_left" || g === "swipe_right";
-    const isPi = g in PINCH_OP;
-    if (!isPi && !isSw && g === lastGRef.current) return;
+    if (gestureCandidateRef.current.gesture !== rawGesture) {
+      gestureCandidateRef.current = { gesture: rawGesture, since: now };
+      return;
+    }
+    const stabilityMs = rawGesture === "palm_up" || rawGesture === "fist" ? 150
+      : rawGesture.startsWith("swipe_") ? 70 : 100;
+    if (now - gestureCandidateRef.current.since < stabilityMs || rawGesture === lastGRef.current) return;
+    const g = rawGesture;
     lastGRef.current = g;
+    setGesture(g);
 
     switch (g) {
       case "palm_up":
+        if (!dockVRef.current) dockShownAtRef.current = Date.now();
         setDockVisible(true); flashRing(accentColor, 500);
-        coolRef.current = now + 300; break;
+        coolRef.current = now + 450; break;
 
       case "fist":
-        setDockVisible(false); setCursor(null);
-        coolRef.current = now + 300; break;
+        setDockVisible(false); updateCursor(null);
+        coolRef.current = now + 450; break;
 
       case "swipe_left":
-        if (dockVRef.current) scrollDock("left");
+        if (dockVRef.current) shiftTarget("left");
         coolRef.current = now + 480; break;
 
       case "swipe_right":
-        if (dockVRef.current) scrollDock("right");
+        if (dockVRef.current) shiftTarget("right");
         coolRef.current = now + 480; break;
-
-      case "pinch_open":
-      case "pinch_close":
-      case "pinch_minimize":
-      case "pinch_maximize": {
-        if (dockVRef.current) {
-          const idx = hovRef.current ?? lastHovRef.current;
-          const op = PINCH_OP[g];
-          if (op && idx !== null) { triggerOp(idx, op); coolRef.current = now + 850; }
-        }
-        break;
-      }
 
       default:
         if (REACTIONS[g]) { spawnReaction(g); coolRef.current = now + 1100; }
     }
-  }, [accentColor, scrollDock, triggerOp, spawnReaction, flashRing]);
+  }, [accentColor, shiftTarget, triggerOp, spawnReaction, flashRing, updateCursor, updateHoverTarget]);
 
   // ─────────────────────────────────────────────────────────────────────────
-  // HOVER UPDATE
-  // ─────────────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!cursor || !dockVisible || !dockRef.current) { setHovIdx(null); return; }
-    const r = dockRef.current.getBoundingClientRect();
-    const inX = cursor.x >= r.left - 14 && cursor.x <= r.right + 14;
-    const inY = cursor.y >= r.top - 72 && cursor.y <= r.bottom + 26;
-    if (!inX || !inY) { setHovIdx(null); return; }
-    const raw = Math.floor((cursor.x - r.left) / ITEM_W) + scrollOff;
-    setHovIdx(Math.max(0, Math.min(DOCK_APPS.length - 1, raw)));
-  }, [cursor, dockVisible, scrollOff]);
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // MEDIAPIPE INIT
-  // Hands + FaceMesh share one camera, alternate frames (60fps cam → ~30fps each)
+  // MEDIAPIPE INIT — Hands only. FaceMesh is deliberately absent.
   // ─────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isBrowser || !visible) return;
     let dead = false;
 
+    const stopTracking = () => {
+      releaseMediaPipeResources(camRef.current, handsRef.current, vidRef.current);
+      camRef.current = null;
+      handsRef.current = null;
+      processingRef.current = false;
+      vidRef.current = null;
+      handVisRef.current = false;
+      machineRef.current.reset();
+      cursorFilterRef.current.reset();
+      targetSelectorRef.current.reset();
+      if (cursorFrameRef.current !== null) cancelAnimationFrame(cursorFrameRef.current);
+      cursorFrameRef.current = null;
+      pendingCursorRef.current = null;
+    };
+
     const init = async () => {
       try {
         setStatus("loading");
-        await Promise.all([
-          loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"),
-          loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"),
-          loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"),
-        ]);
+        for (const script of handsModeScriptUrls(MEDIAPIPE_HANDS_URL, MEDIAPIPE_CAMERA_URL)) {
+          await loadScript(script);
+        }
         if (dead) return;
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 640, height: 480, frameRate: { ideal: 60, min: 30 } },
-        });
-        if (dead) { stream.getTracks().forEach(t => t.stop()); return; }
 
         const vid = document.createElement("video");
         vid.style.cssText = "position:fixed;opacity:0;pointer-events:none;width:1px;height:1px;top:0;left:0;z-index:-9999;";
         vid.autoplay = true; vid.playsInline = true; vid.muted = true;
-        vid.srcObject = stream;
         document.body.appendChild(vid);
         vidRef.current = vid;
 
         // Hands
         const hands = new (window as any).Hands({
-          locateFile: (f: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`,
+          locateFile: (f: string) => `${MEDIAPIPE_HANDS_URL}/${f}`,
         });
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.65, minTrackingConfidence: 0.65 });
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.65, minTrackingConfidence: 0.65 });
         hands.onResults((r: any) => {
           if (dead) return;
           if (r.multiHandLandmarks?.length) {
-            setHandVis(true);
+            if (!handVisRef.current) {
+              handVisRef.current = true;
+              setHandVis(true);
+            }
             processHand(r.multiHandLandmarks[0]);
           } else {
-            setHandVis(false);
-            setGesture("none"); setCursor(null);
-            setActivePinch("none"); setPendingOp(null);
+            if (handVisRef.current) {
+              handVisRef.current = false;
+              setHandVis(false);
+              setGesture("none");
+              setActivePinch("none");
+              setPendingOp(null);
+              setControlPhase("IDLE");
+            }
+            machineRef.current.reset();
+            phaseRef.current = "IDLE";
+            pendingOpRef.current = null;
+            updateCursor(null);
           }
         });
         handsRef.current = hands;
 
-        // FaceMesh (refineLandmarks=true gives us accurate eye landmarks)
-        const face = new (window as any).FaceMesh({
-          locateFile: (f: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`,
-        });
-        face.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
-        face.onResults((r: any) => {
-          if (dead) return;
-          if (r.multiFaceLandmarks?.length) processBlinks(r.multiFaceLandmarks[0]);
-        });
-        faceRef.current = face;
-
-        // Alternating frame dispatch: hands on odd frames, face on even
-        let toggle = false;
+        // Never queue stale frames: a camera callback is dropped while the
+        // previous Hands inference is still running.
         const cam = new (window as any).Camera(vid, {
           onFrame: async () => {
-            if (dead) return;
-            toggle = !toggle;
-            if (toggle) { if (handsRef.current) await handsRef.current.send({ image: vid }); }
-            else { if (faceRef.current) await faceRef.current.send({ image: vid }); }
+            if (dead || processingRef.current) return;
+            processingRef.current = true;
+            try {
+              await handsRef.current?.send({ image: vid });
+            } catch (error) {
+              console.error("[GestureDock inference]", error);
+              dead = true;
+              stopTracking();
+              setStatus("error");
+            } finally {
+              processingRef.current = false;
+            }
           },
-          width: 640, height: 480,
+          width: 480, height: 360, fps: 30,
         });
-        await cam.start();
+        // Store the camera before start resolves. If gesture mode is closed
+        // during the permission prompt/startup, cleanup can still stop it.
         camRef.current = cam;
+        await cam.start();
+        if (dead) {
+          stopTracking();
+          return;
+        }
         if (!dead) setStatus("active");
 
       } catch (e) {
         console.error("[GestureDock init]", e);
+        stopTracking();
         if (!dead) setStatus("error");
       }
     };
@@ -555,14 +577,10 @@ export function GestureDock({ visible = true, onAppLaunch, accentColor = "#0A84F
     init();
     return () => {
       dead = true;
-      camRef.current?.stop();
-      if (vidRef.current) {
-        (vidRef.current.srcObject as MediaStream)?.getTracks().forEach(t => t.stop());
-        vidRef.current.remove(); vidRef.current = null;
-      }
-      handsRef.current = null; faceRef.current = null; camRef.current = null;
+      stopTracking();
+      window.dispatchEvent(new CustomEvent("smarty:dock-hover", { detail: { appName: null } }));
     };
-  }, [visible, processHand, processBlinks]);
+  }, [visible, processHand, updateCursor]);
 
   if (!visible) return null;
 
@@ -603,8 +621,8 @@ export function GestureDock({ visible = true, onAppLaunch, accentColor = "#0A84F
       </div>
 
       {/* ── DOCK CURSOR ──────────────────────────────────────────────────── */}
-      {cursor && dockVisible && (
-        <div className="fixed pointer-events-none" style={{ left: cursor.x, top: cursor.y, zIndex: 2147483628, transform: "translate(-50%,-50%)", willChange: "left,top" }}>
+      {dockVisible && (
+        <div ref={cursorElementRef} className="fixed pointer-events-none" style={{ left: 0, top: 0, zIndex: 2147483628, opacity: 0, transform: "translate3d(0,0,0) translate(-50%,-50%)", willChange: "transform", transition: "opacity 100ms ease" }}>
           {pendingOp && <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 70, height: 70, borderRadius: "50%", border: `1.5px solid ${pColor}55`, boxShadow: `0 0 24px ${pColor}33`, animation: "gdOpH 0.9s ease-in-out infinite alternate" }} />}
           <div style={{
             width: isPinching ? 18 : 46, height: isPinching ? 18 : 46,
@@ -621,7 +639,7 @@ export function GestureDock({ visible = true, onAppLaunch, accentColor = "#0A84F
             <div style={{ position: "absolute", inset: -14, borderRadius: "50%", border: `2px solid ${pColor}`, animation: "gdBurst 0.5s ease-out forwards" }} />
             <div style={{ position: "absolute", inset: -14, borderRadius: "50%", border: `1px solid ${pColor}88`, animation: "gdBurst 0.5s 0.14s ease-out forwards" }} />
           </>}
-          {pendingOp && hovApp && (
+          {pendingOp && hovApp && controlPhase === "GESTURE_ARMED" && (
             <div style={{ position: "absolute", top: -34, left: "50%", transform: "translateX(-50%)", background: `${OP_COLOR[pendingOp]}22`, border: `1px solid ${OP_COLOR[pendingOp]}66`, borderRadius: 100, padding: "3px 10px", fontSize: 9, fontWeight: 800, letterSpacing: "1.5px", color: OP_COLOR[pendingOp], whiteSpace: "nowrap", fontFamily: "'SF Pro Text',monospace", textTransform: "uppercase" }}>
               {OP_ICON[pendingOp]} {OP_LABEL[pendingOp]}
             </div>
@@ -629,66 +647,13 @@ export function GestureDock({ visible = true, onAppLaunch, accentColor = "#0A84F
         </div>
       )}
 
-      {/* ── DOCK ────────────────────────────────────────────────────────── */}
-      <div className="fixed pointer-events-none" style={{
-        bottom: dockVisible ? 22 : -280, left: "50%", transform: "translateX(-50%)",
-        zIndex: 2147483625,
-        transition: "bottom 0.62s cubic-bezier(0.34,1.56,0.64,1)",
-        willChange: "bottom",
-      }}>
-        {scrollOff > 0 && <div style={{ position: "absolute", left: -54, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.38)", fontSize: 22, animation: "gdArr 1.6s ease-in-out infinite" }}>◂</div>}
-        {scrollOff < maxScroll && <div style={{ position: "absolute", right: -54, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.38)", fontSize: 22, animation: "gdArr 1.6s ease-in-out infinite" }}>▸</div>}
-
-        <div ref={dockRef} style={{
-          display: "flex", alignItems: "flex-end", gap: 4,
-          background: "rgba(12,12,18,0.80)",
-          backdropFilter: "blur(90px) saturate(260%)",
-          WebkitBackdropFilter: "blur(90px) saturate(260%)",
-          borderRadius: 30, padding: "14px 16px 12px",
-          border: "1px solid rgba(255,255,255,0.10)",
-          boxShadow: ["0 0 0 0.5px rgba(255,255,255,0.04)", "inset 0 1px 0 rgba(255,255,255,0.08)", "0 32px 100px rgba(0,0,0,0.84)", hovApp ? `0 0 90px ${hovApp.glow}` : ""].filter(Boolean).join(","),
-          transition: "box-shadow 0.32s ease",
-        }}>
-          {visApps.map((app, i) => {
-            const ai = scrollOff + i;
-            const hot = hovIdx === ai;
-            const dd = hovIdx !== null ? Math.abs(hovIdx - ai) : 99;
-            const sc = hot ? 1.68 : dd === 1 ? 1.28 : dd === 2 ? 1.1 : 1;
-            const ty = hot ? -20 : dd === 1 ? -8 : dd === 2 ? -3 : 0;
-            return (
-              <div key={app.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, transform: `scale(${sc}) translateY(${ty}px)`, transformOrigin: "bottom center", transition: "transform 0.20s cubic-bezier(0.34,1.56,0.64,1)", width: ITEM_W - 4 }}>
-                {/* Tooltip */}
-                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.3px", color: "rgba(255,255,255,0.95)", fontFamily: "'SF Pro Text',-apple-system,sans-serif", background: "rgba(0,0,0,0.90)", borderRadius: 9, padding: "5px 10px", opacity: hot ? 1 : 0, transform: hot ? "translateY(0)" : "translateY(6px)", transition: "opacity 0.13s,transform 0.13s", whiteSpace: "nowrap", boxShadow: "0 4px 18px rgba(0,0,0,0.65)", pointerEvents: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                  <span>{app.name}</span>
-                  {pendingOp && <span style={{ fontSize: 8, color: OP_COLOR[pendingOp], letterSpacing: "1.5px", textTransform: "uppercase" }}>{OP_ICON[pendingOp]} {OP_LABEL[pendingOp]}</span>}
-                </div>
-                {/* Icon */}
-                <div style={{ width: 62, height: 62, borderRadius: 16, background: hot ? `radial-gradient(circle at 38% 30%,${app.color}28,rgba(18,18,26,0.96))` : "rgba(26,26,34,0.86)", border: hot ? `1px solid ${app.color}88` : "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: hot ? `0 0 0 3px ${app.color}1e,0 14px 44px ${app.glow},inset 0 1px 0 rgba(255,255,255,0.09)` : "0 6px 24px rgba(0,0,0,0.52),inset 0 1px 0 rgba(255,255,255,0.04)", transition: "all 0.20s cubic-bezier(0.34,1.56,0.64,1)", position: "relative", overflow: "hidden" }}>
-                  {hot && <div style={{ position: "absolute", inset: 0, background: `linear-gradient(135deg,${app.color}18 0%,transparent 55%)`, borderRadius: "inherit" }} />}
-                  <AppIcon app={app} size={62} />
-                </div>
-                {/* Dot */}
-                <div style={{ width: 4, height: 4, borderRadius: "50%", background: hot ? app.color : "rgba(255,255,255,0.15)", boxShadow: hot ? `0 0 8px ${app.color},0 0 22px ${app.color}66` : "none", transition: "background 0.18s,box-shadow 0.18s" }} />
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
       {/* ── OPERATION OVERLAY ─────────────────────────────────────────────── */}
       {opApp && (
-        <div className="fixed inset-0 pointer-events-none flex items-center justify-center" style={{ zIndex: 2147483626 }}>
-          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", animation: "gdFadeIn 0.18s ease" }} />
-          <div style={{ position: "relative", background: "rgba(8,8,14,0.98)", backdropFilter: "blur(80px) saturate(220%)", WebkitBackdropFilter: "blur(80px) saturate(220%)", border: `1px solid ${OP_COLOR[opApp.op]}28`, borderRadius: 48, padding: "48px 80px 44px", textAlign: "center", boxShadow: ["0 0 0 1px rgba(255,255,255,0.04)", `0 0 140px ${opApp.app.glow}`, "0 60px 120px rgba(0,0,0,0.85)"].join(","), animation: "gdCard 2.2s cubic-bezier(0.16,1,0.3,1) forwards" }}>
-            <div style={{ position: "absolute", top: "50%", left: "50%", width: 180, height: 180, transform: "translate(-50%,-74%)", borderRadius: "50%", border: `1px solid ${opApp.app.color}44`, animation: "gdRot 2.2s linear infinite" }} />
-            <div style={{ position: "absolute", top: 22, right: 28, background: `${OP_COLOR[opApp.op]}22`, border: `1px solid ${OP_COLOR[opApp.op]}66`, borderRadius: 100, padding: "4px 12px", fontSize: 9, fontWeight: 800, letterSpacing: "2px", color: OP_COLOR[opApp.op], textTransform: "uppercase", fontFamily: "'SF Pro Text',monospace" }}>{OP_ICON[opApp.op]} {OP_LABEL[opApp.op]}</div>
-            <div style={{ width: 104, height: 104, borderRadius: 28, background: `radial-gradient(circle at 38% 30%,${opApp.app.color}28,rgba(8,8,14,0.95))`, border: `1px solid ${opApp.app.color}55`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 22px", boxShadow: `0 0 70px ${opApp.app.glow},inset 0 1px 0 rgba(255,255,255,0.07)`, animation: "gdIconB 0.7s cubic-bezier(0.34,1.56,0.64,1)", position: "relative", zIndex: 1 }}>
-              <AppIcon app={opApp.app} size={104} />
-            </div>
-            <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: "-0.5px", color: "rgba(255,255,255,0.95)", fontFamily: "'SF Pro Display',-apple-system,sans-serif", position: "relative", zIndex: 1 }}>{opApp.app.name}</div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: OP_COLOR[opApp.op], marginTop: 8, position: "relative", zIndex: 1, letterSpacing: "0.5px" }}>{OP_LABEL[opApp.op]}ing…</div>
-            <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 18, position: "relative", zIndex: 1 }}>
-              {[0, 0.22, 0.44].map((d, i) => <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: OP_COLOR[opApp.op], boxShadow: `0 0 12px ${OP_COLOR[opApp.op]}`, animation: `gdDB 0.9s ${d}s ease-in-out infinite alternate` }} />)}
+        <div className="fixed pointer-events-none" style={{ zIndex: 2147483626, top: 72, left: "50%", transform: "translateX(-50%)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(28,28,30,.88)", backdropFilter: "blur(24px) saturate(180%)", WebkitBackdropFilter: "blur(24px) saturate(180%)", border: "1px solid rgba(255,255,255,.16)", borderRadius: 16, padding: "9px 14px", boxShadow: "0 12px 36px rgba(0,0,0,.35)", animation: "gdCommit 650ms ease forwards" }}>
+            <AppIcon app={opApp.app} size={36} />
+            <div style={{ font: "600 12px 'SF Pro Text',-apple-system,sans-serif", color: "rgba(255,255,255,.92)" }}>
+              {OP_LABEL[opApp.op]} · {opApp.app.name}
             </div>
           </div>
         </div>
@@ -709,17 +674,14 @@ export function GestureDock({ visible = true, onAppLaunch, accentColor = "#0A84F
         </div>
       )}
 
-      {/* ── STATUS BAR top-left  (hand + blink indicators) ───────────────── */}
+      {/* ── STATUS BAR top-left  (mode + tracking indicators) ────────────── */}
       {status === "active" && (
-        <div className="fixed pointer-events-none" style={{ top: 22, left: 22, zIndex: 2147483620, display: "flex", alignItems: "center", gap: 8, background: "rgba(6,6,10,0.90)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 100, padding: "7px 14px" }}>
+        <div className="fixed" style={{ top: 22, left: 22, zIndex: 2147483620, display: "flex", alignItems: "center", gap: 8, background: "rgba(6,6,10,0.90)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 100, padding: "6px 8px 6px 12px" }}>
           {/* Hand dot */}
           <div style={{ width: 7, height: 7, borderRadius: "50%", background: handVis ? "#30D158" : "rgba(255,255,255,0.18)", boxShadow: handVis ? "0 0 10px #30D158,0 0 20px #30D15888" : "none", transition: "background 0.18s,box-shadow 0.18s" }} />
           <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", color: handVis ? "rgba(48,209,88,0.9)" : "rgba(255,255,255,0.25)", fontFamily: "monospace", transition: "color 0.18s" }}>{handVis ? "Hand" : "–"}</span>
           <div style={{ width: 1, height: 14, background: "rgba(255,255,255,0.10)" }} />
-          {/* Left eye */}
-          <div style={{ width: 30, height: 18, borderRadius: 9, border: `1.5px solid ${blinkL ? "#30D158" : "rgba(255,255,255,0.12)"}`, background: blinkL ? "#30D15822" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.07s ease", boxShadow: blinkL ? "0 0 12px #30D15888" : "none", fontSize: 9, fontWeight: 800, color: blinkL ? "#30D158" : "rgba(255,255,255,0.25)", fontFamily: "monospace" }}>L</div>
-          {/* Right eye */}
-          <div style={{ width: 30, height: 18, borderRadius: 9, border: `1.5px solid ${blinkR ? "#FF453A" : "rgba(255,255,255,0.12)"}`, background: blinkR ? "#FF453A22" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.07s ease", boxShadow: blinkR ? "0 0 12px #FF453A88" : "none", fontSize: 9, fontWeight: 800, color: blinkR ? "#FF453A" : "rgba(255,255,255,0.25)", fontFamily: "monospace" }}>R</div>
+          <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: ".7px", color: controlPhase === "TARGET_LOCKED" ? "#5AC8FA" : "rgba(255,255,255,.45)" }}>{controlPhase.replace("_", " ")}</span>
         </div>
       )}
 
@@ -735,7 +697,7 @@ export function GestureDock({ visible = true, onAppLaunch, accentColor = "#0A84F
                 <div key={sec.sec}>
                   <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: "2.5px", color: "rgba(255,255,255,0.22)", padding: "8px 8px 6px", textTransform: "uppercase", fontFamily: "monospace" }}>{sec.sec}</div>
                   {sec.rows.map(row => {
-                    const active = row.g === "eye_left" ? blinkL : row.g === "eye_right" ? blinkR : gesture === row.g;
+                    const active = gesture === row.g;
                     return (
                       <div key={row.g} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 9px", borderRadius: 11, marginBottom: 2, background: active ? `${row.color}1a` : "transparent", transition: "background 0.10s" }}>
                         <span style={{ fontSize: 17, minWidth: 24 }}>{row.icon}</span>
@@ -758,7 +720,7 @@ export function GestureDock({ visible = true, onAppLaunch, accentColor = "#0A84F
       {status === "loading" && (
         <div className="fixed pointer-events-none" style={{ bottom: 26, left: "50%", transform: "translateX(-50%)", zIndex: 2147483645, background: "rgba(8,8,12,0.98)", backdropFilter: "blur(32px)", WebkitBackdropFilter: "blur(32px)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 100, padding: "13px 30px", fontFamily: "'SF Pro Text',-apple-system,sans-serif", fontSize: 11, fontWeight: 800, letterSpacing: "2.5px", textTransform: "uppercase", color: "rgba(255,255,255,0.55)", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 12px 48px rgba(0,0,0,0.65)" }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: accentColor, boxShadow: `0 0 14px ${accentColor}`, animation: "gdDB 0.9s ease-in-out infinite alternate" }} />
-          Initialising Hand + Eye Tracking
+          Initialising Hand Tracking
         </div>
       )}
       {status === "error" && (
@@ -784,6 +746,8 @@ export function GestureDock({ visible = true, onAppLaunch, accentColor = "#0A84F
         @keyframes gdFadeIn { from{opacity:0}                                                    to{opacity:1} }
         @keyframes gdSlide  { from{opacity:0;transform:translateY(-12px) scale(.86)}             to{opacity:1;transform:translateY(0) scale(1)} }
         @keyframes gdOpH    { from{opacity:.28;transform:translate(-50%,-50%) scale(.9)}         to{opacity:.7;transform:translate(-50%,-50%) scale(1.07)} }
+        @keyframes gdCommit { 0%{opacity:0;transform:translateY(-8px) scale(.96)} 20%,75%{opacity:1;transform:none} 100%{opacity:0;transform:translateY(-4px)} }
+        @media (prefers-reduced-motion: reduce) { [class*="fixed"] { animation-duration: 1ms !important; transition-duration: 1ms !important; } }
       `}</style>
     </>
   );

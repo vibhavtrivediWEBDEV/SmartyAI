@@ -2,11 +2,11 @@
 
 import { useState } from "react"
 import SmartyAIAgent from "@/components/SmartyAIAgent"
+import type { LessonContext } from "@/modules/teaching/lesson.schema"
 
 export default function SmartyAIPage() {
   const [userName] = useState("Student")
-  const [userId] = useState("user123")
-  const [subject, setSubject] = useState("")
+  const [context, setContext] = useState<LessonContext>({ subject: "Physics", topic: "", board: "NCERT/CBSE", book: "", chapter: "", language: "English", difficulty: "Intermediate", interests: [] })
 
   return (
     <div className="container mx-auto p-4">
@@ -17,11 +17,10 @@ export default function SmartyAIPage() {
           Subject Area (Optional)
         </label>
         <select
-          value={subject}
-          onChange={(e) => setSubject(e.target.value)}
+          value={context.subject}
+          onChange={(e) => setContext((current) => ({ ...current, subject: e.target.value as LessonContext["subject"] }))}
           className="w-full md:w-1/3 p-2 border rounded-md"
         >
-          <option value="">Any Subject</option>
           <option value="Physics">Physics</option>
           <option value="Chemistry">Chemistry</option>
           <option value="Mathematics">Mathematics</option>
@@ -34,8 +33,8 @@ export default function SmartyAIPage() {
       
       <SmartyAIAgent
         userName={userName}
-        userId={userId}
-        subject={subject}
+        context={context}
+        onContextChange={setContext}
       />
     </div>
   )

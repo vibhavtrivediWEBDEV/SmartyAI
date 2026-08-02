@@ -3,18 +3,12 @@
 import { z } from "zod";
 import Link from "next/link";
 import { toast } from "sonner";
-import { auth } from "@/firebase/client";
 import { useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { Eye, EyeOff, Mail, Lock, User, ArrowRight, Check } from "lucide-react";
-
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-} from "firebase/auth";
+import { Eye, EyeOff, Mail, Lock, User, ArrowRight, Check, FileUp } from "lucide-react";
 
 import { Form } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
@@ -34,6 +28,7 @@ const AuthForm = ({ type }: { type: FormType }) => {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [resume, setResume] = useState<File | null>(null);
 
   const formSchema = authFormSchema(type);
   const form = useForm<z.infer<typeof formSchema>>({
@@ -49,16 +44,12 @@ const AuthForm = ({ type }: { type: FormType }) => {
     setIsLoading(true);
     try {
       if (type === "sign-up") {
+        if (!resume) {
+          toast.error("Please upload your resume as a PDF.");
+          return;
+        }
         const { name, email, password } = data;
-
-        const userCredential = await createUserWithEmailAndPassword(
-          auth,
-          email,
-          password
-        );
-
         const result = await signUp({
-          uid: userCredential.user.uid,
           name: name!,
           email,
           password,
@@ -70,41 +61,38 @@ const AuthForm = ({ type }: { type: FormType }) => {
           return;
         }
 
-        // Set auth cookie for middleware
-        const idToken = await userCredential.user.getIdToken();
-        document.cookie = `auth-token=${idToken}; path=/; max-age=604800; SameSite=Lax`;
-
-        toast.success("Account created successfully!");
-        router.push("/desktop");
-      } else {
-        const { email, password } = data;
-
-        const userCredential = await signInWithEmailAndPassword(
-          auth,
-          email,
-          password
-        );
-
-        const idToken = await userCredential.user.getIdToken();
-        if (!idToken) {
-          toast.error("Sign in Failed. Please try again.");
-          setIsLoading(false);
+        const resumeForm = new FormData();
+        resumeForm.append("resume", resume);
+        const resumeResponse = await fetch("/api/profile/resume", {
+          method: "POST",
+          body: resumeForm,
+        });
+        if (!resumeResponse.ok) {
+          const body = await resumeResponse.json().catch(() => null);
+          toast.error(body?.error ?? "Account created, but the resume could not be processed.");
+          router.push("/desktop");
+          router.refresh();
           return;
         }
 
-        // Set auth cookie for middleware
-        document.cookie = `auth-token=${idToken}; path=/; max-age=604800; SameSite=Lax`;
-        
-        await signIn({
-          email,
-          idToken,
-        });
+        toast.success("Account created and resume profile generated!");
+        router.push("/desktop");
+        router.refresh();
+      } else {
+        const { email, password } = data;
+
+        const result = await signIn({ email, password });
+        if (!result.success) {
+          toast.error(result.message);
+          return;
+        }
 
         toast.success("Signed in successfully.");
         
         // Check if there's a redirect URL
         const redirectUrl = new URLSearchParams(window.location.search).get("redirect");
         router.push(redirectUrl || "/desktop");
+        router.refresh();
       }
     } catch (error) {
       console.log(error);
@@ -123,7 +111,7 @@ const AuthForm = ({ type }: { type: FormType }) => {
   ];
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center relative overflow-hidden">
+    <div className="min-h-screen bg-black flex items-center justify-center relative overflow-x-hidden overflow-y-auto py-8">
       {/* Background Effects */}
       <div className="absolute inset-0">
         <motion.div
@@ -281,6 +269,39 @@ const AuthForm = ({ type }: { type: FormType }) => {
                     <p className="text-red-400 text-sm mt-1">{form.formState.errors.password.message}</p>
                   )}
                 </div>
+
+                {!isSignIn && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Resume (PDF)
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-white/20 bg-black/50 px-4 py-4 text-gray-300 transition-colors hover:border-blue-500">
+                      <FileUp className="h-5 w-5 shrink-0 text-blue-400" />
+                      <span className="min-w-0 flex-1 truncate text-sm">
+                        {resume?.name ?? "Choose your resume (maximum 5 MB)"}
+                      </span>
+                      <input
+                        type="file"
+                        accept="application/pdf,.pdf"
+                        required
+                        className="sr-only"
+                        onChange={(event) => {
+                          const selected = event.target.files?.[0] ?? null;
+                          if (selected && selected.size > 5 * 1024 * 1024) {
+                            toast.error("Resume must be 5 MB or smaller.");
+                            event.target.value = "";
+                            setResume(null);
+                            return;
+                          }
+                          setResume(selected);
+                        }}
+                      />
+                    </label>
+                    <p className="mt-1 text-xs text-gray-500">
+                      AI will extract your experience and create your private About section.
+                    </p>
+                  </div>
+                )}
 
                 {isSignIn && (
                   <div className="flex items-center justify-between">

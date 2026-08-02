@@ -2,10 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { vapi } from "@/lib/vapi.sdk";
 import { interviewer } from "@/constants";
-import { createFeedback } from "@/lib/actions/general.action";
+import { createFeedback, reviewCodeSubmission } from "@/lib/actions/general.action";
 import { Question, QuestionHandler } from "@/lib/services/QuestionHandler";
 import { useTerminal } from "@/app/context/terminalContext";
-import { createAIService } from "@/lib/ai";
 import { useElevenTTS } from "./ElevenLabs";
 
 export enum CallStatus {
@@ -67,11 +66,10 @@ export function useCallManager({
 
   const { runCommandInTerminal } = useTerminal();
 
-  // Ref to track if the component is mounted
-  const isMounted = useRef(true);
   const recognitionRef = useRef<any>(null);
   const messagesHistory = useRef<{role: "user" | "assistant", content: string}[]>([]);
   const isProcessing = useRef(false);
+  const currentQuestionIndexRef = useRef(0);
 
   // 🎯 Detect which pipeline to use based on USE_AI_PROVIDER
   useEffect(() => {
@@ -84,7 +82,6 @@ export function useCallManager({
   // Clean up on unmount
   useEffect(() => {
     return () => {
-      isMounted.current = false;
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
@@ -105,9 +102,10 @@ export function useCallManager({
       keepAliveInterval = setInterval(() => {
         console.log("Keeping connection alive during coding/review");
         // Send a ping to keep the connection alive
-        if (vapi && typeof vapi.ping === "function") {
+        const vapiWithPing = vapi as typeof vapi & { ping?: () => void };
+        if (typeof vapiWithPing.ping === "function") {
           try {
-            vapi.ping();
+            vapiWithPing.ping();
           } catch (error) {
             console.log("Error pinging vapi:", error);
           }
@@ -127,9 +125,10 @@ export function useCallManager({
     if (currentQuestionIndex < processedQuestions.length - 1) {
       const nextIndex = currentQuestionIndex + 1;
       setCurrentQuestionIndex(nextIndex);
+      currentQuestionIndexRef.current = nextIndex;
 
       // Add a transition message to the next question
-      const transitionMessage = {
+      const transitionMessage: SavedMessage = {
         role: "assistant",
         content: `Let's move on to the next question: ${processedQuestions[nextIndex].text}`,
       };
@@ -156,7 +155,7 @@ export function useCallManager({
       // Add greeting message when call starts
       if (!hasGreeted) {
         setTimeout(() => {
-          const greetingMessage = {
+          const greetingMessage: SavedMessage = {
             role: "assistant",
             content: `Hello ${userName}! Welcome to this interview session. I'll be asking you a series of questions. Take your time to think and respond. Let's begin with the first question.`,
           };
@@ -192,11 +191,6 @@ export function useCallManager({
         // If the message is from the user, store it and prepare for review
         if (message.role === "user") {
           setLastUserAnswer(message.transcript);
-
-          // Don't add automatic thank you - wait for proper review
-          if (!isReviewingAnswer && isCoding) {
-            reviewRegularAnswer(message.transcript);
-          }
         }
 
         // If the message is from the AI and contains a code request, show the editor
@@ -233,7 +227,7 @@ export function useCallManager({
       console.log("Error:", error);
 
       // Add an error message to the transcript
-      const errorMessage = {
+      const errorMessage: SavedMessage = {
         role: "system",
         content: "There was a technical issue. Please try speaking again or refresh the page if the problem persists.",
       };
@@ -349,6 +343,10 @@ export function useCallManager({
       // Ask first question
       if (processedQuestions.length > 0) {
         const firstQuestion = processedQuestions[0].text;
+        if (processedQuestions[0].type === "coding") {
+          setCurrentCodingQuestion(firstQuestion);
+          toggleCodeEditor(true);
+        }
         const questionMessage = { role: "assistant" as const, content: firstQuestion };
         setMessages(prev => [...prev, questionMessage]);
         await speakResponse(firstQuestion);
@@ -373,32 +371,59 @@ export function useCallManager({
           setMessages(prev => [...prev, userMessage]);
           setLastUserAnswer(transcript);
           
-          // Get AI response
-          const aiService = createAIService();
-          const systemPrompt = `You are an AI interviewer conducting a ${type === 'generate' ? 'technical' : 'behavioral'} interview. 
-          
-Current question: ${processedQuestions[currentQuestionIndex]?.text || 'N/A'}
-
-Respond naturally and concisely. Acknowledge the candidate's response and either:
-1. Ask a follow-up question for clarification
-2. Provide brief feedback and ask if they want to move to the next question`;
-
+          const questionIndex = currentQuestionIndexRef.current;
+          const currentQuestion = processedQuestions[questionIndex]?.text;
+          const nextQuestion = processedQuestions[questionIndex + 1]?.text;
           messagesHistory.current.push({ role: "user", content: transcript });
           
           try {
-            const response = await aiService.chat([
-              { role: "system", content: systemPrompt },
-              ...messagesHistory.current.slice(-6)
-            ]);
-            
-            const aiResponse = response.content || "Thank you for your answer. Would you like to move to the next question?";
+            const response = await fetch("/api/interview/respond", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                answer: transcript,
+                currentQuestion,
+                nextQuestion,
+                history: messagesHistory.current.slice(-6),
+              }),
+            });
+            const body = await response.json();
+            if (!response.ok) throw new Error(body.error || "Interview response failed");
+
+            const aiResponse = body.response || (nextQuestion
+              ? `Thank you for your answer. Let's continue: ${nextQuestion}`
+              : "Thank you for your answer. That completes the interview questions.");
             
             messagesHistory.current.push({ role: "assistant", content: aiResponse });
             const assistantMessage = { role: "assistant" as const, content: aiResponse };
             setMessages(prev => [...prev, assistantMessage]);
             await speakResponse(aiResponse);
+
+            if (nextQuestion) {
+              const nextIndex = questionIndex + 1;
+              currentQuestionIndexRef.current = nextIndex;
+              setCurrentQuestionIndex(nextIndex);
+              if (processedQuestions[nextIndex].type === "coding") {
+                setCurrentCodingQuestion(nextQuestion);
+                toggleCodeEditor(true);
+              }
+            }
           } catch (error) {
-            console.error("GLM response error:", error);
+            console.error("Interview response error:", error);
+            const fallback = nextQuestion
+              ? `Thank you for your answer. Let's continue with the next question: ${nextQuestion}`
+              : "Thank you for your answer. That completes the interview questions.";
+            setMessages(prev => [...prev, { role: "assistant", content: fallback }]);
+            await speakResponse(fallback);
+            if (nextQuestion) {
+              const nextIndex = questionIndex + 1;
+              currentQuestionIndexRef.current = nextIndex;
+              setCurrentQuestionIndex(nextIndex);
+              if (processedQuestions[nextIndex].type === "coding") {
+                setCurrentCodingQuestion(nextQuestion);
+                toggleCodeEditor(true);
+              }
+            }
           }
           
           isProcessing.current = false;
@@ -409,7 +434,7 @@ Respond naturally and concisely. Acknowledge the candidate's response and either
     } catch (error) {
       console.error("Custom interview error:", error);
       // Fallback to Vapi
-      useCustomPipeline && setUseCustomPipeline(false);
+      if (useCustomPipeline) setUseCustomPipeline(false);
     }
   };
 
@@ -456,89 +481,48 @@ Respond naturally and concisely. Acknowledge the candidate's response and either
     }
   };
 
-  // Function to review a regular (non-code) answer
-  const reviewRegularAnswer = (answer: string) => {
-    setIsReviewingAnswer(true);
-
-    // Add a message indicating the AI is reviewing the answer
-    setTimeout(() => {
-      const reviewMessage = {
-        role: "assistant",
-        content: `Thank you for your answer. That's a thoughtful response. I appreciate how you explained your thinking process. Would you like to elaborate further, or shall we move to the next question?`,
-      };
-
-      if (isMounted.current) {
-        setMessages((prev) => [...prev, reviewMessage]);
-        setLastMessage(reviewMessage.content);
-        setIsReviewingAnswer(false);
-        setIsWaitingForResponse(true);
-      }
-    }, 1500);
-  };
-
-  // Function to simulate AI reviewing the code
-  const simulateCodeReview = async (code: string) => {
-    setIsReviewingAnswer(true);
-
-    // Add a message indicating the AI is reviewing the code
-    const reviewingMessage = {
-      role: "assistant",
-      content: "I'm reviewing your code submission now...",
-    };
-    setMessages((prev) => [...prev, reviewingMessage]);
-
-    // Wait a moment to simulate processing
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    // Add a detailed review message
-    const reviewMessage = {
-      role: "assistant",
-      content: `Thank you for your code submission. Here's my review:
-      
-Your solution is well-structured and addresses the core requirements of the problem. I particularly like how you've approached the algorithm.
-
-Some feedback:
-1. Your code is clean and readable
-2. The logic flow is clear and easy to follow
-3. You've handled edge cases appropriately
-
-Is there anything specific about your solution you'd like me to explain or discuss further?`,
-    };
-
-    if (isMounted.current) {
-      setMessages((prev) => [...prev, reviewMessage]);
-      setLastMessage(reviewMessage.content);
-      setIsReviewingAnswer(false);
-      setIsWaitingForResponse(true);
-    }
-  };
-
   // Handle code submission
-  const handleCodeSubmit = async (code: string) => {
+  const handleCodeSubmit = async (code: string, language: string) => {
     // Create a message with the code
-    const codeMessage = { role: "user", content: `\`\`\`\n${code}\n\`\`\`` };
+    const codeMessage: SavedMessage = { role: "user", content: `\`\`\`\n${code}\n\`\`\`` };
     setMessages((prev) => [...prev, codeMessage]);
     setLastUserAnswer(code);
 
     // Update coding states
     setIsCoding(false);
     toggleCodeEditor(false);
+    setIsReviewingAnswer(true);
 
     try {
       // Add a thank you message for code submission
-      const responseMessage = {
+      const responseMessage: SavedMessage = {
         role: "assistant",
         content: "Thank you for submitting your code. I'll review your solution now.",
       };
       setMessages((prev) => [...prev, responseMessage]);
 
-      // Simulate AI reviewing the code
-      await simulateCodeReview(code);
+      if (!interviewId || !currentCodingQuestion) throw new Error("Coding question context is missing");
+      const result = await reviewCodeSubmission({
+        interviewId,
+        question: currentCodingQuestion,
+        code,
+        language,
+      });
+      if (!result.success || !result.review) throw new Error(result.message || "Code review failed");
+
+      const reviewMessage = {
+        role: "assistant" as const,
+        content: `Code review · ${result.review.score}/100\n\n${result.review.summary}\n\nStrengths: ${result.review.strengths.join("; ") || "Keep iterating."}\nImprovements: ${result.review.improvements.join("; ") || "No major issue identified."}\nComplexity: ${result.review.complexity || "Not determined."}`,
+      };
+      setMessages((prev) => [...prev, reviewMessage]);
+      setLastMessage(reviewMessage.content);
+      setIsWaitingForResponse(true);
+      setIsReviewingAnswer(false);
     } catch (error) {
       console.error("Error handling code submission:", error);
 
       // If there's an error, make sure we don't leave the user hanging
-      const errorMessage = {
+      const errorMessage: SavedMessage = {
         role: "assistant",
         content: "I apologize for the technical difficulty. Let's continue with our discussion.",
       };

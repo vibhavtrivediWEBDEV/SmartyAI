@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/firebase/admin";
+import { getCurrentUser } from "@/lib/actions/auth.action";
 
 export async function POST(request: NextRequest) {
   try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     const { sessionId, summary, duration } = await request.json();
 
     if (!sessionId || !summary) {
@@ -12,8 +15,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update the teaching session with summary data
-    await db.collection("teachingSessions").doc(sessionId).update({
+    const sessionRef = db.collection("teachingSessions").doc(sessionId);
+    const session = await sessionRef.get();
+    if (!session.exists || session.data()?.userId !== user.id) return NextResponse.json({ success: false, error: "Teaching session not found" }, { status: 404 });
+    await sessionRef.update({
       summary,
       duration: duration || 0,
       completed: true,
@@ -35,6 +40,8 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     const url = new URL(request.url);
     const sessionId = url.searchParams.get("sessionId");
 
@@ -47,7 +54,7 @@ export async function GET(request: NextRequest) {
 
     const sessionDoc = await db.collection("teachingSessions").doc(sessionId).get();
     
-    if (!sessionDoc.exists) {
+    if (!sessionDoc.exists || sessionDoc.data()?.userId !== user.id) {
       return NextResponse.json(
         { success: false, error: "Teaching session not found" },
         { status: 404 }

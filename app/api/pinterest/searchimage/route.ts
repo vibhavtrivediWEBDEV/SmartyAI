@@ -1,7 +1,11 @@
 import axios from "axios";
+import { getCurrentUser } from "@/lib/actions/auth.action";
 
-async function fetchPinterestData(query: any, priceMin: any, priceMax: any, nextToken: any) {
-    const encodedQuery = encodeURIComponent(query);
+async function fetchPinterestData(query: any, priceMin: any, priceMax: any, nextToken: any, mode?: string) {
+    const hdQuery = mode === "education"
+        ? `${String(query).trim()} educational diagram labeled high resolution`
+        : `${String(query).trim()} mac wallpaper 4K UHD 3840x2160`;
+    const encodedQuery = encodeURIComponent(hdQuery);
 
     // Construct the data payload
     const data = {
@@ -79,16 +83,33 @@ async function fetchPinterestData(query: any, priceMin: any, priceMax: any, next
 
 export async function POST(request: Request) {
     try {
-        const { search, bookmark = null, priceMin = 1000, priceMax = 1000 } = await request.json();
+        const user = await getCurrentUser();
+        if (!user) return Response.json({ success: false, error: "Unauthorized" }, { status: 401 });
+        const { search, bookmark = null, priceMin = 1000, priceMax = 1000, mode } = await request.json();
         
-        if (!search) {
+        if (typeof search !== "string" || !search.trim() || search.length > 500) {
             return Response.json({ success: false, error: "Search query is required" }, { status: 400 });
         }
         
-        const result = await fetchPinterestData(search, priceMin, priceMax, bookmark);
+        const result = await fetchPinterestData(search, priceMin, priceMax, bookmark, mode);
         
-        // Extract image URLs from the response
-        const filteredData = result.data.resource_response.data.results.map((item: any) => item.images["474x"].url);
+        const pins = result.data?.resource_response?.data?.results ?? [];
+        const originals = pins.flatMap((item: any) => {
+            const image = item.images?.orig ?? item.images?.originals ?? item.images?.["736x"] ?? item.images?.["474x"];
+            if (!image?.url) return [];
+            const url = image.url.replace(/\/\d+x\//, "/originals/");
+            return [{ url, width: Number(image.width) || 0, height: Number(image.height) || 0 }];
+        });
+        const hdLandscape = originals.filter((image: { width: number; height: number }) =>
+            mode === "education"
+                ? image.width >= 600 && image.height >= 600
+                : image.width >= 1280 && image.height >= 720 && image.width > image.height
+        );
+        const filteredData = hdLandscape
+            .filter((image: { url: string }, index: number, images: Array<{ url: string }>) =>
+                images.findIndex((candidate) => candidate.url === image.url) === index
+            )
+            .slice(0, 24);
         const nextBookmark = result.data.resource_response.bookmark;
         
         return Response.json({ 

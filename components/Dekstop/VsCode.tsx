@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { FileText, Folder, Plus, X, Play, ChevronRight, ChevronDown, Code, Terminal, Menu, ChevronLeft } from 'lucide-react'
+import { FileText, Folder, Plus, X, Play, ChevronRight, ChevronDown, Code, Terminal, Menu, ChevronLeft, Save } from 'lucide-react'
 import Editor from '@monaco-editor/react'
 import { useCursorAutomation } from '@/hooks/useCursorAutomation'
 import { getLanguageFromExtension, getFileIconColor } from '@/lib/utils/language'
@@ -15,6 +15,15 @@ interface CodeFile {
   name: string
   content: string
   folderId?: string
+  finderParentId?: string | null
+  source?: 'finder'
+}
+
+export interface FinderCodeFile {
+  id: string
+  name: string
+  content?: string
+  parentId?: string | null
 }
 
 interface FolderItem {
@@ -46,7 +55,6 @@ const MAX_SIDEBAR_WIDTH = 500
 const DEFAULT_SIDEBAR_WIDTH = 256
 
 const MIN_EDITOR_WIDTH = 200
-const MIN_PREVIEW_WIDTH = 200
 
 const MIN_CONSOLE_HEIGHT = 80
 const MAX_CONSOLE_HEIGHT = 500
@@ -78,14 +86,18 @@ const addConsoleLog = (
   }])
 }
 
-export default function VSCodeEditor() {
+interface VSCodeProps {
+  openPreviewWindow?: (htmlContent: string, title?: string) => void
+  initialFile?: FinderCodeFile
+}
+
+export default function VSCodeEditor({ openPreviewWindow, initialFile }: VSCodeProps) {
   const automationAPI = useCursorAutomation(() => { })
 
   // ============ STATE ============
   const [files, setFiles] = useState<CodeFile[]>([])
   const [folders, setFolders] = useState<FolderItem[]>([])
   const [activeFileId, setActiveFileId] = useState('1')
-  const [showPreview, setShowPreview] = useState(true)
   const [showConsole, setShowConsole] = useState(true)
   const [consoleLogs, setConsoleLogs] = useState<ConsoleLog[]>([])
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
@@ -94,23 +106,24 @@ export default function VSCodeEditor() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
 
   // Panel sizes
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
-  const [editorPreviewSplit, setEditorPreviewSplit] = useState(50) // percentage
+
   const [consoleHeight, setConsoleHeight] = useState(DEFAULT_CONSOLE_HEIGHT)
 
   // Dragging state
   const [isDraggingSidebar, setIsDraggingSidebar] = useState(false)
-  const [isDraggingEditorSplit, setIsDraggingEditorSplit] = useState(false)
   const [isDraggingConsole, setIsDraggingConsole] = useState(false)
+  const [previewContent, setPreviewContent] = useState<string>('')
 
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const consoleEndRef = useRef<HTMLDivElement>(null)
   const consoleIdRef = useRef<number>(0)
   const containerRef = useRef<HTMLDivElement>(null)
-
+  
   const activeFile = files.find(f => f.id === activeFileId)
 
   // ============ DRAG HANDLERS ============
@@ -119,16 +132,6 @@ export default function VSCodeEditor() {
     const newWidth = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, e.clientX))
     setSidebarWidth(newWidth)
   }, [isDraggingSidebar])
-
-  const handleEditorSplitDrag = useCallback((e: MouseEvent) => {
-    if (!isDraggingEditorSplit || !containerRef.current) return
-    const containerRect = containerRef.current.getBoundingClientRect()
-    const sidebarOffset = sidebarCollapsed ? 0 : sidebarWidth
-    const editorWidth = e.clientX - containerRect.left - sidebarOffset
-    const contentWidth = containerRect.width - sidebarOffset
-    const percentage = (editorWidth / contentWidth) * 100
-    setEditorPreviewSplit(Math.min(80, Math.max(20, percentage)))
-  }, [isDraggingEditorSplit, sidebarCollapsed, sidebarWidth])
 
   const handleConsoleDrag = useCallback((e: MouseEvent) => {
     if (!isDraggingConsole || !containerRef.current) return
@@ -140,18 +143,16 @@ export default function VSCodeEditor() {
 
   const stopDragging = useCallback(() => {
     setIsDraggingSidebar(false)
-    setIsDraggingEditorSplit(false)
     setIsDraggingConsole(false)
   }, [])
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isDraggingSidebar) handleSidebarDrag(e)
-      else if (isDraggingEditorSplit) handleEditorSplitDrag(e)
       else if (isDraggingConsole) handleConsoleDrag(e)
     }
 
-    if (isDraggingSidebar || isDraggingEditorSplit || isDraggingConsole) {
+    if (isDraggingSidebar || isDraggingConsole) {
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', stopDragging)
       document.body.style.cursor = 'ew-resize'
@@ -161,17 +162,17 @@ export default function VSCodeEditor() {
     return () => {
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', stopDragging)
-      if (!isDraggingSidebar && !isDraggingEditorSplit && !isDraggingConsole) {
+      if (!isDraggingSidebar && !isDraggingConsole) {
         document.body.style.cursor = ''
         document.body.style.userSelect = ''
       }
     }
-  }, [isDraggingSidebar, isDraggingEditorSplit, isDraggingConsole, handleSidebarDrag, handleEditorSplitDrag, handleConsoleDrag, stopDragging])
+  }, [isDraggingSidebar, isDraggingConsole, handleSidebarDrag, handleConsoleDrag, stopDragging])
 
   // ============ LOCALSTORAGE HELPERS ============
   const saveToLocalStorage = (files: CodeFile[], folders: FolderItem[]) => {
     try {
-      localStorage.setItem('vscode-files-v2', JSON.stringify(files))
+      localStorage.setItem('vscode-files-v2', JSON.stringify(files.filter(file => file.source !== 'finder')))
       localStorage.setItem('vscode-folders', JSON.stringify(folders))
       localStorage.setItem('vscode-activeFileId', activeFileId)
       localStorage.setItem('vscode-sidebarWidth', sidebarWidth.toString())
@@ -226,6 +227,43 @@ export default function VSCodeEditor() {
     loadFromLocalStorage()
   }, [])
 
+  useEffect(() => {
+    if (!initialFile) return
+    let active = true
+    const incoming: CodeFile = {
+      id: initialFile.id,
+      name: initialFile.name,
+      content: initialFile.content ?? '',
+      finderParentId: initialFile.parentId ?? null,
+      source: 'finder',
+    }
+    setFiles(previous => [...previous.filter(file => file.id !== incoming.id), incoming])
+    setActiveFileId(incoming.id)
+    setHasUnsavedChanges(false)
+
+    fetch('/api/Projects')
+      .then(response => response.json())
+      .then(result => {
+        if (!active || !Array.isArray(result.data)) return
+        const siblings: CodeFile[] = result.data
+          .filter((item: any) => item.parentId === initialFile.parentId && item.id !== initialFile.id && typeof item.content === 'string')
+          .map((item: any): CodeFile => ({
+            id: item.id,
+            name: item.name,
+            content: item.content,
+            finderParentId: item.parentId,
+            source: 'finder',
+          }))
+        setFiles(previous => {
+          const siblingIds = new Set(siblings.map((file: CodeFile) => file.id))
+          return [...previous.filter(file => !siblingIds.has(file.id)), ...siblings]
+        })
+      })
+      .catch(() => undefined)
+
+    return () => { active = false }
+  }, [initialFile?.id, initialFile?.name, initialFile?.content, initialFile?.parentId])
+
   // ============ AUTO-SAVE TO LOCALSTORAGE ============
   useEffect(() => {
     if (files.length > 0) {
@@ -244,6 +282,43 @@ export default function VSCodeEditor() {
     setFiles(files.map(f => (f.id === id ? { ...f, content } : f)))
     setHasUnsavedChanges(true)
   }
+
+  const saveActiveFile = useCallback(async () => {
+    if (!activeFile) return
+    setIsSaving(true)
+    try {
+      if (activeFile.source === 'finder') {
+        const response = await fetch(`/api/Projects/${activeFile.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: activeFile.name, content: activeFile.content }),
+        })
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.error || 'Save failed')
+        addConsoleLog(setConsoleLogs, consoleIdRef, 'log', `Saved ${activeFile.name} to Finder`)
+      } else {
+        saveToLocalStorage(files, folders)
+        addConsoleLog(setConsoleLogs, consoleIdRef, 'log', `Saved ${activeFile.name} locally`)
+      }
+      setHasUnsavedChanges(false)
+    } catch (error) {
+      addConsoleLog(setConsoleLogs, consoleIdRef, 'error', error instanceof Error ? error.message : 'Save failed')
+      setShowConsole(true)
+    } finally {
+      setIsSaving(false)
+    }
+  }, [activeFile, files, folders])
+
+  useEffect(() => {
+    const handleSaveShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault()
+        void saveActiveFile()
+      }
+    }
+    window.addEventListener('keydown', handleSaveShortcut)
+    return () => window.removeEventListener('keydown', handleSaveShortcut)
+  }, [saveActiveFile])
 
   const deleteFile = (id: string) => {
     const newFiles = files.filter(f => f.id !== id)
@@ -343,6 +418,21 @@ export default function VSCodeEditor() {
     return bundled
   }
 
+  // Open preview in desktop window
+  const openPreviewInWindow = (htmlContent: string) => {
+    if (openPreviewWindow) {
+      // Use Desktop's window system
+      openPreviewWindow(htmlContent, `Preview - ${activeFile?.name || 'Output'}`)
+    } else {
+      // Fallback: Open in new browser window
+      const newWindow = window.open('', '_blank', 'width=800,height=600')
+      if (newWindow) {
+        newWindow.document.write(htmlContent)
+        newWindow.document.close()
+      }
+    }
+  }
+  
   const handleRun = async () => {
     if (!activeFile) return
     
@@ -497,7 +587,9 @@ const root = ReactDOM.createRoot(rootElement);
 </html>
     `
     
-    iframeRef.current.srcdoc = html
+    // Open/update preview window
+    openPreviewInWindow(html)
+    
     setHasUnsavedChanges(false)
   }
   
@@ -511,7 +603,12 @@ const root = ReactDOM.createRoot(rootElement);
       }
       return String(arg)
     }).join(' ')
-    window.parent.postMessage({ type, message, time: new Date().toLocaleTimeString() }, '*')
+    // Send to parent window (main VS Code window)
+    if (window.opener) {
+      window.opener.postMessage({ type, message, time: new Date().toLocaleTimeString() }, '*')
+    } else {
+      window.parent.postMessage({ type, message, time: new Date().toLocaleTimeString() }, '*')
+    }
   }
   const methods = ['log','error','warn','info']
   methods.forEach(method => {
@@ -519,15 +616,23 @@ const root = ReactDOM.createRoot(rootElement);
     console[method] = (...args) => { send(method, args); original(...args) }
   })
   window.addEventListener('error', (e) => {
-    window.parent.postMessage({ type: 'error', message: e.message, time: new Date().toLocaleTimeString() }, '*')
+    const errorMsg = e.message || 'Unknown error'
+    if (window.opener) {
+      window.opener.postMessage({ type: 'error', message: errorMsg, time: new Date().toLocaleTimeString() }, '*')
+    } else {
+      window.parent.postMessage({ type: 'error', message: errorMsg, time: new Date().toLocaleTimeString() }, '*')
+    }
   })
 })()
 </script>`
   }
 
   const generatePreview = () => {
-    if (!iframeRef.current) return
-    iframeRef.current.srcdoc = bundleCode()
+    const html = bundleCode()
+    
+    // Open/update preview window
+    openPreviewInWindow(html)
+    
     setConsoleLogs([])
     setHasUnsavedChanges(false)
   }
@@ -580,19 +685,22 @@ const root = ReactDOM.createRoot(rootElement);
 
         <div className="flex gap-2 ml-auto">
           <button
+            onClick={() => void saveActiveFile()}
+            disabled={!activeFile || isSaving}
+            className="bg-[#3a3a3d] hover:bg-[#4a4a4e] disabled:opacity-40 text-white px-2 sm:px-3 py-1 rounded text-xs flex items-center gap-1 sm:gap-2 transition-colors"
+          >
+            <Save size={12} />
+            <span className="hidden sm:inline">Save</span>
+            {hasUnsavedChanges && <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />}
+          </button>
+          <button
             onClick={() => setShowConsole(!showConsole)}
             className={`${showConsole ? 'bg-[#1177bb]' : 'bg-[#0e639c]'} hover:bg-[#1177bb] text-white px-2 sm:px-3 py-1 rounded text-xs flex items-center gap-1 sm:gap-2 transition-colors`}
           >
             <Terminal size={12} />
             <span className="hidden sm:inline">{showConsole ? 'Hide' : 'Show'} Console</span>
           </button>
-          <button
-            onClick={() => setShowPreview(!showPreview)}
-            className={`${showPreview ? 'bg-[#1177bb]' : 'bg-[#0e639c]'} hover:bg-[#1177bb] text-white px-2 sm:px-3 py-1 rounded text-xs flex items-center gap-1 sm:gap-2 transition-colors`}
-          >
-            <Play size={12} />
-            <span className="hidden sm:inline">{showPreview ? 'Hide' : 'Show'} Preview</span>
-          </button>
+
           <button
             onClick={handleRun}
             disabled={isRunning}
@@ -797,9 +905,9 @@ const root = ReactDOM.createRoot(rootElement);
 
           {/* Editor + Preview Container */}
           <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0" style={{ height: showConsole ? `calc(100% - ${consoleHeight}px)` : '100%' }}>
-            {/* Monaco Editor */}
+            {/* Monaco Editor - Full width since preview is in separate window */}
             <div
-              style={{ width: showPreview ? `${editorPreviewSplit}%` : '100%' }}
+              style={{ width: '100%' }}
               className="flex flex-col overflow-hidden min-w-0 h-full"
             >
               {activeFile && (
@@ -809,6 +917,27 @@ const root = ReactDOM.createRoot(rootElement);
                   value={activeFile.content}
                   onChange={(value) => updateFile(activeFile.id, value || '')}
                   theme="vs-dark"
+                  beforeMount={(monaco) => {
+                    // Configure Monaco for JSX/TSX syntax highlighting
+                    // JSX and TSX will use JavaScript/TypeScript syntax automatically
+                    console.log('✅ Monaco Editor ready with JSX/TSX support');
+                  }}
+                  onMount={(editor, monaco) => {
+                    // Enable JSX/TSX specific features
+                    const model = editor.getModel();
+                    if (model) {
+                      const languageId = model.getLanguageId();
+                      console.log('📝 Monaco Editor loaded with language:', languageId);
+                      
+                      // For JSX/TSX files, ensure proper syntax highlighting
+                      if (languageId === 'javascript' || languageId === 'typescript') {
+                        const fileName = activeFile.name.toLowerCase();
+                        if (fileName.endsWith('.jsx') || fileName.endsWith('.tsx')) {
+                          console.log('✅ JSX/TSX syntax highlighting enabled');
+                        }
+                      }
+                    }
+                  }}
                   options={{
                     minimap: { enabled: window.innerWidth > 768 },
                     fontSize: window.innerWidth < 640 ? 12 : 14,
@@ -839,40 +968,16 @@ const root = ReactDOM.createRoot(rootElement);
               )}
             </div>
 
-            {/* Editor/Preview Split Resize Handle */}
-            {showPreview && (
-              <div
-                className="w-1 bg-transparent hover:bg-[#007acc] cursor-ew-resize flex-shrink-0 transition-colors"
-                onMouseDown={(e) => {
-                  e.preventDefault()
-                  setIsDraggingEditorSplit(true)
-                }}
-              />
-            )}
 
-            {/* Live Preview */}
-            {showPreview && (
-              <div
-                style={{ width: `${100 - editorPreviewSplit}%` }}
-                className="border-t lg:border-t-0 lg:border-l border-[#2d2d30] bg-white overflow-hidden flex flex-col h-full"
-              >
-                <div className="h-8 bg-[#252526] border-b border-[#2d2d30] px-3 flex items-center justify-between flex-shrink-0">
-                  <span className="text-xs text-[#cccccc]">Live Preview</span>
-                  <button
-                    onClick={() => setShowPreview(false)}
-                    className="text-[#858585] hover:text-[#cccccc] transition-colors"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-                <iframe
-                  ref={iframeRef}
-                  sandbox="allow-scripts allow-same-origin"
-                  className="flex-1 w-full h-full bg-white"
-                  title="Preview"
-                />
-              </div>
-            )}
+
+            {/* Preview is now in separate window - auto-opens on Run */}
+            {/* Hidden iframe for console message handling */}
+            <iframe
+              ref={iframeRef}
+              sandbox="allow-scripts allow-same-origin"
+              className="hidden"
+              title="Preview Bridge"
+            />
           </div>
 
           {/* Console Resize Handle */}

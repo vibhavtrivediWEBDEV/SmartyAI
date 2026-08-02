@@ -15,10 +15,7 @@ interface ProjectsFolderProps {
 }
 
 export function ProjectsFolder({ folderItems = [], folderColor = '#644AFB' }: ProjectsFolderProps) {
-  const projects = folderItems.length > 0 ? folderItems : [
-    { label: 'SmartyAI', value: 'https://github.com/smarty-ai', type: 'url' as const },
-    { label: 'aiFlow', value: 'https://github.com/aiflow', type: 'url' as const },
-  ]
+  const projects = folderItems
 
   const handleItemClick = (item: ProjectItem) => {
     if (item.type === 'url') {
@@ -70,9 +67,13 @@ export function ProjectsFolder({ folderItems = [], folderColor = '#644AFB' }: Pr
             {/* Project Name */}
             <h3 className="font-semibold text-lg mb-1">{project.label}</h3>
 
+            {project.type === 'text' && project.value && (
+              <p className="mb-2 line-clamp-3 text-xs leading-5 text-gray-300">{project.value}</p>
+            )}
+
             {/* Project Type Badge */}
             <div className="inline-block px-2 py-1 rounded-md text-xs bg-white/10 text-gray-300">
-              {project.type === 'url' ? 'GitHub Repository' : 'Text'}
+              {project.type === 'url' ? 'Open Project' : 'Resume Project'}
             </div>
 
             {/* Hover Effect Overlay */}

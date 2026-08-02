@@ -5,8 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, Sparkles, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
-import { auth } from "@/firebase/client";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import { signOut } from "@/lib/actions/auth.action";
 
 const navItems = [
   { label: "Features", href: "#features" },
@@ -23,11 +22,15 @@ export default function Navigation() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setIsAuthenticated(!!user);
-    });
+    let active = true;
+    fetch("/api/auth/session")
+      .then((response) => response.json())
+      .then((session) => active && setIsAuthenticated(Boolean(session.authenticated)))
+      .catch(() => active && setIsAuthenticated(false));
 
-    return () => unsubscribe();
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -41,10 +44,10 @@ export default function Navigation() {
 
   const handleSignOut = async () => {
     try {
-      await signOut(auth);
-      document.cookie = "auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT";
+      await signOut();
       setIsAuthenticated(false);
       router.push("/sign-in");
+      router.refresh();
     } catch (error) {
       console.error("Sign out error:", error);
     }

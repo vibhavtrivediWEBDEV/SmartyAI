@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { BackgroundGradientAnimation } from "./GradientBg";
 import GridGlobe from "./GridGlobe";
 
-import { animationData } from "@/data/confetti.json"
+import animationData from "@/data/confetti.json"
 import MagicButton from "../MagicButton";
 import Image from "next/image";
 import dynamic from "next/dynamic";

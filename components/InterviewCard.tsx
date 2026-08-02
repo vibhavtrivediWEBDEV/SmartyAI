@@ -1,13 +1,8 @@
 "use client"; // make this client if you want to handle interactions
 
 import dayjs from "dayjs";
-import Link from "next/link";
-import Image from "next/image";
-
-import { Button } from "./ui/button";
-import { cn, getRandomInterviewCover } from "@/lib/utils";
-import AsyncImageFromDescription from "@/app/components/terminal/asyncImageDesc";
 import { useTerminal } from "@/app/context/terminalContext";
+import { ArrowRight, CalendarDays, CheckCircle2, Clock3, Code2, MessageCircle, RotateCcw, Sparkles, Star } from "lucide-react";
 
 
 
@@ -38,88 +33,56 @@ export default function InterviewCard({
 
   const { runCommandInTerminal } = useTerminal();
 
-  const badgeColor =
+  const typeStyle =
     {
-      Behavioral: "bg-light-400",
-      Mixed: "bg-light-600",
-      Technical: "bg-light-800",
-    }[normalizedType] || "bg-light-600";
+      Behavioral: { icon: MessageCircle, color: "from-[#ff9f0a] to-[#ff6b00]", tint: "bg-[#ff9f0a]/15 text-[#ffb340]" },
+      Mixed: { icon: Sparkles, color: "from-[#5e5ce6] to-[#bf5af2]", tint: "bg-[#bf5af2]/15 text-[#d48aff]" },
+      Technical: { icon: Code2, color: "from-[#0a84ff] to-[#32ade6]", tint: "bg-[#0a84ff]/15 text-[#64d2ff]" },
+    }[normalizedType] || { icon: Sparkles, color: "from-[#5e5ce6] to-[#bf5af2]", tint: "bg-[#bf5af2]/15 text-[#d48aff]" };
+  const TypeIcon = typeStyle.icon;
 
   const formattedDate = dayjs(
     feedback?.createdAt || createdAt || Date.now()
   ).format("MMM D, YYYY");
 
   return (
-    <div className="card-border w-[360px] max-sm:w-full min-h-96">
-      <div className="card-interview flex flex-col justify-between h-full">
-        {/* Header */}
-        <div>
-          <div
-            className={cn(
-              "absolute top-0 right-0 w-fit px-4 py-2 rounded-bl-lg",
-              badgeColor
-            )}
-          >
-            <p className="badge-text">{normalizedType}</p>
-          </div>
+    <article className="group flex min-h-[340px] w-full flex-col overflow-hidden rounded-[22px] border border-white/10 bg-white/[.07] shadow-[0_18px_45px_rgba(0,0,0,.2)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-white/20 hover:bg-white/[.1] hover:shadow-[0_24px_60px_rgba(0,0,0,.3)]">
+      <div className={`h-1.5 bg-gradient-to-r ${typeStyle.color}`} />
+      <div className="flex flex-1 flex-col p-5">
+        <div className="flex items-start justify-between gap-3">
+          <span className={`flex size-11 items-center justify-center rounded-[14px] bg-gradient-to-br ${typeStyle.color} text-white shadow-lg`}><TypeIcon className="size-5" /></span>
+          <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${typeStyle.tint}`}>{normalizedType}</span>
+        </div>
 
-          <Image
-            src={getRandomInterviewCover()}
-            alt="cover-image"
-            width={90}
-            height={90}
-            className="rounded-full object-cover size-[90px]"
-          />
+        <h3 className="mt-5 text-xl font-semibold capitalize tracking-[-.02em] text-white">{role} Interview</h3>
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white/45">
+          <span className="flex items-center gap-1.5"><CalendarDays className="size-3.5" />{formattedDate}</span>
+          <span className="flex items-center gap-1.5">{feedback ? <Star className="size-3.5 fill-[#ffd60a] text-[#ffd60a]" /> : <Clock3 className="size-3.5" />}{feedback ? `${feedback.totalScore ?? "—"}/100` : "Not started"}</span>
+        </div>
 
-          <h3 className="mt-5 capitalize">{role} Interview</h3>
-
-          {/* Date & Score */}
-          <div className="flex flex-row gap-5 mt-3">
-            <div className="flex flex-row gap-2 items-center">
-              <Image src="/calendar.svg" width={22} height={22} alt="calendar" />
-              <p>{formattedDate}</p>
-            </div>
-
-            <div className="flex flex-row gap-2 items-center">
-              <Image src="/star.svg" width={22} height={22} alt="star" />
-              <p>{feedback?.totalScore ?? "---"}/100</p>
-            </div>
-          </div>
-
-          {/* Feedback text */}
-          <p className="line-clamp-2 mt-5">
+        <div className="my-4 h-px bg-white/10" />
+        <p className="line-clamp-3 flex-1 text-sm leading-6 text-white/55">
             {feedback?.finalAssessment ||
               "You haven't taken this interview yet. Take it now to improve your skills."}
           </p>
-        </div>
 
-        {/* Footer */}
-        <div className="flex flex-row gap-2 mt-5">
+        <div className="mt-5 flex gap-2">
           {feedback ? (
             <>
-              <Button 
-                className="btn-primary flex-1" 
+              <button className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0a84ff] text-sm font-semibold text-white transition hover:bg-[#2997ff] active:scale-[.98]"
                 onClick={() => runCommandInTerminal("feedback", interviewId)}
-              >
-                View Feedback
-              </Button>
-              <Button 
-                className="btn-secondary flex-1" 
+              ><CheckCircle2 className="size-4" /> Feedback</button>
+              <button className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[.08] px-3 text-sm font-medium text-white transition hover:bg-white/15"
                 onClick={() => runCommandInTerminal("startinterview", interviewId)}
-              >
-                Retake
-              </Button>
+              ><RotateCcw className="size-4" /> Retake</button>
             </>
           ) : (
-            <Button 
-              className="btn-primary w-full" 
+            <button className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#0a84ff] text-sm font-semibold text-white shadow-[0_8px_20px_rgba(10,132,255,.25)] transition hover:bg-[#2997ff] active:scale-[.98]"
               onClick={()=> runCommandInTerminal("startinterview",interviewId)}
-            >
-              Start Interview
-            </Button>
+            >Start Interview <ArrowRight className="size-4" /></button>
           )}
         </div>
       </div>
-    </div>
+    </article>
   );
 }

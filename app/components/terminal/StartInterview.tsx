@@ -49,7 +49,7 @@ console.log("startInterview -ID",id)
       }
     }
     fetchUser();
-  }, []);
+  }, [id]);
 
   // Auto-start interview when component is ready
   const [autoStarted, setAutoStarted] = useState(false);
@@ -108,12 +108,12 @@ console.log("startInterview -ID",id)
       </div>
 
       <Agent
-        userName={user?.name!}
-        userId={user?.id}
+        userName={user!.name}
+        userId={user!.id}
         interviewId={id}
         type="interview"
         questions={lastInterview.questions}
-        feedbackId={null} // Pass actual feedback ID if available
+        feedbackId={undefined}
       />
     </div>
   );

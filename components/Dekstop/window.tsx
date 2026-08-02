@@ -27,7 +27,7 @@ interface WindowProps {
   onClose: (id: string) => void
   onMinimize: (id: string) => void
   onFocus: (id: string) => void
-  desktopRef: React.RefObject<HTMLDivElement>
+  desktopRef: React.RefObject<HTMLDivElement | null>
   themeColor: string
   children: React.ReactNode
 }
@@ -63,6 +63,9 @@ export function Window({
   const [isResizing, setIsResizing] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const windowRef = useRef<HTMLDivElement>(null)
+  const previousMinimizedRef = useRef(isMinimized)
+  const hasOpenedRef = useRef(false)
+  const isTransitioningRef = useRef(false)
   const dragOffset = useRef({ x: 0, y: 0 })
   const resizeStart = useRef({ x: 0, y: 0, width: 0, height: 0 })
 
@@ -96,11 +99,73 @@ export function Window({
     return () => window.removeEventListener("resize", checkMobile)
   }, [])
 
-  // --- macOS-like Open Animation ---
+  const getDockTarget = useCallback(() => {
+    const dock = document.querySelector<HTMLElement>('[data-smarty-dock="desktop"]')
+    const dockRect = dock?.getBoundingClientRect()
+    const isVertical = dockRect ? dockRect.height > dockRect.width : false
+
+    return {
+      x: dockRect ? (isVertical ? dockRect.right - 18 : dockRect.right - 64) : window.innerWidth / 2,
+      y: dockRect ? (isVertical ? dockRect.bottom - 64 : dockRect.bottom - 18) : window.innerHeight - 18,
+    }
+  }, [])
+
+  // --- macOS-like Open / Genie Restore Animation ---
   useLayoutEffect(() => {
-    if (windowRef.current) {
+    const element = windowRef.current
+    const wasMinimized = previousMinimizedRef.current
+    previousMinimizedRef.current = isMinimized
+
+    if (!element || isMinimized) return
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    if (reduceMotion) {
+      gsap.set(element, { visibility: "visible", clearProps: "transform,opacity,clipPath,filter,willChange" })
+      hasOpenedRef.current = true
+      return
+    }
+
+    if (wasMinimized) {
+      const rect = element.getBoundingClientRect()
+      const target = getDockTarget()
+      const deltaX = target.x - (rect.left + rect.width / 2)
+      const deltaY = target.y - (rect.top + rect.height / 2)
+
+      isTransitioningRef.current = true
       gsap.fromTo(
-        windowRef.current,
+        element,
+        {
+          x: deltaX,
+          y: deltaY,
+          scaleX: 0.025,
+          scaleY: 0.035,
+          skewX: deltaX >= 0 ? 7 : -7,
+          opacity: 0.18,
+          clipPath: "polygon(49% 0%, 51% 0%, 51% 100%, 49% 100%)",
+          transformOrigin: "bottom center",
+          filter: "blur(1.5px)",
+          visibility: "visible",
+        },
+        {
+          x: 0,
+          y: 0,
+          scaleX: 1,
+          scaleY: 1,
+          skewX: 0,
+          opacity: 1,
+          clipPath: "polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)",
+          filter: "blur(0px)",
+          duration: 0.52,
+          ease: "power3.out",
+          onComplete: () => {
+            gsap.set(element, { clearProps: "transform,opacity,clipPath,filter,willChange" })
+            isTransitioningRef.current = false
+          },
+        },
+      )
+    } else if (!hasOpenedRef.current) {
+      gsap.fromTo(
+        element,
         { scale: 0.96, opacity: 0 },
         {
           scale: 1,
@@ -108,25 +173,113 @@ export function Window({
           duration: 0.35,
           ease: "power3.out",
           clearProps: "transform",
+          onComplete: () => {
+            isTransitioningRef.current = false
+          },
         }
       )
     }
-  }, [])
+    hasOpenedRef.current = true
+  }, [getDockTarget, isMinimized])
 
-  // --- macOS-like Close Animation ---
-  const handleClose = useCallback(() => {
-    if (windowRef.current) {
-      const rect = windowRef.current.getBoundingClientRect()
-      gsap.to(windowRef.current, {
-        scale: 0.05,
-        x: window.innerWidth - rect.left - rect.width / 2 - 30,
-        y: window.innerHeight - rect.top - rect.height / 2 - 20,
-        opacity: 0,
-        duration: 0.4,
-        ease: "power4.in",
-        onComplete: () => onClose(id),
-      })
+  // --- macOS Genie Minimize Animation ---
+  const handleMinimize = useCallback(() => {
+    const element = windowRef.current
+    if (isTransitioningRef.current) return
+    if (!element) {
+      onMinimize(id)
+      return
     }
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      onMinimize(id)
+      return
+    }
+
+    window.dispatchEvent(new CustomEvent("smarty:dock-reveal"))
+    const rect = element.getBoundingClientRect()
+    const target = getDockTarget()
+    const deltaX = target.x - (rect.left + rect.width / 2)
+    const deltaY = target.y - (rect.top + rect.height / 2)
+    const bend = deltaX >= 0 ? 7 : -7
+    const genieLayer = element.cloneNode(true) as HTMLElement
+    genieLayer.removeAttribute("id")
+    genieLayer.querySelectorAll("[id]").forEach((child) => child.removeAttribute("id"))
+    genieLayer.setAttribute("aria-hidden", "true")
+    Object.assign(genieLayer.style, {
+      position: "fixed",
+      left: `${rect.left}px`,
+      top: `${rect.top}px`,
+      width: `${rect.width}px`,
+      height: `${rect.height}px`,
+      margin: "0",
+      zIndex: "2147483646",
+      pointerEvents: "none",
+      overflow: "hidden",
+      contain: "layout paint style",
+      transformOrigin: "bottom center",
+      willChange: "transform, opacity, clip-path, filter",
+    })
+    document.body.appendChild(genieLayer)
+
+    isTransitioningRef.current = true
+    gsap.killTweensOf(element)
+    gsap.set(element, {
+      visibility: "hidden",
+      willChange: "transform, opacity, clip-path, filter",
+      pointerEvents: "none",
+    })
+
+    gsap.fromTo(genieLayer, {
+      x: 0,
+      y: 0,
+      scaleX: 1,
+      scaleY: 1,
+      skewX: 0,
+      opacity: 1,
+      clipPath: "polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)",
+      filter: "blur(0px)",
+    }, {
+      x: deltaX,
+      y: deltaY,
+      scaleX: 0.025,
+      scaleY: 0.035,
+      skewX: bend,
+      opacity: 0.12,
+      clipPath: "polygon(49% 0%, 51% 0%, 51% 100%, 49% 100%)",
+      filter: "blur(1.5px)",
+      duration: 0.58,
+      ease: "power3.in",
+      onComplete: () => {
+        genieLayer.remove()
+        isTransitioningRef.current = false
+        onMinimize(id)
+      },
+      onInterrupt: () => {
+        genieLayer.remove()
+        isTransitioningRef.current = false
+        gsap.set(element, { clearProps: "visibility,willChange,pointerEvents" })
+      },
+    })
+  }, [getDockTarget, id, onMinimize])
+
+  // --- macOS-like Close Animation (single fade/scale, no dock travel) ---
+  const handleClose = useCallback(() => {
+    const element = windowRef.current
+    if (!element || isTransitioningRef.current) return
+
+    isTransitioningRef.current = true
+    gsap.killTweensOf(element)
+    gsap.to(element, {
+        scale: 0.88,
+        y: 10,
+        opacity: 0,
+        filter: "blur(3px)",
+        duration: 0.24,
+        transformOrigin: "center center",
+        ease: "power2.in",
+        onComplete: () => onClose(id),
+    })
   }, [id, onClose])
 
   // --- Dragging (disabled on mobile when maximized) ---
@@ -175,13 +328,25 @@ export function Window({
           resizeStart.current.width + (clientX - resizeStart.current.x)
         let newHeight =
           resizeStart.current.height + (clientY - resizeStart.current.y)
-        newWidth = Math.max(300, Math.min(newWidth, desktopRect.width - x))
-        newHeight = Math.max(200, Math.min(newHeight, desktopRect.height - y))
+        const availableWidth = desktopRect.width - x
+        const availableHeight = desktopRect.height - y
+        const minimumWidth = appName === "ATS"
+          ? Math.min(900, availableWidth)
+          : appName === "Excel Editor" || appName === "Data Table"
+            ? Math.min(760, availableWidth)
+            : 300
+        const minimumHeight = appName === "ATS"
+          ? Math.min(600, availableHeight)
+          : appName === "Excel Editor" || appName === "Data Table"
+            ? Math.min(520, availableHeight)
+            : 200
+        newWidth = Math.max(minimumWidth, Math.min(newWidth, availableWidth))
+        newHeight = Math.max(minimumHeight, Math.min(newHeight, availableHeight))
         setWidth(newWidth)
         setHeight(newHeight)
       }
     },
-    [isDragging, isResizing, width, height, x, y, desktopRef, isMobile]
+    [isDragging, isResizing, width, height, x, y, desktopRef, isMobile, appName]
   )
 
   const handleMouseUp = useCallback(() => {
@@ -241,26 +406,53 @@ export function Window({
 
   // Maximize
   const handleMaximize = useCallback(() => {
-    if (!desktopRef.current) return
+    const element = windowRef.current
+    if (!desktopRef.current || !element || isTransitioningRef.current) return
 
     const desktopRect = desktopRef.current.getBoundingClientRect()
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    const target = isMaximized && prevBounds && !isMobile
+      ? prevBounds
+      : { x: 0, y: 0, width: desktopRect.width, height: desktopRect.height }
 
-    if (isMaximized) {
-      if (prevBounds && !isMobile) {
-        setX(prevBounds.x)
-        setY(prevBounds.y)
-        setWidth(prevBounds.width)
-        setHeight(prevBounds.height)
+    const commitBounds = () => {
+      if (isMaximized) {
+        if (prevBounds && !isMobile) {
+          setX(prevBounds.x)
+          setY(prevBounds.y)
+          setWidth(prevBounds.width)
+          setHeight(prevBounds.height)
+        }
+        setIsMaximized(false)
+      } else {
+        setPrevBounds({ x, y, width, height })
+        setX(0)
+        setY(0)
+        setWidth(desktopRect.width)
+        setHeight(desktopRect.height)
+        setIsMaximized(true)
       }
-      setIsMaximized(false)
-    } else {
-      setPrevBounds({ x, y, width, height })
-      setX(0)
-      setY(0)
-      setWidth(desktopRect.width)
-      setHeight(desktopRect.height)
-      setIsMaximized(true)
+      isTransitioningRef.current = false
     }
+
+    if (reduceMotion || isMobile) {
+      commitBounds()
+      return
+    }
+
+    isTransitioningRef.current = true
+    gsap.killTweensOf(element)
+    gsap.to(element, {
+      left: target.x,
+      top: target.y,
+      width: target.width,
+      height: target.height,
+      borderRadius: isMaximized ? 12 : 0,
+      duration: 0.42,
+      ease: "power3.inOut",
+      willChange: "left, top, width, height, border-radius",
+      onComplete: commitBounds,
+    })
   }, [isMaximized, x, y, width, height, desktopRef, prevBounds, isMobile])
 
   // --- Global Mouse/Touch Move/Up Listeners ---
@@ -364,7 +556,7 @@ export function Window({
             aria-label="Close window"
           />
           <button
-            onClick={() => onMinimize(id)}
+            onClick={handleMinimize}
             // 🎯 AUTOMATION: Minimize button ID
             id={`${id}-minimize`}
             data-automation="minimize-button"

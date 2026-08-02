@@ -3,7 +3,7 @@ import React, { useState, useRef } from "react"
 type IconType = "pdf" | "file" | "folder" | "trash" | "text"
 
 interface FileIconProps {
-    id: number
+    id: number | string
     name: string
     icon: IconType
     initialX: number
@@ -11,7 +11,7 @@ interface FileIconProps {
     onPositionChange: (x: number, y: number) => void
     onDoubleClick: () => void
     onSingleClick?: () => void
-    desktopRef: React.RefObject<HTMLDivElement>
+    desktopRef: React.RefObject<HTMLDivElement | null>
     size?: number
 }
 

@@ -85,7 +85,11 @@ export function useWindowManager({
 }: UseWindowManagerProps): WindowManager {
   
   const [windows, setWindows] = useState<WindowState[]>([])
-  const [nextZIndex, setNextZIndex] = useState(100)
+  const topZIndexRef = useRef(100)
+  const claimTopZIndex = useCallback(() => {
+    topZIndexRef.current += 1
+    return topZIndexRef.current
+  }, [])
   
   // Track previous window counts for animations
   const windowCountRef = useRef(0)
@@ -184,18 +188,17 @@ export function useWindowManager({
       isMinimized: false,
       isMaximized: isMobile || appConfig.alwaysMaximize || false,
       alwaysMaximize: appConfig.alwaysMaximize || false,
-      zIndex: nextZIndex,
+      zIndex: claimTopZIndex(),
       singleton: appConfig.singleton || false,
       automatable: appConfig.automatable !== false,
       props
     }
 
     setWindows(prev => [...prev, newWindow])
-    setNextZIndex(prev => prev + 1)
     windowCountRef.current += 1
 
     return true
-  }, [windows, desktopRef, automationAPI, nextZIndex])
+  }, [windows, desktopRef, automationAPI, claimTopZIndex])
 
   /**
    * Close window by ID
@@ -236,13 +239,13 @@ export function useWindowManager({
    * Focus window (bring to front)
    */
   const focusWindow = useCallback((id: string) => {
+    const topZIndex = claimTopZIndex()
     setWindows(prev => prev.map(w => 
       w.id === id 
-        ? { ...w, zIndex: nextZIndex, isMinimized: false }
+        ? { ...w, zIndex: topZIndex, isMinimized: false }
         : w
     ))
-    setNextZIndex(prev => prev + 1)
-  }, [nextZIndex])
+  }, [claimTopZIndex])
 
   /**
    * Get window by ID

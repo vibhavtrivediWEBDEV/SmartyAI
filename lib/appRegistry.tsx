@@ -11,7 +11,7 @@
 
 import React from 'react'
 import { TerminalUI } from '@/app/components/terminal/terminalUI'
-import { SettingsPanel } from '@/components/Dekstop/Settings'
+import SettingsPanel from '@/components/Dekstop/Settings'
 import { AISearch } from '@/app/components/terminal/AiSearch'
 import Vscode from '@/components/Dekstop/VsCode'
 import Browser from '@/components/Dekstop/chrome'
@@ -33,6 +33,7 @@ import Webpage from '@/components/Dekstop/webpage'
 import Figma from '@/components/Dekstop/figma'
 import PremiumNotes from '@/components/Dekstop/notesapp'
 import { AutomationControlPanel } from '@/components/Dekstop/AutomationControlPannel'
+import { ATSResumeBuilder } from '@/components/Dekstop/ATSResumeBuilder'
 
 /**
  * App Configuration Interface
@@ -132,11 +133,11 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
 
   Settings: {
     name: 'Settings',
-    displayName: 'System Preferences',
+    displayName: 'System Settings',
     icon: '/icons/settings.png',
     component: SettingsPanel,
-    defaultWidth: 500,
-    defaultHeight: 600,
+    defaultWidth: 920,
+    defaultHeight: 680,
     minWidth: 400,
     minHeight: 400,
     automatable: true,
@@ -201,13 +202,16 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
 
   'Excel Editor': {
     name: 'Excel Editor',
-    displayName: 'Numbers',
+    displayName: 'Smarty Excel AI',
     icon: '/icons/excel.png',
     component: ExcelEditor,
-    defaultWidth: 900,
-    defaultHeight: 600,
+    defaultWidth: 1180,
+    defaultHeight: 720,
+    minWidth: 760,
+    minHeight: 520,
     automatable: true,
-    category: 'development'
+    singleton: true,
+    category: 'productivity'
   },
 
   // ═══════════════════════════════════════════════════════════════
@@ -260,11 +264,11 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
 
   Mail: {
     name: 'Mail',
-    displayName: 'Mail',
+    displayName: 'Smarty Mail',
     icon: '/icons/mail.png',
     component: MailSender,
-    defaultWidth: 600,
-    defaultHeight: 500,
+    defaultWidth: 900,
+    defaultHeight: 650,
     automatable: true,
     category: 'productivity'
   },
@@ -272,7 +276,7 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
   'PDF Viewer': {
     name: 'PDF Viewer',
     displayName: 'Preview',
-    icon: '/icons/pdf.png',
+    icon: '/assets/pdfIcon.png',
     component: PdfViewer,
     defaultWidth: 700,
     defaultHeight: 600,
@@ -280,6 +284,20 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
     defaultProps: {
       pdfUrl: 'https://ncert.nic.in/textbook/pdf/leph2ps.pdf'
     },
+    category: 'productivity'
+  },
+
+  ATS: {
+    name: 'ATS',
+    displayName: 'ATS',
+    icon: '/assets/pdfIcon.png',
+    component: ATSResumeBuilder,
+    defaultWidth: 1200,
+    defaultHeight: 760,
+    minWidth: 900,
+    minHeight: 600,
+    singleton: true,
+    automatable: true,
     category: 'productivity'
   },
 
@@ -402,7 +420,7 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
   'Resume PDF': {
     name: 'Resume PDF',
     displayName: 'Resume',
-    icon: '/icons/pdf.png',
+    icon: '/assets/pdfIcon.png',
     component: PdfViewer,
     defaultWidth: 700,
     defaultHeight: 600,

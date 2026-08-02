@@ -36,6 +36,8 @@ interface User {
   name: string;
   email: string;
   id: string;
+  plan: "free" | "starter" | "pro";
+  subscriptionStatus: "active" | "past_due" | "cancelled";
 }
 
 interface InterviewCardProps {
@@ -73,11 +75,10 @@ interface GetLatestInterviewsParams {
 
 interface SignInParams {
   email: string;
-  idToken: string;
+  password: string;
 }
 
 interface SignUpParams {
-  uid: string;
   name: string;
   email: string;
   password: string;

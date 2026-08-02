@@ -1,464 +1,220 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useRef, useEffect, useCallback } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { DownloadIcon, UploadIcon } from "lucide-react"
-import { CodeViewer } from "./CodeViwer"
-import type { JSX } from "react/jsx-runtime"
-
-import { Spreadsheet, type DataViewer } from "react-spreadsheet"
+import { useCallback, useMemo, useRef, useState } from "react"
+import { Download, FilePlus2, Loader2, Plus, Redo2, Send, Sparkles, Table2, Undo2, Upload } from "lucide-react"
+import { Spreadsheet, type CellBase } from "react-spreadsheet"
+import { toast } from "sonner"
 import * as XLSX from "xlsx"
 
-// Dummy Excel data (will be replaced by file upload)
-const initialExcelData = [
+import { applySpreadsheetActions, rectangularize, type SheetMatrix, type SpreadsheetAction } from "@/lib/spreadsheet/actions"
 
+type WorkbookState = Record<string, SheetMatrix>
+type ChatItem = { role: "user" | "assistant"; text: string }
+
+const blankSheet = (): SheetMatrix => Array.from({ length: 20 }, () => Array.from({ length: 10 }, () => ""))
+const AI_SUGGESTIONS = [
+  "Create a professional monthly budget with formulas and totals",
+  "Clean this data, remove duplicates, and standardize values",
+  "Analyze this sheet and add a summary with key insights",
+  "Add formulas for totals, averages, growth, and percentages",
 ]
+const toSpreadsheetData = (matrix: SheetMatrix): CellBase<string>[][] => rectangularize(matrix).map((row) => row.map((value) => ({ value: value == null ? "" : String(value) })))
+const fromSpreadsheetData = (data: Array<Array<CellBase<string> | undefined>>): SheetMatrix => data.map((row) => row.map((cell) => cell?.value ?? ""))
+
+function worksheetToMatrix(worksheet: XLSX.WorkSheet): SheetMatrix {
+  if (!worksheet["!ref"]) return blankSheet()
+  const range = XLSX.utils.decode_range(worksheet["!ref"])
+  const data: SheetMatrix = []
+  for (let row = range.s.r; row <= range.e.r; row += 1) {
+    const values = []
+    for (let column = range.s.c; column <= range.e.c; column += 1) {
+      const cell = worksheet[XLSX.utils.encode_cell({ r: row, c: column })]
+      values.push(cell?.f ? `=${cell.f}` : cell?.v ?? "")
+    }
+    data.push(values)
+  }
+  return rectangularize(data)
+}
+
+function matrixToWorksheet(matrix: SheetMatrix) {
+  const worksheet = XLSX.utils.aoa_to_sheet(matrix)
+  matrix.forEach((row, rowIndex) => row.forEach((value, columnIndex) => {
+    if (typeof value !== "string" || !value.startsWith("=")) return
+    const address = XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex })
+    worksheet[address] = { t: "n", f: value.slice(1) }
+  }))
+  return worksheet
+}
 
 export function ExcelEditor() {
-  const [spreadsheetData, setSpreadsheetData] = useState<DataViewer[][]>(
-    initialExcelData.map((row) => row.map((cell) => ({ value: String(cell) }))),
-  )
-  const [spreadsheetRenderKey, setSpreadsheetRenderKey] = useState(0) // New state for forcing re-render
-  const [chatQuery, setChatQuery] = useState("")
-  const [chatResponse, setChatResponse] = useState<string | JSX.Element>("")
-  const [isChatLoading, setIsChatLoading] = useState(false)
-  const chatInputRef = useRef<HTMLInputElement>(null)
-  const chatResponseRef = useRef<HTMLDivElement>(null)
+  const [workbook, setWorkbook] = useState<WorkbookState>({ Sheet1: blankSheet() })
+  const [activeSheet, setActiveSheet] = useState("Sheet1")
+  const [fileName, setFileName] = useState("Untitled.xlsx")
+  const [prompt, setPrompt] = useState("")
+  const [isRunning, setIsRunning] = useState(false)
+  const [remaining, setRemaining] = useState<number | null | undefined>(undefined)
+  const [chat, setChat] = useState<ChatItem[]>([{ role: "assistant", text: "Import a workbook or describe the spreadsheet you want to create." }])
+  const [undoStack, setUndoStack] = useState<WorkbookState[]>([])
+  const [redoStack, setRedoStack] = useState<WorkbookState[]>([])
+  const inputRef = useRef<HTMLInputElement>(null)
+  const activeMatrix = workbook[activeSheet] ?? blankSheet()
+  const spreadsheetData = useMemo(() => toSpreadsheetData(activeMatrix), [activeMatrix])
 
-  useEffect(() => {
-    if (chatInputRef.current) {
-      chatInputRef.current.focus()
-    }
-  }, [])
+  const commitWorkbook = useCallback((next: WorkbookState) => {
+    setUndoStack((items) => [...items.slice(-29), workbook])
+    setRedoStack([])
+    setWorkbook(next)
+  }, [workbook])
 
-  useEffect(() => {
-    if (chatResponseRef.current) {
-      chatResponseRef.current.scrollTop = chatResponseRef.current.scrollHeight
-    }
-  }, [chatResponse])
+  const updateActiveSheet = useCallback((next: SheetMatrix) => {
+    commitWorkbook({ ...workbook, [activeSheet]: rectangularize(next) })
+  }, [activeSheet, commitWorkbook, workbook])
 
-  // Function to parse AI response for code blocks and plain text
-  const parseAIResponse = (text: string): JSX.Element => {
-    const codeBlockRegex = /```(\w+)?\n([\s\S]*?)\n```/g
-    const elements: (string | JSX.Element)[] = []
-    let lastIndex = 0
-    let match
-
-    while ((match = codeBlockRegex.exec(text)) !== null) {
-      const [fullMatch, language, codeContent] = match
-      const startIndex = match.index!
-      const endIndex = startIndex + fullMatch.length
-
-      if (startIndex > lastIndex) {
-        elements.push(text.substring(lastIndex, startIndex))
-      }
-      elements.push(<CodeViewer key={startIndex} code={codeContent.trim() || 'smarty'} language={language || "text"} />)
-      lastIndex = endIndex
-    }
-
-    if (lastIndex < text.length) {
-      elements.push(text.substring(lastIndex))
-    }
-
-    return (
-      <>
-        {elements.map((el, i) =>
-          typeof el === "string"
-            ? el.split("\n").map((line, lineIdx) => (
-                <p key={`${i}-${lineIdx}`} className="text-sm whitespace-pre-wrap mb-2">
-                  {line}
-                </p>
-              ))
-            : el,
-        )}
-      </>
-    )
+  const undo = () => {
+    const previous = undoStack[undoStack.length - 1]
+    if (!previous) return
+    setRedoStack((items) => [...items, workbook])
+    setUndoStack((items) => items.slice(0, -1))
+    setWorkbook(previous)
+    if (!previous[activeSheet]) setActiveSheet(Object.keys(previous)[0])
   }
 
-  const performSpreadsheetAction = useCallback(
-    (actionType: string, payload: any) => {
-      setSpreadsheetData((prevData) => {
-        console.log("--- performSpreadsheetAction ---")
-        console.log("Previous Data:", JSON.stringify(prevData))
-        console.log("Action Type:", actionType)
-        console.log("Payload:", JSON.stringify(payload))
+  const redo = () => {
+    const next = redoStack[redoStack.length - 1]
+    if (!next) return
+    setUndoStack((items) => [...items, workbook])
+    setRedoStack((items) => items.slice(0, -1))
+    setWorkbook(next)
+    if (!next[activeSheet]) setActiveSheet(Object.keys(next)[0])
+  }
 
-        let newData = [...prevData.map((row) => [...row])] // Deep copy to ensure immutability
-        let maxCols = Math.max(...newData.map((row) => row.length)) // Current max columns
-
-        if (actionType === "addRow") {
-          const { rowIndex, data } = payload
-          maxCols = Math.max(maxCols, data.length) // Update maxCols if new row is wider
-
-          const newRow = Array(maxCols).fill({ value: "" }) // Create a row filled with empty cells
-          data.forEach((cellValue: string, i: number) => {
-            if (i < maxCols) {
-              newRow[i] = { value: cellValue } // Populate with provided data
-            }
-          })
-
-          if (rowIndex === -1 || rowIndex >= newData.length) {
-            newData.push(newRow)
-          } else {
-            newData.splice(rowIndex, 0, newRow)
-          }
-          console.log("After addRow:", JSON.stringify(newData))
-        } else if (actionType === "updateCell") {
-          // Ensure payload is an array of updates, even if it's a single update
-          const updates = Array.isArray(payload) ? payload : [payload]
-
-          updates.forEach(({ rowIndex, colIndex, value }) => {
-            maxCols = Math.max(maxCols, colIndex + 1) // Update maxCols if cell is beyond current max
-
-            // Ensure row exists
-            while (newData.length <= rowIndex) {
-              newData.push(Array(maxCols).fill({ value: "" })) // Use maxCols for new rows
-            }
-            // Ensure column exists in that row
-            while (newData[rowIndex].length <= colIndex) {
-              newData[rowIndex].push({ value: "" })
-            }
-            newData[rowIndex][colIndex] = { value: String(value) }
-          })
-          console.log("After updateCell (batch):", JSON.stringify(newData))
-        } else if (actionType === "addColumn") {
-          const { colIndex, header, data } = payload
-          const targetColIndex = colIndex === -1 ? maxCols : colIndex // -1 means add to end
-          maxCols = Math.max(maxCols, targetColIndex + 1) // Update maxCols
-
-          // Add header to the first row
-          if (newData.length > 0) {
-            while (newData[0].length <= targetColIndex) {
-              newData[0].push({ value: "" }) // Pad if necessary
-            }
-            newData[0].splice(targetColIndex, 0, { value: header || "" })
-          } else {
-            // If no data, create a new first row with the header
-            newData.push(Array(targetColIndex + 1).fill({ value: "" }))
-            newData[0][targetColIndex] = { value: header || "" }
-          }
-
-          // Add data to subsequent rows or empty cells
-          for (let i = 1; i < newData.length; i++) {
-            while (newData[i].length <= targetColIndex) {
-              newData[i].push({ value: "" }) // Pad if necessary
-            }
-            const cellValue = data && data[i - 1] !== undefined ? data[i - 1] : ""
-            newData[i].splice(targetColIndex, 0, { value: cellValue })
-          }
-          console.log("After addColumn:", JSON.stringify(newData))
-        } else if (actionType === "deleteRow") {
-          const { rowIndex } = payload
-          if (rowIndex >= 0 && rowIndex < newData.length) {
-            newData.splice(rowIndex, 1)
-          }
-          console.log("After deleteRow:", JSON.stringify(newData))
-        } else if (actionType === "deleteColumn") {
-          const { colIndex } = payload
-          if (colIndex >= 0 && colIndex < maxCols) {
-            newData = newData.map((row) => {
-              const newRow = [...row]
-              newRow.splice(colIndex, 1)
-              return newRow
-            })
-            maxCols-- // Decrement max columns
-          }
-          console.log("After deleteColumn:", JSON.stringify(newData))
-        } else if (actionType === "sort") {
-          const { colIndex, order } = payload
-          if (newData.length < 2) return newData // No header or only header row
-
-          const headerRow = newData[0]
-          const dataRows = newData.slice(1)
-
-          if (colIndex >= 0 && colIndex < headerRow.length) {
-            dataRows.sort((a, b) => {
-              const valA = a[colIndex]?.value || ""
-              const valB = b[colIndex]?.value || ""
-
-              // Attempt numerical comparison first
-              const numA = Number.parseFloat(valA)
-              const numB = Number.parseFloat(valB)
-
-              if (!isNaN(numA) && !isNaN(numB)) {
-                return order === "asc" ? numA - numB : numB - numA
-              } else {
-                // Fallback to string comparison
-                return order === "asc" ? valA.localeCompare(valB) : valB.localeCompare(valA)
-              }
-            })
-          }
-          newData = [headerRow, ...dataRows]
-          console.log("After sort:", JSON.stringify(newData))
-        }
-
-        // Ensure all rows have the same number of columns as the new maxCols
-        // This is crucial for react-spreadsheet to render correctly after structural changes
-        for (let i = 0; i < newData.length; i++) {
-          while (newData[i].length < maxCols) {
-            newData[i].push({ value: "" })
-          }
-          // Trim excess columns if maxCols decreased (e.g., after deleteColumn)
-          newData[i] = newData[i].slice(0, maxCols)
-        }
-
-        // Increment the key to force re-render of Spreadsheet component
-        setSpreadsheetRenderKey((prevKey) => prevKey + 1)
-        console.log("Final Data (before set):", JSON.stringify(newData))
-        console.log("New Render Key:", spreadsheetRenderKey + 1)
-        console.log("--- End performSpreadsheetAction ---")
-        return newData
-      })
-    },
-    [spreadsheetRenderKey],
-  )
-
-  const handleChatSearch = async (e?: React.FormEvent) => {
-    e?.preventDefault()
-    if (!chatQuery.trim()) return
-
-    const userQuery = chatQuery.trim()
-    setChatQuery("")
-    setIsChatLoading(true)
-    setChatResponse("") // Clear previous response
-
+  const importFile = useCallback(async (file: File) => {
     try {
-      // Convert current spreadsheet data to a simple 2D array for AI context
-      const currentSheetData = spreadsheetData.map((row) => row.map((cell) => cell.value))
+      const bytes = await file.arrayBuffer()
+      const parsed = XLSX.read(bytes, { type: "array", cellDates: true })
+      const sheets = Object.fromEntries(parsed.SheetNames.map((name) => [name, worksheetToMatrix(parsed.Sheets[name])]))
+      if (!parsed.SheetNames.length) throw new Error("This workbook has no visible sheets.")
+      commitWorkbook(sheets)
+      setActiveSheet(parsed.SheetNames[0])
+      setFileName(file.name)
+      setChat((items) => [...items, { role: "assistant", text: `${file.name} opened with ${parsed.SheetNames.length} sheet${parsed.SheetNames.length === 1 ? "" : "s"}.` }])
+      toast.success("Spreadsheet opened")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The spreadsheet could not be opened.")
+    }
+  }, [commitWorkbook])
 
+  const exportWorkbook = useCallback((format: "xlsx" | "csv") => {
+    if (format === "csv") {
+      const csv = XLSX.utils.sheet_to_csv(matrixToWorksheet(activeMatrix))
+      const url = URL.createObjectURL(new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" }))
+      const anchor = document.createElement("a")
+      anchor.href = url
+      anchor.download = fileName.replace(/\.[^.]+$/, "") + ".csv"
+      anchor.click()
+      URL.revokeObjectURL(url)
+      return
+    }
+    const output = XLSX.utils.book_new()
+    Object.entries(workbook).forEach(([name, matrix]) => XLSX.utils.book_append_sheet(output, matrixToWorksheet(matrix), name.slice(0, 31)))
+    XLSX.writeFile(output, fileName.replace(/\.[^.]+$/, "") + ".xlsx", { compression: true })
+  }, [activeMatrix, fileName, workbook])
+
+  const runPrompt = async () => {
+    const userPrompt = prompt.trim()
+    if (!userPrompt || isRunning) return
+    setPrompt("")
+    setIsRunning(true)
+    setChat((items) => [...items, { role: "user", text: userPrompt }])
+    try {
       const response = await fetch("/api/streamExcel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: userQuery, spreadsheet: currentSheetData }),
+        body: JSON.stringify({ prompt: userPrompt, activeSheet, spreadsheet: activeMatrix }),
       })
-
-      if (!response.ok || !response.body) {
-        throw new Error("No stream returned from AI API.")
-      }
-
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder("utf-8")
-      let accumulated = ""
-
-      // Read the entire stream first
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        accumulated += decoder.decode(value, { stream: true })
-      }
-
-      console.log("accumulated (raw):", accumulated) // Log raw accumulated string
-
-      // Attempt to extract JSON from a Markdown code block if present
-      let jsonString = accumulated.trim()
-      // Updated regex to find JSON code block anywhere in the string
-      const jsonCodeBlockMatch = jsonString.match(/```json\n([\s\S]*?)\n```/)
-      if (jsonCodeBlockMatch && jsonCodeBlockMatch[1]) {
-        jsonString = jsonCodeBlockMatch[1].trim()
-        console.log("Extracted JSON string:", jsonString)
-      } else {
-        console.log("No JSON code block detected, attempting to parse raw accumulated string.")
-      }
-
-      // After stream is done, attempt to parse as JSON
-      try {
-        const aiResponse = JSON.parse(jsonString) // Parse the extracted/trimmed string
-        console.log("aiResponse (parsed):", aiResponse) // Log parsed JSON
-       
-
-        if (aiResponse.action) {
-          performSpreadsheetAction(aiResponse.action.type, aiResponse.action.payload)
-        }
-        setChatResponse(parseAIResponse(aiResponse.response || "Action performed successfully."))
-      } catch (jsonError) {
-        console.error("JSON parsing error:", jsonError) // Log the actual error
-        // If JSON parsing fails, treat the original accumulated string as plain text
-        setChatResponse(parseAIResponse(accumulated))
-      }
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || "Excel AI could not complete the request.")
+      const actions = Array.isArray(result.actions) ? result.actions as SpreadsheetAction[] : []
+      if (actions.length) updateActiveSheet(applySpreadsheetActions(activeMatrix, actions))
+      setRemaining(result.remaining)
+      setChat((items) => [...items, { role: "assistant", text: result.response || (actions.length ? "Changes applied." : "Done.") }])
+      if (actions.length) toast.success("Changes applied live")
     } catch (error) {
-      console.error("Stream error:", error)
-      setChatResponse(<p className="text-red-400">Something went wrong. Please try again.</p>)
+      const message = error instanceof Error ? error.message : "Excel AI failed."
+      setChat((items) => [...items, { role: "assistant", text: message }])
+      toast.error(message)
     } finally {
-      setIsChatLoading(false)
-      if (chatInputRef.current) chatInputRef.current.focus()
+      setIsRunning(false)
     }
   }
 
-  const handleChatKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      handleChatSearch()
-    }
+  const addSheet = () => {
+    let index = Object.keys(workbook).length + 1
+    while (workbook[`Sheet${index}`]) index += 1
+    const name = `Sheet${index}`
+    commitWorkbook({ ...workbook, [name]: blankSheet() })
+    setActiveSheet(name)
   }
-
-  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const data = e.target?.result
-      if (data) {
-        try {
-          const workbook = XLSX.read(data, { type: "binary" })
-          const sheetName = workbook.SheetNames[0]
-          const worksheet = workbook.Sheets[sheetName]
-
-          const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1")
-          const formattedData: DataViewer[][] = []
-
-          // Determine the maximum number of columns across all rows
-          let maxCols = 0
-          for (let R = range.s.r; R <= range.e.r; ++R) {
-            for (let C = range.s.c; C <= range.e.c; ++C) {
-              const cellAddress = XLSX.utils.encode_cell({ r: R, c: C })
-              if (worksheet[cellAddress]) {
-                maxCols = Math.max(maxCols, C + 1)
-              }
-            }
-          }
-
-          for (let R = range.s.r; R <= range.e.r; ++R) {
-            const row: DataViewer[] = []
-            for (let C = range.s.c; C < maxCols; ++C) {
-              // Iterate up to maxCols
-              const cellAddress = XLSX.utils.encode_cell({ r: R, c: C })
-              const cell = worksheet[cellAddress]
-
-              let cellValue = ""
-              if (cell) {
-                if (cell.f) {
-                  // If it's a formula cell, get the formula string
-                  cellValue = "=" + cell.f
-                } else if (cell.v !== undefined) {
-                  // Otherwise, get the value
-                  cellValue = String(cell.v)
-                }
-              }
-              row.push({ value: cellValue })
-            }
-            formattedData.push(row)
-          }
-
-          setSpreadsheetData(formattedData)
-          setSpreadsheetRenderKey((prevKey) => prevKey + 1) // Force re-render on file upload
-        } catch (error) {
-          console.error("Error parsing Excel file:", error)
-          alert("Failed to parse Excel file. Please ensure it's a valid .xlsx or .csv.")
-        }
-      }
-    }
-    reader.readAsBinaryString(file)
-  }, [])
-
-  const handleDownloadExcel = useCallback(() => {
-    const ws = XLSX.utils.json_to_sheet([]) // Start with an empty sheet
-
-    spreadsheetData.forEach((row, rIdx) => {
-      row.forEach((cell, cIdx) => {
-        const cellAddress = XLSX.utils.encode_cell({ r: rIdx, c: cIdx })
-        const cellValue = cell.value
-
-        let cellObj: XLSX.CellObject = { t: "s", v: cellValue } // Default to string type
-
-        if (typeof cellValue === "string" && cellValue.startsWith("=")) {
-          cellObj = { t: "f", f: cellValue.substring(1) } // Formula type, remove leading '='
-        } else if (!isNaN(Number(cellValue)) && cellValue !== "") {
-          cellObj = { t: "n", v: Number(cellValue) } // Number type
-        }
-
-        // Add cell to worksheet
-        XLSX.utils.sheet_add_json(ws, [[cellObj]], { origin: cellAddress, skipHeader: true })
-      })
-    })
-
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "Sheet1")
-    XLSX.writeFile(wb, "excel_output.xlsx")
-  }, [spreadsheetData])
 
   return (
-    <div className="flex w-full h-full bg-gray-900 text-gray-300 rounded-lg overflow-hidden ">
-      {/* Left Side: Excel Viewer */}
-      <div className="flex-1 p-4 overflow-auto border-r border-gray-700 flex flex-col">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-green-400">Excel Viewer</h2>
-          <div className="flex gap-2">
-            <Label htmlFor="file-upload" className="cursor-pointer">
-              <Button asChild className="bg-gray-700 hover:bg-gray-600 text-white">
-                <span>
-                  <UploadIcon className="h-4 w-4 mr-2" /> Upload Excel
-                </span>
-              </Button>
-            </Label>
-            <Input
-              id="file-upload"
-              type="file"
-              accept=".xlsx, .xls, .csv"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-            <Button onClick={handleDownloadExcel} className="bg-blue-600 hover:bg-blue-700 text-white">
-              <DownloadIcon className="h-4 w-4 mr-2" /> Download Excel
-            </Button>
-          </div>
-        </div>
-        <div className="flex-1 max-h-[300px] overflow-auto border border-gray-700 rounded-md">
-          <Spreadsheet key={spreadsheetRenderKey} data={spreadsheetData} onChange={setSpreadsheetData} />
-        </div>
-        <p className="text-xs text-gray-500 mt-4">* This is a simulated Excel view. You can edit cells directly.</p>
-      </div>
+    <div className="flex h-full min-h-[480px] w-full flex-col overflow-hidden bg-[#f5f5f7] font-sans text-[#1d1d1f]">
+      <input ref={inputRef} type="file" className="hidden" accept=".xlsx,.xls,.xlsm,.xlsb,.csv,.tsv,.ods,.fods,.numbers" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importFile(file); event.target.value = "" }} />
+      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-black/10 bg-white/80 px-3 backdrop-blur-xl">
+        <Table2 className="h-5 w-5 text-[#217346]" />
+        <input value={fileName} onChange={(event) => setFileName(event.target.value)} className="min-w-0 flex-1 bg-transparent text-center text-[13px] font-semibold outline-none" aria-label="Workbook name" />
+        <button onClick={undo} disabled={!undoStack.length} title="Undo" className="toolbar-button px-2 disabled:opacity-30"><Undo2 className="h-4 w-4" /></button>
+        <button onClick={redo} disabled={!redoStack.length} title="Redo" className="toolbar-button px-2 disabled:opacity-30"><Redo2 className="h-4 w-4" /></button>
+        <button onClick={() => inputRef.current?.click()} className="toolbar-button"><Upload className="h-4 w-4" />Open</button>
+        <button onClick={() => exportWorkbook("csv")} className="toolbar-button">CSV</button>
+        <button onClick={() => exportWorkbook("xlsx")} className="toolbar-button bg-[#217346] text-white hover:bg-[#185c37]"><Download className="h-4 w-4" />Export</button>
+      </header>
 
-      {/* Right Side: AI Chatbox */}
-      <div className="flex-1 flex flex-col p-4">
-        <h2 className="text-xl font-bold text-blue-400 mb-4">Excel AI Assistant</h2>
-        <div className=" h-auto  overflow-y-auto  pr-2 mb-4 border-b border-gray-700 pb-2" ref={chatResponseRef}>
-          {chatResponse && <div className="mb-4">{chatResponse}</div>}
-          {isChatLoading && (
-            <p className="text-yellow-400">
-              Thinking...
-              <span className="blinking-cursor bg-yellow-400 w-2 h-4 ml-1 inline-block" />
-            </p>
-          )}
-        </div>
-        <form onSubmit={handleChatSearch} className="flex items-center">
-          <span className="text-blue-400 mr-2">Excel AI&gt;</span>
-          <Input
-            ref={chatInputRef}
-            type="text"
-            value={chatQuery}
-            onChange={(e) => setChatQuery(e.target.value)}
-            onKeyDown={handleChatKeyDown}
-            className="flex-1 bg-transparent border-b border-gray-600 outline-none text-gray-200 caret-blue-400 pb-1"
-            placeholder="Ask about Excel shortcuts or formulas..."
-            disabled={isChatLoading}
-          />
-          <Button
-            type="submit"
-            className="ml-2 px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm disabled:opacity-50"
-            disabled={isChatLoading}
-          >
-            Send
-          </Button>
-        </form>
-        <style jsx>{`
-          @keyframes blink {
-            0%,
-            100% {
-              opacity: 1;
-            }
-            50% {
-              opacity: 0;
-            }
-          }
-          .blinking-cursor {
-            animation: blink 1s step-end infinite;
-          }
-        `}</style>
+      <div className="flex min-h-0 flex-1">
+        <main className="flex min-w-0 flex-[1.7] flex-col border-r border-black/10 bg-white">
+          <div className="flex h-10 shrink-0 items-center gap-2 border-b border-black/10 bg-[#fafafa] px-3 text-xs text-black/55">
+            <span className="rounded bg-[#217346]/10 px-2 py-1 font-semibold text-[#217346]">fx</span>
+            <span>Click any cell to edit · formulas start with =</span>
+          </div>
+          <div className="min-h-0 flex-1 overflow-auto spreadsheet-canvas">
+            <Spreadsheet data={spreadsheetData} onChange={(data) => updateActiveSheet(fromSpreadsheetData(data))} />
+          </div>
+          <div className="flex h-9 shrink-0 items-center gap-1 overflow-x-auto border-t border-black/10 bg-[#f5f5f7] px-2">
+            <button onClick={addSheet} title="Add sheet" className="grid h-7 w-7 place-items-center rounded hover:bg-black/5"><Plus className="h-4 w-4" /></button>
+            {Object.keys(workbook).map((name) => <button key={name} onClick={() => setActiveSheet(name)} className={`h-8 border-b-2 px-4 text-xs font-medium ${activeSheet === name ? "border-[#217346] bg-white text-[#185c37]" : "border-transparent text-black/55 hover:bg-white/60"}`}>{name}</button>)}
+          </div>
+        </main>
+
+        <aside className="flex min-w-[280px] flex-1 flex-col bg-[#f7f7f9]">
+          <div className="border-b border-black/10 bg-white/70 p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold"><span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-[#34c759] to-[#0a84ff] text-white"><Sparkles className="h-4 w-4" /></span>Smarty Excel AI</div>
+            <p className="mt-2 text-[11px] leading-4 text-black/45">Create, calculate, clean, sort, and transform the active sheet. Changes appear instantly.</p>
+            <div className="mt-2 text-[10px] font-medium text-[#217346]">{remaining === null ? "Unlimited AI operations" : remaining === undefined ? "Free plan: 10 AI operations/month" : `${remaining} free AI operations remaining`}</div>
+            <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
+              {AI_SUGGESTIONS.map((suggestion, index) => <button key={suggestion} onClick={() => setPrompt(suggestion)} title={suggestion} className="shrink-0 rounded-full border border-[#217346]/15 bg-[#217346]/[0.07] px-2.5 py-1 text-[10px] font-medium text-[#185c37] hover:bg-[#217346]/15">{["Create", "Clean", "Analyze", "Formulas"][index]}</button>)}
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+            {chat.map((item, index) => <div key={index} className={`max-w-[92%] rounded-2xl px-3 py-2 text-xs leading-5 shadow-sm ${item.role === "user" ? "ml-auto bg-[#0a84ff] text-white" : "border border-black/[0.06] bg-white text-black/70"}`}>{item.text}</div>)}
+            {isRunning && <div className="flex items-center gap-2 text-xs text-black/45"><Loader2 className="h-4 w-4 animate-spin text-[#217346]" />Building your spreadsheet…</div>}
+          </div>
+          <div className="border-t border-black/10 bg-white/80 p-3">
+            <div className="flex items-end gap-2 rounded-2xl border border-black/10 bg-white p-2 shadow-sm focus-within:border-[#0a84ff]/50 focus-within:ring-2 focus-within:ring-[#0a84ff]/10">
+              <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void runPrompt() } }} rows={2} disabled={isRunning} placeholder="Create a monthly budget with totals…" className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-1 text-xs leading-5 outline-none placeholder:text-black/30" />
+              <button onClick={() => void runPrompt()} disabled={!prompt.trim() || isRunning} className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#0a84ff] text-white disabled:opacity-35"><Send className="h-4 w-4" /></button>
+            </div>
+            <button onClick={() => { commitWorkbook({ Sheet1: blankSheet() }); setActiveSheet("Sheet1"); setFileName("Untitled.xlsx") }} className="mt-2 flex items-center gap-1 text-[10px] text-black/40 hover:text-black/70"><FilePlus2 className="h-3 w-3" />New blank workbook</button>
+          </div>
+        </aside>
       </div>
+      <style jsx global>{`
+        .toolbar-button { display:inline-flex; height:30px; align-items:center; gap:6px; border-radius:7px; padding:0 10px; font-size:11px; font-weight:600; color:#3a3a3c; transition:background .15s; }
+        .toolbar-button:hover { background:rgba(0,0,0,.06); }
+        .toolbar-button.bg-\[\#217346\] { color:white; }
+        .spreadsheet-canvas table { font-size:12px; min-width:100%; }
+        .spreadsheet-canvas td { min-width:96px; height:28px; border-color:#dedee2 !important; }
+        .spreadsheet-canvas th { background:#f4f4f6 !important; color:#6e6e73 !important; border-color:#d2d2d7 !important; font-weight:500; }
+        .spreadsheet-canvas .Spreadsheet__cell--selected { outline:2px solid #217346 !important; }
+      `}</style>
     </div>
   )
 }

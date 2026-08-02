@@ -7,28 +7,33 @@ type Props = {
   description: string
   alt: string
   caption?: string
+  initialUrl?: string
+  onResolved?: (url: string) => void
 }
 
-export default function AsyncImageFromDescription({ description, alt, caption }: Props) {
-  const [imageUrl, setImageUrl] = useState<string | null>(null)
+export default function AsyncImageFromDescription({ description, alt, caption, initialUrl, onResolved }: Props) {
+  const [imageUrl, setImageUrl] = useState<string | null>(initialUrl || null)
 
   useEffect(() => {
     const fetchImage = async () => {
+      if (initialUrl) return
       try {
         const res = await fetch("/api/pinterest/searchimage", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ search: description }),
+          body: JSON.stringify({ search: description, mode: "education" }),
         })
 
         const data = await res.json()
 
         // Assuming your API returns { images: [url1, url2, ...] }
         const firstImage = data?.images?.[0]
-        if (firstImage) {
-          setImageUrl(firstImage)
+        const resolvedUrl = typeof firstImage === "string" ? firstImage : firstImage?.url
+        if (resolvedUrl) {
+          setImageUrl(resolvedUrl)
+          onResolved?.(resolvedUrl)
         }
       } catch (error) {
         console.error("Image fetch failed:", error)
@@ -36,7 +41,7 @@ export default function AsyncImageFromDescription({ description, alt, caption }:
     }
 
     fetchImage()
-  }, [description])
+  }, [description, initialUrl, onResolved])
 
   return (
     <div className="flex flex-col items-center justify-center h-full p-4 bg-gray-900">
@@ -44,9 +49,9 @@ export default function AsyncImageFromDescription({ description, alt, caption }:
         <Image
           src={imageUrl || "/b1.svg"} // fallback if no result
           alt={alt}
-          layout="fill"
-          objectFit="contain"
-          className="rounded-lg shadow-lg"
+          fill
+          sizes="(max-width: 768px) 90vw, 700px"
+          className="rounded-lg object-contain shadow-lg"
         />
       </div>
       {caption && (

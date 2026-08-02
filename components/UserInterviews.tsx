@@ -2,8 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import InterviewCard from "@/components/InterviewCard";
-import { Interview } from "@/types";
 import { getFeedbackByInterviewId } from "@/lib/actions/general.action";
+
+interface Interview {
+  id: string;
+  role: string;
+  type: string;
+  techstack: string[];
+  createdAt: string;
+}
 
 interface UserInterviewsProps {
   interviews: Interview[];
@@ -41,10 +48,13 @@ const UserInterviews = ({ interviews, userId  }: UserInterviewsProps) => {
   }, [interviews, userId]);
 
   return (
-    <section className="flex flex-col gap-6 mt-8">
-      <h2>Your Interviews</h2>
+    <section className="mt-8 flex flex-col gap-5">
+      <div className="flex items-end justify-between">
+        <div><p className="mb-1 text-xs font-semibold uppercase tracking-[.14em] text-[#64d2ff]">Your workspace</p><h2 className="text-xl font-semibold tracking-tight">Recent Interviews</h2></div>
+        {hasPastInterviews && <span className="rounded-full border border-white/10 bg-white/[.06] px-3 py-1 text-xs opacity-55">{interviews.length} sessions</span>}
+      </div>
 
-      <div className="interviews-section">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {hasPastInterviews ? (
           interviews?.map((interview) => (
             <InterviewCard
@@ -59,7 +69,7 @@ const UserInterviews = ({ interviews, userId  }: UserInterviewsProps) => {
             />
           ))
         ) : (
-          <p>You haven&apos;t taken any interviews yet</p>
+          <div className="col-span-full rounded-[22px] border border-dashed border-white/15 bg-white/[.04] px-6 py-12 text-center"><p className="font-medium">No interviews yet</p><p className="mt-1 text-sm opacity-45">Create your first tailored practice session above.</p></div>
         )}
       </div>
     </section>

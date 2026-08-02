@@ -4,6 +4,7 @@ import { Mona_Sans } from "next/font/google";
 
 
 import "./globals.css";
+import "katex/dist/katex.min.css";
 import { SettingsProvider } from "./context/settingContext";
 
 const monaSans = Mona_Sans({

@@ -1,0 +1,22 @@
+[
+  {
+    "id": "fixture-professional-data",
+    "name": "Professional Data",
+    "type": "folder",
+    "parentId": null,
+    "files": [
+      {
+        "id": "fixture-profile-json",
+        "name": "profile.json",
+        "type": "document",
+        "content": "{\n  \"name\": \"Smarty User\",\n  \"role\": \"Full Stack Developer\",\n  \"skills\": [\"TypeScript\", \"Next.js\", \"MongoDB\"],\n  \"source\": \"migration fixture\"\n}"
+      },
+      {
+        "id": "fixture-readme",
+        "name": "README.md",
+        "type": "document",
+        "content": "# Professional Data\n\nThis folder was migrated through the authenticated Finder import API."
+      }
+    ]
+  }
+]

@@ -19,6 +19,11 @@ export interface AIConfig {
   awsSecretAccessKey?: string
 }
 
+export function hasUsableOpenAICredential(): boolean {
+  const key = process.env.OPENAI_API_KEY?.trim()
+  return Boolean(key && key !== 'dummy' && key.length >= 20)
+}
+
 /**
  * Get current AI provider based on environment
  */
@@ -35,7 +40,7 @@ export function getAIProvider(): AIProvider {
   }
 
   // 2. Auto-detect based on available credentials
-  if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'dummy') {
+  if (hasUsableOpenAICredential()) {
     console.log('🎯 Auto-detected: OpenAI (has API key)')
     return 'openai'
   }
@@ -58,9 +63,7 @@ export function getAIProvider(): AIProvider {
 /**
  * Get AI configuration for current provider
  */
-export function getAIConfig(): AIConfig {
-  const provider = getAIProvider()
-
+export function getAIConfigForProvider(provider: AIProvider): AIConfig {
   switch (provider) {
     case 'openai':
       return {
@@ -73,6 +76,8 @@ export function getAIConfig(): AIConfig {
       return {
         provider: 'bedrock',
         model: process.env.BEDROCK_MODEL || 'zai.glm-5',
+        baseUrl: process.env.BEDROCK_MANTLE_BASE_URL,
+        apiKey: process.env.AWS_BEARER_TOKEN_BEDROCK,
         region: process.env.AWS_REGION || 'ap-south-1',
         awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID,
         awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
@@ -88,6 +93,10 @@ export function getAIConfig(): AIConfig {
     default:
       throw new Error(`Unknown AI provider: ${provider}`)
   }
+}
+
+export function getAIConfig(): AIConfig {
+  return getAIConfigForProvider(getAIProvider())
 }
 
 /**
@@ -129,7 +138,7 @@ export function getModelForUseCase(useCase: 'chat' | 'vision' | 'voice' | 'fast'
 export function isProviderAvailable(provider: AIProvider): boolean {
   switch (provider) {
     case 'openai':
-      return !!process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'dummy'
+      return hasUsableOpenAICredential()
     case 'bedrock':
       return !!(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY)
     case 'gemini':

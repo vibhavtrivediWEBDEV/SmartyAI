@@ -23,7 +23,7 @@ const REACT_BUNDLE_EXTENSIONS = new Set([
  * Backend programming languages that need server-side execution
  */
 const BACKEND_EXECUTION_EXTENSIONS = new Set([
-  'py', 'java', 'c', 'cpp', 'cc', 'cxx', 'go', 'rs', 'php', 'rb'
+  'py', 'java', 'c', 'cpp', 'cc', 'cxx', 'go', 'rs', 'php', 'rb', 'ts'
 ])
 
 /**
@@ -54,11 +54,6 @@ export function getRunStrategy(filename: string): RunStrategy {
   // CSS/JS files can be part of HTML preview (bundled with HTML)
   if (ext === 'css' || ext === 'js') {
     return 'html-preview'
-  }
-  
-  // TypeScript .ts files (not .tsx) - can't bundle as standalone
-  if (ext === 'ts') {
-    return 'unsupported'
   }
   
   // Default to unsupported

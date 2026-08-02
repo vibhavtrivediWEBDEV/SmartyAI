@@ -14,7 +14,7 @@ interface DesktopIconProps {
   initialY: number
   onDoubleClick: () => void
   onPositionChange?: (x: number, y: number) => void
-  desktopRef: React.RefObject<HTMLDivElement>
+  desktopRef: React.RefObject<HTMLDivElement | null>
   folderColor?: string
   folderItems?: RepositoryItem[]
 }

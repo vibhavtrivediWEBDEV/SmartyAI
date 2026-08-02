@@ -52,9 +52,16 @@ export async function fetchGitHubUser(username: string) {
 }
 
 export async function fetchGitHubRepositories(username: string): Promise<Repository[]> {
+  const normalizedUsername = username.trim();
+  if (!normalizedUsername) return [];
+
   try {
-    const response = await fetch(`${GITHUB_API_BASE}/users/${username}/repos?per_page=100&sort=stars&order=desc`);
-    if (!response.ok) throw new Error('Failed to fetch repos');
+    const response = await fetch(`/api/github/repos?username=${encodeURIComponent(normalizedUsername)}`);
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      console.warn(data?.error || 'Failed to fetch GitHub repositories');
+      return [];
+    }
     
     const repos = await response.json();
     return repos.map((repo: any) => ({
@@ -64,9 +71,9 @@ export async function fetchGitHubRepositories(username: string): Promise<Reposit
       description: repo.description,
       stars: repo.stargazers_count,
       language: repo.language,
-    }));
+    })).sort((a: Repository, b: Repository) => b.stars - a.stars);
   } catch (error) {
-    console.error('Error fetching GitHub repositories:', error);
+    console.warn('Unable to fetch GitHub repositories:', error);
     return [];
   }
 }

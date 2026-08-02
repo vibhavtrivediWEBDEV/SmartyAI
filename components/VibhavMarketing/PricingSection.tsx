@@ -4,83 +4,21 @@ import { motion, useInView } from "framer-motion";
 import { useRef, useState } from "react";
 import { Check, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SUBSCRIPTION_PLANS } from "@/modules/subscription/plans";
 
-const pricingPlans = [
-  {
-    name: "Free",
-    price: "$0",
-    period: "forever",
-    description: "Perfect for getting started",
-    features: [
-      "Basic AI assistant",
-      "5 GB storage",
-      "Standard apps",
-      "Community support",
-      "50 AI credits/month",
-    ],
-    cta: "Get Started",
-    popular: false,
-    gradient: "from-gray-600 to-gray-700",
-  },
-  {
-    name: "Starter",
-    price: "$15",
-    period: "per month",
-    description: "For individuals and freelancers",
-    features: [
-      "Advanced AI assistant",
-      "50 GB storage",
-      "All standard apps",
-      "Email support",
-      "500 AI credits/month",
-      "Priority processing",
-      "Custom workflows",
-    ],
-    cta: "Start Trial",
-    popular: false,
-    gradient: "from-blue-600 to-cyan-600",
-  },
-  {
-    name: "Pro",
-    price: "$39",
-    period: "per month",
-    description: "For power users and teams",
-    features: [
-      "Full AI capabilities",
-      "500 GB storage",
-      "All 50+ apps",
-      "Priority support",
-      "Unlimited AI credits",
-      "Team collaboration",
-      "Advanced analytics",
-      "API access",
-      "Custom integrations",
-    ],
-    cta: "Go Pro",
-    popular: true,
-    gradient: "from-purple-600 to-pink-600",
-  },
-  {
-    name: "Enterprise",
-    price: "Custom",
-    period: "contact us",
-    description: "For organizations with custom needs",
-    features: [
-      "Everything in Pro",
-      "Unlimited storage",
-      "Dedicated support",
-      "SSO & SAML",
-      "Custom AI training",
-      "SLA guarantee",
-      "On-premise deployment",
-      "White-label options",
-      "Dedicated account manager",
-    ],
-    cta: "Contact Sales",
-    popular: false,
-    gradient: "from-amber-600 to-orange-600",
-  },
-];
+const gradients = {
+  free: "from-gray-600 to-gray-700",
+  starter: "from-blue-600 to-cyan-600",
+  pro: "from-purple-600 to-pink-600",
+};
+
+const pricingPlans = Object.values(SUBSCRIPTION_PLANS).map((plan) => ({
+  ...plan,
+  price: `$${plan.priceMonthly}`,
+  period: plan.priceMonthly ? "per month" : "forever",
+  cta: plan.id === "free" ? "Start with 1 GB" : "Paid checkout coming soon",
+  gradient: gradients[plan.id],
+}));
 
 const faqs = [
   {
@@ -135,7 +73,7 @@ export default function PricingSection() {
         </motion.div>
 
         {/* Pricing Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {pricingPlans.map((plan, index) => (
             <motion.div
               key={index}
@@ -196,6 +134,10 @@ export default function PricingSection() {
 
                 {/* CTA */}
                 <Button
+                  onClick={() => {
+                    if (plan.id === "free") window.location.href = "/sign-up";
+                  }}
+                  disabled={plan.id !== "free"}
                   className={`w-full py-6 rounded-2xl font-semibold text-lg ${
                     plan.popular
                       ? "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white"

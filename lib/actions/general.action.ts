@@ -2,12 +2,25 @@
 
 import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
-import { openai } from "@ai-sdk/openai";
 import { createAIService } from "@/lib/ai";
+import { ObjectId } from "mongodb";
 
 import { db } from "@/firebase/admin";
 import { feedbackSchema } from "@/constants";
-import { limit } from "firebase/firestore";
+import { getCurrentUser } from "@/lib/actions/auth.action";
+import {
+  findFeedback,
+  findInterviewById,
+  findInterviewsByUserId,
+  findLatestInterviews,
+  saveCodeSubmission,
+  saveFeedback,
+} from "@/modules/interviews/interview.repository";
+
+interface TeachingSession {
+  id: string;
+  [key: string]: unknown;
+}
 
 /**
  * Create feedback with dynamic AI provider
@@ -17,6 +30,8 @@ export async function createFeedback(params: CreateFeedbackParams) {
   const { interviewId, userId, transcript, feedbackId } = params;
 
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser || currentUser.id !== userId) throw new Error("Unauthorized feedback request");
     const formattedTranscript = transcript
       .map(
         (sentence: { role: string; content: string }) =>
@@ -103,38 +118,30 @@ Please score the candidate from 0 to 100 in the following areas. Do not add cate
       feedbackObject = result.object;
     }
 
+    if (!ObjectId.isValid(interviewId) || !ObjectId.isValid(userId)) {
+      throw new Error("Invalid interview or user identifier");
+    }
+
     const feedback = {
-      interviewId: interviewId,
-      userId: userId,
+      interviewId: new ObjectId(interviewId),
+      userId: new ObjectId(userId),
       totalScore: feedbackObject.totalScore,
       categoryScores: feedbackObject.categoryScores,
       strengths: feedbackObject.strengths,
       areasForImprovement: feedbackObject.areasForImprovement,
       finalAssessment: feedbackObject.finalAssessment,
-      createdAt: new Date().toISOString(),
     };
+    const savedFeedbackId = await saveFeedback(feedback, feedbackId);
 
-    let feedbackRef;
-
-    if (feedbackId) {
-      feedbackRef = db.collection("feedback").doc(feedbackId);
-    } else {
-      feedbackRef = db.collection("feedback").doc();
-    }
-
-    await feedbackRef.set(feedback);
-
-    return { success: true, feedbackId: feedbackRef.id };
+    return { success: true, feedbackId: savedFeedbackId };
   } catch (error) {
     console.error("Error saving feedback:", error);
     return { success: false };
   }
 }
 
-export async function getInterviewById(id: any): Promise<Interview | null> {
-  const interview = await db.collection("interviews").doc(id).get();
-
-  return interview.data() as Interview | null;
+export async function getInterviewById(id: string): Promise<Interview | null> {
+  return findInterviewById(id);
 }
 
 export async function getSessionBySessionId(id: string): Promise<TeachingSession | null> {
@@ -157,17 +164,7 @@ export async function getFeedbackByInterviewId(
 ): Promise<Feedback | null> {
   const { interviewId, userId } = params;
 
-  const querySnapshot = await db
-    .collection("feedback")
-    .where("interviewId", "==", interviewId)
-    .where("userId", "==", userId)
-    .limit(1)
-    .get();
-
-  if (querySnapshot.empty) return null;
-
-  const feedbackDoc = querySnapshot.docs[0];
-  return { id: feedbackDoc.id, ...feedbackDoc.data() } as Feedback;
+  return findFeedback(interviewId, userId);
 }
 
 export async function getLatestInterviews(
@@ -175,52 +172,75 @@ export async function getLatestInterviews(
 ): Promise<Interview[] | null> {
   const { userId, limit = 20 } = params;
 
-  const interviews = await db
-    .collection("interviews")
-    .orderBy("createdAt", "desc")
-    .where("finalized", "==", true)
-    .where("userId", "!=", userId)
-    .limit(limit)
-    .get();
-
-  return interviews.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-  })) as Interview[];
+  return findLatestInterviews(userId, limit);
 }
 
 export async function getInterviewsByUserId(
   userId: string
 ): Promise<Interview[] | null> {
-  const interviews = await db
-    .collection("interviews")
-    .where("userId", "==", userId)
-    .orderBy("createdAt", "desc")
-    .get();
-
-    
-
-  return interviews.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-  })) as Interview[];
+  return findInterviewsByUserId(userId);
 }
 
 
 export async function getLastInterviewsByUserId(
   userId: string
 ): Promise<Interview[] | null> {
-  const interviews = await db
-    .collection("interviews")
-    .where("userId", "==", userId)
-    .orderBy("createdAt", "desc")
-    .limit(1)
-    .get();
+  return findInterviewsByUserId(userId, 1);
+}
 
-    
+export async function reviewCodeSubmission(params: {
+  interviewId: string;
+  question: string;
+  code: string;
+  language: string;
+}) {
+  const user = await getCurrentUser();
+  if (!user || !ObjectId.isValid(params.interviewId) || params.code.trim().length < 3) {
+    return { success: false, message: "Unable to review this submission." };
+  }
 
-  return interviews.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-  })) as Interview[];
+  const interview = await findInterviewById(params.interviewId);
+  if (!interview || !interview.finalized) {
+    return { success: false, message: "Interview not found." };
+  }
+
+  try {
+    const response = await createAIService().chat([
+      {
+        role: "system",
+        content: "You are a senior technical interviewer. Evaluate code accurately, never claim it was executed, and return only valid JSON.",
+      },
+      {
+        role: "user",
+        content: `Question: ${params.question}\nLanguage: ${params.language}\nCandidate code:\n${params.code}\n\nReturn JSON: {"score":0-100,"summary":"concise feedback","strengths":["..."],"improvements":["..."],"complexity":"time and space complexity, or unknown"}`,
+      },
+    ], { temperature: 0.2, maxTokens: 1200 });
+    const match = response.content.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error("AI returned invalid code review JSON");
+    const review = JSON.parse(match[0]) as {
+      score: number;
+      summary: string;
+      strengths: string[];
+      improvements: string[];
+      complexity?: string;
+    };
+    const score = Math.max(0, Math.min(100, Number(review.score) || 0));
+    await saveCodeSubmission({
+      interviewId: new ObjectId(params.interviewId),
+      userId: new ObjectId(user.id),
+      question: params.question,
+      code: params.code,
+      language: params.language,
+      score,
+      summary: review.summary,
+      strengths: review.strengths ?? [],
+      improvements: review.improvements ?? [],
+      complexity: review.complexity,
+      createdAt: new Date(),
+    });
+    return { success: true, review: { ...review, score } };
+  } catch (error) {
+    console.error("Error reviewing code:", error);
+    return { success: false, message: "Code review is temporarily unavailable." };
+  }
 }

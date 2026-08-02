@@ -1,9 +1,15 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
+import { DEFAULT_DOCK_APPS } from '@/lib/desktopApps'
 
 export interface DesktopSettings {
   fontSize: number
+  dockPosition: 'bottom' | 'right'
+  pinnedDockApps: string[]
+  dockSize: number
+  dockMagnification: boolean
+  autoHideDock: boolean
   folderColor: string
   textColor: string
   backgroundColor: string
@@ -13,21 +19,86 @@ export interface DesktopSettings {
   isMobile: boolean
   wallpaperQuery: string
   githubProfile: string
+  gestureControl: boolean
+  tapToClick: boolean
+  naturalScrolling: boolean
+  threeFingerDrag: boolean
+  reduceMotion: boolean
+  reduceTransparency: boolean
+  increaseContrast: boolean
+  screenBrightness: number
+  soundVolume: number
+  muted: boolean
+  interfaceSounds: boolean
+  notificationsEnabled: boolean
+  notificationPreview: 'Always' | 'When Unlocked' | 'Never'
+  focusMode: boolean
+  wifiEnabled: boolean
+  bluetoothEnabled: boolean
+  locationServices: boolean
+  analyticsSharing: boolean
+  showBatteryPercentage: boolean
+  lowPowerMode: boolean
+  keyboardBrightness: number
+  keyRepeat: number
+  language: string
+  region: string
+  use24HourTime: boolean
+  automaticBrightness: boolean
+  preferredSearchEngine: 'Google' | 'Bing' | 'DuckDuckGo'
+  appLockEnabled: boolean
+  lockedApps: string[]
+  hasAppLockPassword: boolean
 }
 
 const DEFAULT_SETTINGS: DesktopSettings = {
   fontSize: 14,
+  dockPosition: 'bottom',
+  pinnedDockApps: DEFAULT_DOCK_APPS,
+  dockSize: 52,
+  dockMagnification: true,
+  autoHideDock: true,
   folderColor: '#9de9ff',
   textColor: '#333333',
   backgroundColor: '240 5.9% 10%',
   darkMode: true,
-  themeColor: '240 5.9% 10%',
+  themeColor: '211 100% 50%',
   // backgroundImage: 'https://4kwallpapers.com/images/walls/thumbs_3t/14776.jpg',
   backgroundImage: '',
 
   isMobile: false,
   wallpaperQuery: 'wallpaper',
   githubProfile: 'vibhavtrivediWEBDEV',
+  gestureControl: false,
+  tapToClick: true,
+  naturalScrolling: true,
+  threeFingerDrag: false,
+  reduceMotion: false,
+  reduceTransparency: false,
+  increaseContrast: false,
+  screenBrightness: 80,
+  soundVolume: 65,
+  muted: false,
+  interfaceSounds: true,
+  notificationsEnabled: true,
+  notificationPreview: 'When Unlocked',
+  focusMode: false,
+  wifiEnabled: true,
+  bluetoothEnabled: true,
+  locationServices: true,
+  analyticsSharing: false,
+  showBatteryPercentage: true,
+  lowPowerMode: false,
+  keyboardBrightness: 60,
+  keyRepeat: 55,
+  language: 'English',
+  region: 'India',
+  use24HourTime: false,
+  automaticBrightness: true,
+  preferredSearchEngine: 'Google',
+  appLockEnabled: false,
+  lockedApps: [],
+  hasAppLockPassword: false,
 }
 
 interface SettingsContextType {
@@ -49,8 +120,10 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false)
 
   // Refs for debouncing
-  const wallpaperDebounceRef = useRef<NodeJS.Timeout>()
-  const githubDebounceRef = useRef<NodeJS.Timeout>()
+  const wallpaperDebounceRef = useRef<NodeJS.Timeout | undefined>(undefined)
+  const githubDebounceRef = useRef<NodeJS.Timeout | undefined>(undefined)
+  const settingsSaveDebounceRef = useRef<NodeJS.Timeout | undefined>(undefined)
+  const pendingSettingsRef = useRef<Partial<DesktopSettings>>({})
 
   // Detect mobile device
   useEffect(() => {
@@ -70,30 +143,27 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
-  // Load from localStorage on mount
+  // Load persisted settings from MongoDB on mount. Search results and device
+  // detection remain session-only because they are not desktop preferences.
   useEffect(() => {
-    const saved = localStorage.getItem('desktopSettings')
-    const savedWallpapers = localStorage.getItem('desktopWallpapers')
-
-    if (saved) {
+    let cancelled = false
+    const loadSettings = async () => {
       try {
-        const parsed = JSON.parse(saved)
-        setSettings({ ...DEFAULT_SETTINGS, ...parsed })
-      } catch (e) {
-        console.log('[v0] Error loading settings:', e)
+        const response = await fetch('/api/settings', { cache: 'no-store' })
+        if (!response.ok) {
+          if (response.status !== 401) throw new Error('Failed to load desktop settings')
+          return
+        }
+        const result = await response.json()
+        if (!cancelled) setSettings((current) => ({ ...current, ...result.data }))
+      } catch (error) {
+        console.error('Error loading desktop settings:', error)
+      } finally {
+        if (!cancelled) setMounted(true)
       }
     }
-
-    if (savedWallpapers) {
-      try {
-        const parsed = JSON.parse(savedWallpapers)
-        setWallpapers(parsed)
-      } catch (e) {
-        console.log('[v0] Error loading wallpapers:', e)
-      }
-    }
-
-    setMounted(true)
+    void loadSettings()
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
@@ -103,29 +173,60 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [settings.darkMode])
 
-  // Save to localStorage whenever settings change
+  // Apply settings only after the database values have been hydrated.
   useEffect(() => {
     if (mounted) {
-      localStorage.setItem('desktopSettings', JSON.stringify(settings))
       applySettingsToDOM(settings)
     }
   }, [settings, mounted])
 
-  // Save wallpapers to localStorage
-  useEffect(() => {
-    if (mounted && wallpapers.length > 0) {
-      localStorage.setItem('desktopWallpapers', JSON.stringify(wallpapers))
-    }
-  }, [wallpapers, mounted])
-
   const updateSettings = (updates: Partial<DesktopSettings>) => {
     setSettings(prev => ({ ...prev, ...updates }))
+
+    const persistedKeys: Array<keyof DesktopSettings> = [
+      'fontSize', 'dockPosition', 'pinnedDockApps', 'dockSize', 'dockMagnification',
+      'autoHideDock', 'folderColor', 'backgroundColor', 'darkMode', 'themeColor',
+      'backgroundImage', 'wallpaperQuery', 'githubProfile', 'gestureControl',
+      'tapToClick', 'naturalScrolling', 'threeFingerDrag', 'reduceMotion',
+      'reduceTransparency', 'increaseContrast', 'screenBrightness', 'soundVolume',
+      'muted', 'interfaceSounds', 'notificationsEnabled', 'notificationPreview',
+      'focusMode', 'wifiEnabled', 'bluetoothEnabled',
+      'locationServices', 'analyticsSharing', 'showBatteryPercentage', 'lowPowerMode',
+      'keyboardBrightness', 'keyRepeat', 'language', 'region', 'use24HourTime',
+      'automaticBrightness', 'preferredSearchEngine', 'appLockEnabled', 'lockedApps',
+    ]
+    const persistedUpdates = Object.fromEntries(
+      Object.entries(updates).filter(([key]) => persistedKeys.includes(key as keyof DesktopSettings)),
+    ) as Partial<DesktopSettings>
+    if (Object.keys(persistedUpdates).length === 0) return
+
+    pendingSettingsRef.current = { ...pendingSettingsRef.current, ...persistedUpdates }
+    if (settingsSaveDebounceRef.current) clearTimeout(settingsSaveDebounceRef.current)
+    settingsSaveDebounceRef.current = setTimeout(async () => {
+      const body = pendingSettingsRef.current
+      pendingSettingsRef.current = {}
+      try {
+        const response = await fetch('/api/settings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        if (!response.ok && response.status !== 401) throw new Error('Failed to save desktop settings')
+      } catch (error) {
+        pendingSettingsRef.current = { ...body, ...pendingSettingsRef.current }
+        console.error('Error saving desktop settings:', error)
+      }
+    }, 350)
   }
 
   const resetSettings = () => {
     setSettings(DEFAULT_SETTINGS)
     setWallpapers([])
-    localStorage.removeItem('desktopWallpapers')
+    pendingSettingsRef.current = {}
+    if (settingsSaveDebounceRef.current) clearTimeout(settingsSaveDebounceRef.current)
+    void fetch('/api/settings', { method: 'DELETE' }).catch((error) => {
+      console.error('Error resetting desktop settings:', error)
+    })
   }
 
   // Load wallpapers from Pinterest API
@@ -148,8 +249,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         throw new Error(data.error || 'Failed to fetch wallpapers')
       }
 
-      // Extract image URLs (adjust based on your API response structure)
-      const imageUrls = data.images.slice(0, 10).map((img: any) => img.url || img.image || img)
+      const imageUrls = data.images.slice(0, 18).map((img: { url?: string } | string) =>
+        typeof img === 'string' ? img : img.url
+      ).filter(Boolean) as string[]
       setWallpapers(imageUrls)
 
       // Set first wallpaper as default background if none is set
@@ -168,8 +270,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(wallpaperDebounceRef.current)
     }
 
-    // Update settings immediately for input value
-    setSettings(prev => ({ ...prev, wallpaperQuery: query }))
+    // Update immediately and persist the latest query with the other preferences.
+    updateSettings({ wallpaperQuery: query })
 
     // Debounce the API call
     wallpaperDebounceRef.current = setTimeout(() => {
@@ -177,7 +279,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         loadWallpapers(query)
       }
     }, 500) // 500ms debounce delay
-  }, [])
+  }, [settings.backgroundImage])
 
   // Debounced GitHub profile update
   const updateGithubProfile = useCallback((profile: string) => {
@@ -186,8 +288,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(githubDebounceRef.current)
     }
 
-    // Update settings immediately for input value
-    setSettings(prev => ({ ...prev, githubProfile: profile }))
+    // Update immediately and persist the profile with the other preferences.
+    updateSettings({ githubProfile: profile })
 
     // Debounce the save (already handled by localStorage effect, but you can add custom logic here)
     githubDebounceRef.current = setTimeout(() => {
@@ -204,6 +306,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       }
       if (githubDebounceRef.current) {
         clearTimeout(githubDebounceRef.current)
+      }
+      if (settingsSaveDebounceRef.current) {
+        clearTimeout(settingsSaveDebounceRef.current)
       }
     }
   }, [])
@@ -250,6 +355,28 @@ function applySettingsToDOM(settings: DesktopSettings) {
 
   // Theme color - update CSS variable
   root.style.setProperty('--theme-primary', settings.themeColor)
+  root.style.setProperty('--theme-primary-color', `hsl(${settings.themeColor})`)
+  root.style.setProperty('--theme-primary-soft', `hsl(${settings.themeColor} / 0.14)`)
+  root.style.setProperty('--primary', settings.themeColor)
+  root.style.setProperty('--ring', settings.themeColor)
+  root.style.setProperty('--sidebar-primary', settings.themeColor)
+  const systemAccent = `hsl(${settings.themeColor})`
+  ;['blue', 'indigo', 'violet', 'purple', 'fuchsia'].forEach((family) => {
+    ;[300, 400, 500, 600, 700].forEach((shade) => {
+      root.style.setProperty(`--color-${family}-${shade}`, systemAccent)
+    })
+  })
+  root.style.setProperty('--macos-bg', settings.darkMode ? '#1c1c1e' : '#f5f5f7')
+  root.style.setProperty('--macos-surface', settings.darkMode ? '#2c2c2e' : '#ffffff')
+  root.style.setProperty('--macos-surface-raised', settings.darkMode ? '#3a3a3c' : '#f2f2f7')
+  root.style.setProperty('--macos-text', settings.darkMode ? '#f5f5f7' : '#1d1d1f')
+  root.style.setProperty('--macos-secondary', settings.darkMode ? '#a1a1a6' : '#6e6e73')
+  root.style.setProperty('--macos-border', settings.increaseContrast
+    ? (settings.darkMode ? 'rgba(255,255,255,.32)' : 'rgba(0,0,0,.28)')
+    : (settings.darkMode ? 'rgba(255,255,255,.11)' : 'rgba(0,0,0,.10)'))
+  root.style.setProperty('--macos-blur', settings.reduceTransparency ? '0px' : '24px')
+  root.style.setProperty('--macos-motion', settings.reduceMotion ? '0s' : '180ms')
+  root.style.setProperty('--screen-brightness', `${settings.screenBrightness / 100}`)
 
   // Folder color
   root.style.setProperty('--folder-color', settings.folderColor)
@@ -264,6 +391,10 @@ function applySettingsToDOM(settings: DesktopSettings) {
   if (body) {
     body.style.fontSize = `${settings.fontSize}px`
   }
+
+  root.style.setProperty('color-scheme', settings.darkMode ? 'dark' : 'light')
+  root.classList.toggle('reduce-motion', settings.reduceMotion)
+  root.classList.toggle('reduce-transparency', settings.reduceTransparency)
 
   // Background image
   if (settings.backgroundImage && body) {

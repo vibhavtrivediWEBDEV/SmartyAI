@@ -18,6 +18,12 @@ interface BrowserContentProps {
   onError?: (error: string) => void;
 }
 
+const SEARCH_ENGINES = {
+  Google: { home: "https://www.google.com/webhp?igu=1", search: (query: string) => `https://www.google.com/search?igu=1&q=${query}` },
+  Bing: { home: "https://www.bing.com", search: (query: string) => `https://www.bing.com/search?q=${query}` },
+  DuckDuckGo: { home: "https://duckduckgo.com", search: (query: string) => `https://duckduckgo.com/?q=${query}` },
+} as const;
+
 export function BrowserContent({ 
   searchQuery,
   directUrl,
@@ -27,9 +33,11 @@ export function BrowserContent({
 }: BrowserContentProps) {
   const { settings } = useSettings();
   const isDark = settings?.darkMode ?? true;
+  const searchEngine = settings.preferredSearchEngine ?? "Google";
+  const engine = SEARCH_ENGINES[searchEngine];
   
   const [searchInput, setSearchInput] = useState("");
-  const [currentUrl, setCurrentUrl] = useState("https://www.google.com/webhp?igu=1");
+  const [currentUrl, setCurrentUrl] = useState<string>(engine.home);
   const [isLoading, setIsLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -45,9 +53,7 @@ export function BrowserContent({
     if (searchQuery && searchQuery.trim() && searchQuery !== searchedQueryRef.current) {
       searchedQueryRef.current = searchQuery; // Mark as searched
       const encoded = encodeURIComponent(searchQuery.trim());
-      // Use igu=1 for Google iframe compatibility
-      const googleUrl = `https://www.google.com/search?igu=1&q=${encoded}`;
-      setCurrentUrl(googleUrl);
+      setCurrentUrl(engine.search(encoded));
       setSearchInput(searchQuery);
       setIsLoading(true);
       onLoad?.();
@@ -55,7 +61,7 @@ export function BrowserContent({
       // Also fetch results for cards view
       executeSearch(searchQuery);
     }
-  }, [searchQuery]);
+  }, [engine, searchQuery]);
 
   // Direct URL navigation
   useEffect(() => {
@@ -93,9 +99,7 @@ export function BrowserContent({
     e?.preventDefault?.();
     if (searchInput.trim()) {
       const encoded = encodeURIComponent(searchInput.trim());
-      // Use igu=1 for Google iframe compatibility
-      const googleUrl = `https://www.google.com/search?igu=1&q=${encoded}`;
-      setCurrentUrl(googleUrl);
+      setCurrentUrl(engine.search(encoded));
       setIsLoading(true);
       setShowResults(false); // Switch to iframe view
       executeSearch(searchInput);
@@ -148,7 +152,7 @@ export function BrowserContent({
             }
           }}
           className={`flex-1 px-3 py-1.5 text-sm rounded border focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputBg} ${textColor} ${borderColor} ${placeholderColor}`}
-          placeholder="Search Google..."
+          placeholder={`Search ${searchEngine}...`}
         />
         <button
           onClick={handleManualSearch}
@@ -218,7 +222,7 @@ export function BrowserContent({
       {/* Status Bar */}
       <div className={`flex-shrink-0 px-3 py-1 text-xs border-t flex items-center justify-between ${isDark ? 'bg-gray-800 border-gray-700 text-gray-500' : 'bg-gray-100 border-gray-200 text-gray-600'}`}>
         <span>🌐 {currentUrl.replace('https://', '').split('/')[0]}</span>
-        <span>{showResults ? `📋 ${searchResults.length} sources` : '🔍 Google Search'}</span>
+        <span>{showResults ? `📋 ${searchResults.length} sources` : `🔍 ${searchEngine} Search`}</span>
       </div>
     </div>
   );

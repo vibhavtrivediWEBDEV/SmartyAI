@@ -1,133 +1,96 @@
 "use server";
 
-import { auth, db } from "@/firebase/admin";
-import { cookies } from "next/headers";
+import bcrypt from "bcryptjs";
+import { z } from "zod";
 
-// Session duration (1 week)
-const SESSION_DURATION = 60 * 60 * 24 * 7;
+import { clearSession, getSessionUserId, setSession } from "@/lib/auth/session";
+import {
+  createUser,
+  findUserByEmail,
+  findUserById,
+  normalizeEmail,
+} from "@/modules/users/user.repository";
+import { getOrCreateProfile } from "@/modules/profile/profile.repository";
 
-// Set session cookie
-export async function setSessionCookie(idToken: string) {
-  const cookieStore = await cookies();
+const credentialsSchema = z.object({
+  email: z.string().trim().email(),
+  password: z.string().min(8).max(128),
+});
 
-  // Create session cookie
-  const sessionCookie = await auth.createSessionCookie(idToken, {
-    expiresIn: SESSION_DURATION * 1000, // milliseconds
-  });
+const registrationSchema = credentialsSchema.extend({
+  name: z.string().trim().min(3).max(80),
+});
 
-  // Set cookie in the browser
-  cookieStore.set("session", sessionCookie, {
-    maxAge: SESSION_DURATION,
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    sameSite: "lax",
-  });
-}
-
-export async function signUp(params: SignUpParams) {
-  const { uid, name, email } = params;
+export async function signUp(params: { name: string; email: string; password: string }) {
+  const parsed = registrationSchema.safeParse(params);
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? "Invalid account details." };
+  }
 
   try {
-    // check if user exists in db
-    const userRecord = await db.collection("users").doc(uid).get();
-    if (userRecord.exists)
-      return {
-        success: false,
-        message: "User already exists. Please sign in.",
-      };
+    const email = normalizeEmail(parsed.data.email);
+    const passwordHash = await bcrypt.hash(parsed.data.password, 12);
+    const userId = await createUser({ name: parsed.data.name, email, passwordHash });
 
-    // save user to db
-    await db.collection("users").doc(uid).set({
-      name,
-      email,
-      // profileURL,
-      // resumeURL,
-    });
-
-    return {
-      success: true,
-      message: "Account created successfully. Please sign in.",
-    };
-  } catch (error: any) {
-    console.error("Error creating user:", error);
-
-    // Handle Firebase specific errors
-    if (error.code === "auth/email-already-exists") {
-      return {
-        success: false,
-        message: "This email is already in use",
-      };
+    if (!userId) {
+      return { success: false, message: "This email is already in use." };
     }
 
-    return {
-      success: false,
-      message: "Failed to create account. Please try again.",
-    };
-  }
-}
-
-export async function signIn(params: SignInParams) {
-  const { email, idToken } = params;
-
-  try {
-    const userRecord = await auth.getUserByEmail(email);
-    if (!userRecord)
-      return {
-        success: false,
-        message: "User does not exist. Create an account.",
-      };
-
-    await setSessionCookie(idToken);
-  } catch (error: any) {
-    console.log("");
-
-    return {
-      success: false,
-      message: "Failed to log into account. Please try again.",
-    };
-  }
-}
-
-// Sign out user by clearing the session cookie
-export async function signOut() {
-  const cookieStore = await cookies();
-
-  cookieStore.delete("session");
-}
-
-// Get current user from session cookie
-export async function getCurrentUser(): Promise<User | null> {
-  const cookieStore = await cookies();
-
-  const sessionCookie = cookieStore.get("session")?.value;
-  if (!sessionCookie) return null;
-
-  try {
-    const decodedClaims = await auth.verifySessionCookie(sessionCookie, true);
-
-    // get user info from db
-    const userRecord = await db
-      .collection("users")
-      .doc(decodedClaims.uid)
-      .get();
-    if (!userRecord.exists) return null;
-
-    
-    return {
-      ...userRecord.data(),
-      id: userRecord.id,
-    } as User;
+    await getOrCreateProfile(userId.toHexString(), parsed.data.name);
+    await setSession(userId.toHexString());
+    return { success: true, message: "Account created successfully." };
   } catch (error) {
-    console.log(error);
-
-    // Invalid or expired session
-    return null;
+    console.error("Error creating user:", error);
+    return { success: false, message: "Failed to create account. Please try again." };
   }
 }
 
-// Check if user is authenticated
+export async function signIn(params: { email: string; password: string }) {
+  const parsed = credentialsSchema.safeParse(params);
+  if (!parsed.success) {
+    return { success: false, message: "Invalid email or password." };
+  }
+
+  try {
+    const user = await findUserByEmail(parsed.data.email);
+    if (!user || user.status !== "active") {
+      return { success: false, message: "Invalid email or password." };
+    }
+
+    const passwordMatches = await bcrypt.compare(parsed.data.password, user.passwordHash);
+    if (!passwordMatches) {
+      return { success: false, message: "Invalid email or password." };
+    }
+
+    await setSession(user._id.toHexString());
+    return { success: true, message: "Signed in successfully." };
+  } catch (error) {
+    console.error("Error signing in:", error);
+    return { success: false, message: "Failed to sign in. Please try again." };
+  }
+}
+
+export async function signOut() {
+  await clearSession();
+  return { success: true };
+}
+
+export async function getCurrentUser(): Promise<User | null> {
+  const userId = await getSessionUserId();
+  if (!userId) return null;
+
+  const user = await findUserById(userId);
+  if (!user || user.status !== "active") return null;
+
+  return {
+    id: user._id.toHexString(),
+    name: user.name,
+    email: user.email,
+    plan: user.plan,
+    subscriptionStatus: user.subscriptionStatus ?? "active",
+  };
+}
+
 export async function isAuthenticated() {
-  const user = await getCurrentUser();
-  return !!user;
+  return Boolean(await getCurrentUser());
 }

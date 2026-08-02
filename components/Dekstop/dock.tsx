@@ -1,8 +1,8 @@
 "use client"
 
 import Image from "next/image"
-import React, { useEffect, useState, useCallback } from "react"
-import GestureDock from "./gestureDock"
+import React, { useEffect, useState } from "react"
+import { useSettings } from "@/app/context/settingContext"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Window state type — matches your existing openWindows shape
@@ -19,7 +19,7 @@ interface WindowState {
 
 interface DockProps {
   appIcons: { name: string; icon?: React.ReactNode | string }[]
-  minappIcons: { id: string; icon: string; title: string; isMinimized?: boolean }[]
+  minappIcons: { id: string; icon: string; title: string; appName: string; isMinimized?: boolean }[]
   onAppClick: (appName: string) => void
   onminAppClick: (id: string) => void
   // Pass your openWindows array so gesture pinch can maximise the top window
@@ -31,6 +31,7 @@ interface DockProps {
 // ─────────────────────────────────────────────────────────────────────────────
 const lucideIconMap: Record<string, string> = {
   Finder: "https://framerusercontent.com/images/wtQkw1jK0MlEDOrW0Q1kE5PBqc.png",
+  ATS: "/assets/pdfIcon.png",
   Safari: "https://framerusercontent.com/images/qQISGOSSnz748TdrZn91l44R5u0.png",
   Mail: "https://framerusercontent.com/images/fm90fwzWoBMCvK5C0MOyKdo94.png",
   Messages: "https://framerusercontent.com/images/CwKoPLck9kD8CifRkrpug3socM.png",
@@ -53,11 +54,11 @@ const lucideIconMap: Record<string, string> = {
 // ─────────────────────────────────────────────────────────────────────────────
 // Eye icon for the gesture toggle button
 // ─────────────────────────────────────────────────────────────────────────────
-function EyeIcon({ active }: { active: boolean }) {
+function EyeIcon({ active, size = 18 }: { active: boolean; size?: number }) {
   return (
     <svg
-      width="18"
-      height="18"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -93,12 +94,17 @@ function GestureToggleBtn({
   active,
   onToggle,
   gestureMode,
+  size = 40,
+  dockPosition = "bottom",
 }: {
   active: boolean
   onToggle: () => void
   gestureMode: boolean
+  size?: number
+  dockPosition?: "bottom" | "right"
 }) {
   const [ripple, setRipple] = useState(false)
+  const [hovered, setHovered] = useState(false)
 
   const handleClick = () => {
     setRipple(true)
@@ -107,110 +113,108 @@ function GestureToggleBtn({
   }
 
   return (
-    <>
-      <button
-        onClick={handleClick}
-        title={active ? "Gesture Control ON — click to disable" : "Enable Gesture Control"}
-        className="relative flex flex-col items-center justify-center p-1 rounded-lg focus:outline-none"
+    <button
+      onClick={handleClick}
+      title={active ? "Gesture Control ON — click to disable" : "Enable Gesture Control"}
+      className="relative flex flex-col items-center justify-end focus:outline-none"
+      style={{
+        padding: "2px 3px",
+        margin: dockPosition === "right"
+          ? `${hovered ? 8 : 0}px 0`
+          : `0 ${hovered ? 8 : 0}px`,
+        borderRadius: 10,
+        transition: "transform 0.2s cubic-bezier(0.34,1.56,0.64,1), margin 0.2s cubic-bezier(0.22,1,0.36,1)",
+        transform: hovered
+          ? `scale(1.25) ${dockPosition === "right" ? "translateX(-9px)" : "translateY(-9px)"}`
+          : "scale(1)",
+        transformOrigin: dockPosition === "right" ? "right center" : "bottom center",
+        filter: active
+          ? "drop-shadow(0 0 10px rgba(10,132,255,0.5)) drop-shadow(0 0 20px rgba(10,132,255,0.2))"
+          : "none",
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {/* Icon container - match dock icon size */}
+      <div
         style={{
-          transition: "transform 0.2s cubic-bezier(0.34,1.56,0.64,1)",
-          transform: "scale(1)",
+          width: size,
+          height: size,
+          borderRadius: Math.max(7, size * 0.22),
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          position: "relative",
+          overflow: "hidden",
+          background: active
+            ? "linear-gradient(135deg, rgba(10,132,255,0.4) 0%, rgba(48,209,88,0.3) 100%)"
+            : "rgba(255,255,255,0.08)",
+          border: active
+            ? "1px solid rgba(10,132,255,0.55)"
+            : "1px solid rgba(255,255,255,0.12)",
+          boxShadow: active
+            ? "0 0 0 1px rgba(10,132,255,0.3), 0 4px 16px rgba(0,0,0,0.45)"
+            : "0 4px 16px rgba(0,0,0,0.35)",
+          transition: "all 0.35s cubic-bezier(0.16,1,0.3,1)",
+          color: active ? "#0A84FF" : "rgba(255,255,255,0.6)",
         }}
-        onMouseEnter={e => (e.currentTarget.style.transform = "scale(1.15) translateY(-4px)")}
-        onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
       >
-        {/* Icon container */}
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 10,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            position: "relative",
-            overflow: "hidden",
-            background: active
-              ? "linear-gradient(135deg, rgba(10,132,255,0.35) 0%, rgba(48,209,88,0.25) 100%)"
-              : "rgba(255,255,255,0.06)",
-            border: active
-              ? "1px solid rgba(10,132,255,0.55)"
-              : "1px solid rgba(255,255,255,0.08)",
-            boxShadow: active
-              ? "0 0 16px rgba(10,132,255,0.4), 0 0 32px rgba(10,132,255,0.15), inset 0 1px 0 rgba(255,255,255,0.1)"
-              : "inset 0 1px 0 rgba(255,255,255,0.04)",
-            transition: "all 0.35s cubic-bezier(0.16,1,0.3,1)",
-            color: active ? "#0A84FF" : "rgba(255,255,255,0.5)",
-          }}
-        >
-          <EyeIcon active={active} />
+        <EyeIcon active={active} size={Math.max(18, size * 0.44)} />
 
-          {/* Ripple on click */}
-          {ripple && (
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                borderRadius: "inherit",
-                background: active ? "rgba(10,132,255,0.3)" : "rgba(255,255,255,0.12)",
-                animation: "dockBtnRipple 0.55s ease-out forwards",
-                pointerEvents: "none",
-              }}
-            />
-          )}
+        {/* Ripple on click */}
+        {ripple && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: "inherit",
+              background: active ? "rgba(10,132,255,0.3)" : "rgba(255,255,255,0.12)",
+              animation: "dockBtnRipple 0.55s ease-out forwards",
+              pointerEvents: "none",
+            }}
+          />
+        )}
 
-          {/* Pulse ring when active */}
-          {active && (
-            <div
-              style={{
-                position: "absolute",
-                inset: -3,
-                borderRadius: 13,
-                border: "1px solid rgba(10,132,255,0.4)",
-                animation: "dockBtnPulse 2s ease-in-out infinite",
-                pointerEvents: "none",
-              }}
-            />
-          )}
-        </div>
+        {/* Pulse ring when active */}
+        {active && (
+          <div
+            style={{
+              position: "absolute",
+              inset: -3,
+              borderRadius: 13,
+              border: "1px solid rgba(10,132,255,0.4)",
+              animation: "dockBtnPulse 2s ease-in-out infinite",
+              pointerEvents: "none",
+            }}
+          />
+        )}
+      </div>
 
-        {/* Tooltip */}
-        <span
-          className="absolute pointer-events-none whitespace-nowrap"
-          style={{
-            top: -34,
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: "rgba(0,0,0,0.85)",
-            backdropFilter: "blur(12px)",
-            color: "rgba(255,255,255,0.9)",
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: "0.3px",
-            padding: "4px 10px",
-            borderRadius: 7,
-            fontFamily: "'SF Pro Text', -apple-system, sans-serif",
-            opacity: 0,
-            transition: "opacity 0.15s",
-          }}
-          className="tooltip-label"
-        >
-          {active ? "Gesture ON" : "Gesture OFF"}
-        </span>
-      </button>
-
-      <style>{`
-        button:hover .tooltip-label { opacity: 1 !important; }
-        @keyframes dockBtnRipple {
-          from { transform: scale(0.6); opacity: 1; }
-          to   { transform: scale(2.2); opacity: 0; }
-        }
-        @keyframes dockBtnPulse {
-          0%,100% { opacity: 0.5; transform: scale(1);    }
-          50%     { opacity: 0.9; transform: scale(1.08); }
-        }
-      `}</style>
-    </>
+      {/* Tooltip */}
+      <span
+        className="absolute pointer-events-none whitespace-nowrap"
+        style={{
+          top: dockPosition === "right" ? "50%" : -40,
+          left: dockPosition === "right" ? "auto" : "50%",
+          right: dockPosition === "right" ? size + 14 : "auto",
+          transform: dockPosition === "right" ? "translateY(-50%)" : "translateX(-50%)",
+          background: "rgba(0,0,0,0.82)",
+          backdropFilter: "blur(12px)",
+          color: "rgba(255,255,255,0.92)",
+          fontSize: 11,
+          fontWeight: 600,
+          padding: "4px 10px",
+          borderRadius: 7,
+          whiteSpace: "nowrap",
+          fontFamily: "'SF Pro Text', -apple-system, sans-serif",
+          opacity: hovered ? 1 : 0,
+          transition: "opacity 0.15s",
+          boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+        }}
+      >
+        {active ? "Gesture ON" : "Gesture OFF"}
+      </span>
+    </button>
   )
 }
 
@@ -224,70 +228,105 @@ export function Dock({
   onminAppClick,
   openWindows = [],
 }: DockProps) {
-  const [isVisible, setIsVisible] = useState(false)
+  const { settings, updateSettings } = useSettings()
+  const dockPosition = settings.dockPosition ?? "bottom"
+  const [isVisible, setIsVisible] = useState(!settings.autoHideDock)
   const [isMobile, setIsMobile] = useState(false)
   const [drawerExpanded, setDrawerExpanded] = useState(false)
-  const [gestureActive, setGestureActive] = useState(false)
+  const gestureActive = settings.gestureControl
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+  const [viewportSize, setViewportSize] = useState({ width: 1440, height: 900 })
+  const [contextMenu, setContextMenu] = useState<{ name: string; x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    const handleGestureHover = (event: Event) => {
+      const appName = (event as CustomEvent<{ appName?: string | null }>).detail?.appName
+      if (!appName) {
+        setHoveredIndex(null)
+        return
+      }
+      const index = appIcons.findIndex((app) => app.name.toLowerCase() === appName.toLowerCase())
+      setHoveredIndex(index >= 0 ? index : null)
+    }
+    window.addEventListener("smarty:dock-hover", handleGestureHover)
+    return () => window.removeEventListener("smarty:dock-hover", handleGestureHover)
+  }, [appIcons])
+
+  useEffect(() => {
+    if (!contextMenu) return
+    const closeMenu = () => setContextMenu(null)
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeMenu()
+    }
+    window.addEventListener("click", closeMenu)
+    window.addEventListener("blur", closeMenu)
+    window.addEventListener("keydown", closeOnEscape)
+    return () => {
+      window.removeEventListener("click", closeMenu)
+      window.removeEventListener("blur", closeMenu)
+      window.removeEventListener("keydown", closeOnEscape)
+    }
+  }, [contextMenu])
+
+  useEffect(() => {
+    let hideTimer: ReturnType<typeof setTimeout> | undefined
+    const revealDock = () => {
+      setIsVisible(true)
+      if (hideTimer) clearTimeout(hideTimer)
+      if (settings.autoHideDock) hideTimer = setTimeout(() => setIsVisible(false), 1400)
+    }
+
+    const setDockVisibility = (event: Event) => {
+      const nextVisible = (event as CustomEvent<{ visible?: boolean }>).detail?.visible
+      if (typeof nextVisible !== "boolean") return
+      if (hideTimer) clearTimeout(hideTimer)
+      setIsVisible(nextVisible)
+    }
+
+    window.addEventListener("smarty:dock-reveal", revealDock)
+    window.addEventListener("smarty:dock-visibility", setDockVisibility)
+    return () => {
+      window.removeEventListener("smarty:dock-reveal", revealDock)
+      window.removeEventListener("smarty:dock-visibility", setDockVisibility)
+      if (hideTimer) clearTimeout(hideTimer)
+    }
+  }, [settings.autoHideDock])
 
   // ── Mobile detect ─────────────────────────────────────────────────────
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768)
+    const check = () => {
+      setIsMobile(window.innerWidth < 768)
+      setViewportSize({ width: window.innerWidth, height: window.innerHeight })
+    }
     check()
     window.addEventListener("resize", check)
     return () => window.removeEventListener("resize", check)
   }, [])
 
-  // ── Desktop: show on hover near bottom (macOS-style: requires bottom edge + upward motion) ───────────────────────
+  // ── Desktop: reveal from the configured screen edge (including its corners) ──
   useEffect(() => {
     if (isMobile) return
-    
-    let lastY = 0
-    let lastTime = 0
-    let wasAtBottom = false
-    
-    const onMove = (e: MouseEvent) => {
-      const currentY = e.clientY
-      const currentTime = Date.now()
-      const distanceFromBottom = window.innerHeight - currentY
-      
-      // Check if mouse is at the very bottom edge (within 8px)
-      if (distanceFromBottom <= 8) {
-        wasAtBottom = true
-      }
-      
-      // Calculate vertical velocity (negative = moving up)
-      const dy = lastY - currentY
-      const dt = currentTime - lastTime
-      const velocity = dt > 0 ? dy / dt : 0
-      
-      // Show dock only if:
-      // 1. Mouse was at bottom edge (within 8px) AND
-      // 2. Mouse is now moving upward (velocity > 0.3) OR
-      // 3. Mouse is still near bottom edge (within 15px)
-      
-      // When mouse is near bottom (within 12px), show dock
-      if (distanceFromBottom <= 12) {
-        setIsVisible(true)
-      }
-      // When mouse was at bottom and is moving up, reveal dock
-      else if (wasAtBottom && velocity > 0.3 && dy > 20) {
-        setIsVisible(true)
-        // Reset wasAtBottom after revealing
-        setTimeout(() => { wasAtBottom = false }, 500)
-      }
-      // When mouse is moving away from bottom (more than 100px), hide dock
-      else if (distanceFromBottom > 100) {
-        setIsVisible(false)
-        wasAtBottom = false
-      }
-      
-      lastY = currentY
-      lastTime = currentTime
+
+    if (!settings.autoHideDock) {
+      setIsVisible(true)
+      return
     }
-    
+
+    const onMove = (e: MouseEvent) => {
+      const distanceFromBottom = window.innerHeight - e.clientY
+      const distanceFromRight = window.innerWidth - e.clientX
+      const distanceFromEdge = dockPosition === "right" ? distanceFromRight : distanceFromBottom
+
+      if (distanceFromEdge <= 12) {
+        setIsVisible(true)
+      } else if (distanceFromEdge > 100) {
+        setIsVisible(false)
+      }
+    }
+
     window.addEventListener("mousemove", onMove)
     return () => window.removeEventListener("mousemove", onMove)
-  }, [isMobile])
+  }, [dockPosition, isMobile, settings.autoHideDock])
 
   // ── Mobile: swipe up from bottom ─────────────────────────────────────
   useEffect(() => {
@@ -310,25 +349,15 @@ export function Dock({
     }
   }, [isMobile])
 
-  // ── GestureDock app launch handler ───────────────────────────────────
-  // Finds the top-most (highest zIndex) open window and triggers its app.
-  // Falls back to onAppClick with the app name.
-  const handleGestureAppLaunch = useCallback((app: { id: string; name: string }) => {
-    // Find topmost window
-    if (openWindows.length > 0) {
-      const top = [...openWindows].sort((a, b) => (b.zIndex ?? 0) - (a.zIndex ?? 0))[0]
-      // You can call maximize logic here — for now we call onAppClick with topmost appName
-      onAppClick(top.appName)
-    }
-    // Also launch the gesture-selected app
-    onAppClick(app.name)
-  }, [openWindows, onAppClick])
-
   // ── Merge icons ───────────────────────────────────────────────────────
   const mergedIcons = appIcons.map((app) => ({
     name: app.name,
     icon: typeof app.icon === "string" ? app.icon : lucideIconMap[app.name] ?? "/icons/default.png",
   }))
+
+  const dockItemCount = Math.max(1, mergedIcons.length + minappIcons.length + 1)
+  const availableDockLength = dockPosition === "right" ? viewportSize.height - 112 : viewportSize.width - 112
+  const dockIconSize = Math.max(20, Math.min(settings.dockSize, Math.floor(availableDockLength / dockItemCount - 10)))
 
   const handleAppClick = (appName: string) => {
     onAppClick(appName)
@@ -341,6 +370,7 @@ export function Dock({
   }
 
   const previewIcons = mergedIcons.slice(0, 5)
+  const minimizedAppNames = new Set(minappIcons.map((app) => app.appName.toLowerCase()))
 
   // ─────────────────────────────────────────────────────────────────────
   // MOBILE
@@ -348,13 +378,6 @@ export function Dock({
   if (isMobile) {
     return (
       <>
-        {/* GestureDock overlay — only when toggled */}
-        <GestureDock
-          visible={gestureActive}
-          onAppLaunch={handleGestureAppLaunch}
-          accentColor="#0A84FF"
-        />
-
         {/* Collapsed mobile dock */}
         {!drawerExpanded && (
           <div
@@ -393,7 +416,7 @@ export function Dock({
                 <GestureToggleBtn
                   active={gestureActive}
                   gestureMode={gestureActive}
-                  onToggle={() => setGestureActive((v) => !v)}
+                  onToggle={() => updateSettings({ gestureControl: !gestureActive })}
                 />
               </div>
             </div>
@@ -414,7 +437,7 @@ export function Dock({
             <div className="px-4 pb-6 h-full overflow-y-auto">
               <div className="flex items-center justify-between mb-4 mt-2">
                 <h2 className="text-white text-lg font-semibold">All Apps</h2>
-                <GestureToggleBtn active={gestureActive} gestureMode={gestureActive} onToggle={() => setGestureActive((v) => !v)} />
+                <GestureToggleBtn active={gestureActive} gestureMode={gestureActive} onToggle={() => updateSettings({ gestureControl: !gestureActive })} />
               </div>
 
               <div className="grid grid-cols-4 gap-4">
@@ -461,41 +484,73 @@ export function Dock({
   // ─────────────────────────────────────────────────────────────────────
   return (
     <>
-      {/* GestureDock overlay — only when toggled */}
-      <GestureDock
-        visible={gestureActive}
-        onAppLaunch={handleGestureAppLaunch}
-        accentColor="#0A84FF"
-      />
-
       {/* Normal Mac dock */}
       <div
+        data-smarty-dock="desktop"
         className={`
-          fixed left-1/2 -translate-x-1/2 bottom-0 mb-2
-          backdrop-blur-md rounded-xl p-2
-          flex items-end space-x-1
+          fixed
+          rounded-[20px] p-2
+          flex gap-[6px]
           shadow-lg z-40
           transform transition-all duration-300 ease-out
-          ${isVisible ? "translate-y-0 opacity-100" : "translate-y-full opacity-0 pointer-events-none"}
+          ${isVisible ? "opacity-100" : "opacity-0 pointer-events-none"}
         `}
+        onMouseLeave={() => setHoveredIndex(null)}
         style={{
-          background: "rgba(155,152,152,0.09)",
+          ...(dockPosition === "right"
+            ? {
+              right: 6,
+              top: "50%",
+              flexDirection: "column" as const,
+              alignItems: "center",
+              transform: isVisible ? "translate(0, -50%)" : "translate(calc(100% + 8px), -50%)",
+            }
+            : {
+              left: "50%",
+              bottom: 6,
+              alignItems: "flex-end",
+              transform: isVisible ? "translate(-50%, 0)" : "translate(-50%, calc(100% + 8px))",
+            }),
+          background: "linear-gradient(145deg, rgba(106,106,112,0.52) 0%, rgba(55,55,60,0.46) 48%, rgba(30,30,34,0.5) 100%)",
+          border: "1px solid rgba(255,255,255,0.3)",
+          backdropFilter: "blur(36px) saturate(210%) brightness(1.08)",
+          WebkitBackdropFilter: "blur(36px) saturate(210%) brightness(1.08)",
           zIndex: 9999999,
           // When gesture mode is on: add a subtle accent shadow to the dock itself
           boxShadow: gestureActive
             ? "0 0 0 1px rgba(10,132,255,0.25), 0 8px 32px rgba(0,0,0,0.5), 0 0 60px rgba(10,132,255,0.12)"
-            : "0 8px 32px rgba(0,0,0,0.4)",
-          transition: "box-shadow 0.5s ease, transform 0.3s ease-out, opacity 0.3s ease-out",
+            : "0 18px 48px rgba(0,0,0,0.46), 0 3px 10px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.22)",
+          transition: "box-shadow 0.45s ease, transform 0.38s cubic-bezier(0.22,1,0.36,1), opacity 0.28s ease",
         }}
       >
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-2 top-1 h-[42%] rounded-[15px]"
+          style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0))" }}
+        />
+
         {/* App icons */}
-        {mergedIcons.map((app) => (
+        {mergedIcons.map((app, index) => (
           <DockIcon
             key={app.name}
             name={app.name}
             src={app.icon as string}
+            isMinimized={minimizedAppNames.has(app.name.toLowerCase())}
             gestureMode={gestureActive}
+            dockPosition={dockPosition}
+            size={dockIconSize}
+            index={index}
+            hoveredIndex={settings.dockMagnification ? hoveredIndex : null}
+            onHover={setHoveredIndex}
             onClick={() => onAppClick(app.name)}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              setContextMenu({
+                name: app.name,
+                x: Math.min(event.clientX, window.innerWidth - 190),
+                y: Math.min(event.clientY, window.innerHeight - 112),
+              })
+            }}
           />
         ))}
 
@@ -503,9 +558,9 @@ export function Dock({
         {minappIcons.length > 0 && (
           <div
             style={{
-              width: 1,
-              height: 36,
-              margin: "0 4px",
+              width: dockPosition === "right" ? dockIconSize * 0.78 : 1,
+              height: dockPosition === "right" ? 1 : dockIconSize * 0.78,
+              margin: dockPosition === "right" ? "4px 0" : "0 4px",
               borderRadius: 1,
               background: "rgba(255,255,255,0.18)",
               alignSelf: "center",
@@ -520,34 +575,70 @@ export function Dock({
             id={app.id}
             title={app.title}
             gestureMode={gestureActive}
+            dockPosition={dockPosition}
+            size={dockIconSize}
             onClick={() => onminAppClick(app.id)}
           />
         ))}
 
-        {/* Separator before gesture toggle */}
-        <div
-          style={{
-            width: 1,
-            height: 36,
-            margin: "0 6px 0 4px",
-            borderRadius: 1,
-            background: "rgba(255,255,255,0.12)",
-            alignSelf: "center",
-          }}
-        />
-
-        {/* Gesture toggle button */}
+        {/* Gesture toggle button - aligned as an icon */}
         <GestureToggleBtn
           active={gestureActive}
           gestureMode={gestureActive}
-          onToggle={() => setGestureActive((v) => !v)}
+          size={dockIconSize}
+          dockPosition={dockPosition}
+          onToggle={() => updateSettings({ gestureControl: !gestureActive })}
         />
       </div>
+
+      {contextMenu && (
+        <div
+          role="menu"
+          aria-label={`${contextMenu.name} Dock options`}
+          className="fixed z-[10000000] w-44 overflow-hidden rounded-xl border border-white/20 bg-[#262628]/90 p-1.5 text-[13px] text-white shadow-2xl backdrop-blur-2xl"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="truncate border-b border-white/10 px-2.5 py-1.5 text-center text-xs font-semibold text-white/70">{contextMenu.name}</div>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              onAppClick(contextMenu.name)
+              setContextMenu(null)
+            }}
+            className="mt-1 w-full rounded-md px-2.5 py-1.5 text-left hover:bg-[#0a84ff]"
+          >
+            Open
+          </button>
+          {!['Finder', 'App Store'].includes(contextMenu.name) && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                updateSettings({ pinnedDockApps: (settings.pinnedDockApps ?? []).filter((name) => name !== contextMenu.name) })
+                setContextMenu(null)
+              }}
+              className="w-full rounded-md px-2.5 py-1.5 text-left hover:bg-[#0a84ff]"
+            >
+              Remove from Dock
+            </button>
+          )}
+        </div>
+      )}
 
       <style>{`
         @keyframes dockIconEnter {
           from { transform: scale(0.6) translateY(12px); opacity: 0; }
           to   { transform: scale(1) translateY(0);       opacity: 1; }
+        }
+        @keyframes dockBtnRipple {
+          from { transform: scale(0.6); opacity: 1; }
+          to   { transform: scale(2.2); opacity: 0; }
+        }
+        @keyframes dockBtnPulse {
+          0%,100% { opacity: 0.5; transform: scale(1);    }
+          50%     { opacity: 0.9; transform: scale(1.08); }
         }
       `}</style>
     </>
@@ -560,38 +651,58 @@ export function Dock({
 function DockIcon({
   name,
   src,
+  isMinimized,
   gestureMode,
+  dockPosition,
+  size,
+  index,
+  hoveredIndex,
+  onHover,
   onClick,
+  onContextMenu,
 }: {
   name: string
   src: string
+  isMinimized: boolean
   gestureMode: boolean
+  dockPosition: "bottom" | "right"
+  size: number
+  index: number
+  hoveredIndex: number | null
+  onHover: (index: number | null) => void
   onClick: () => void
+  onContextMenu: (event: React.MouseEvent<HTMLButtonElement>) => void
 }) {
-  const [hovered, setHovered] = useState(false)
   const [pressing, setPressing] = useState(false)
+  const distance = hoveredIndex === null ? Number.POSITIVE_INFINITY : Math.abs(index - hoveredIndex)
+  const scale = distance === 0 ? 1.55 : distance === 1 ? 1.3 : distance === 2 ? 1.12 : 1
+  const lift = distance === 0 ? 18 : distance === 1 ? 9 : distance === 2 ? 3 : 0
+  const expansion = ((scale - 1) * size) / 2
+  const hovered = distance === 0
 
   return (
     <button
+      data-smarty-app={name}
       onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => { setHovered(false); setPressing(false) }}
+      onContextMenu={onContextMenu}
+      onMouseEnter={() => onHover(index)}
+      onMouseLeave={() => setPressing(false)}
       onMouseDown={() => setPressing(true)}
       onMouseUp={() => setPressing(false)}
       className="relative flex flex-col items-center justify-end focus:outline-none"
       aria-label={`Launch ${name}`}
       type="button"
       style={{
-        padding: "2px 4px",
+        padding: "2px 3px",
+        margin: dockPosition === "right" ? `${expansion}px 0` : `0 ${expansion}px`,
         borderRadius: 10,
         // macOS-style magnify
         transform: pressing
-          ? "scale(0.92) translateY(2px)"
-          : hovered
-            ? "scale(1.28) translateY(-10px)"
-            : "scale(1) translateY(0)",
-        transition: "transform 0.2s cubic-bezier(0.34,1.56,0.64,1)",
-        transformOrigin: "bottom center",
+          ? `scale(0.92) ${dockPosition === "right" ? "translateX(-2px)" : "translateY(2px)"}`
+          : `scale(${scale}) ${dockPosition === "right" ? `translateX(-${lift}px)` : `translateY(-${lift}px)`}`,
+        transition: "transform 220ms cubic-bezier(0.2,0.9,0.25,1.18), margin 220ms cubic-bezier(0.2,0.9,0.25,1), filter 180ms ease",
+        transformOrigin: dockPosition === "right" ? "right center" : "bottom center",
+        zIndex: hovered ? 30 : distance === 1 ? 20 : distance === 2 ? 10 : 1,
         // Gesture mode: add per-icon glow
         filter: gestureMode && hovered
           ? "drop-shadow(0 0 10px rgba(10,132,255,0.7)) drop-shadow(0 0 24px rgba(10,132,255,0.35))"
@@ -604,9 +715,10 @@ function DockIcon({
       <span
         style={{
           position: "absolute",
-          top: -36,
-          left: "50%",
-          transform: "translateX(-50%)",
+          top: dockPosition === "right" ? "50%" : -36,
+          left: dockPosition === "right" ? "auto" : "50%",
+          right: dockPosition === "right" ? size + 14 : "auto",
+          transform: dockPosition === "right" ? "translateY(-50%)" : "translateX(-50%)",
           background: "rgba(0,0,0,0.82)",
           backdropFilter: "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",
@@ -630,16 +742,18 @@ function DockIcon({
       {/* Icon */}
       <div
         style={{
-          width: 40,
-          height: 40,
+          width: size,
+          height: size,
           position: "relative",
-          borderRadius: 10,
+          borderRadius: Math.max(7, size * 0.22),
           overflow: "hidden",
           // Gesture mode: subtle ring around icon
           boxShadow: gestureMode
             ? "0 0 0 1px rgba(10,132,255,0.3), 0 4px 16px rgba(0,0,0,0.45)"
-            : "0 4px 16px rgba(0,0,0,0.35)",
-          transition: "box-shadow 0.35s ease",
+            : hovered
+              ? "0 14px 28px rgba(0,0,0,0.42), 0 3px 8px rgba(0,0,0,0.34)"
+              : "0 6px 16px rgba(0,0,0,0.36)",
+          transition: "box-shadow 0.22s ease",
         }}
       >
         <Image
@@ -647,24 +761,26 @@ function DockIcon({
           alt={`${name} icon`}
           fill
           className="object-contain"
-          sizes="40px"
+          sizes={`${size}px`}
           priority
           unoptimized
         />
       </div>
 
-      {/* Active dot */}
-      <div
-        style={{
-          width: 3,
-          height: 3,
-          borderRadius: "50%",
-          background: gestureMode ? "rgba(10,132,255,0.7)" : "rgba(255,255,255,0.2)",
-          marginTop: 2,
-          transition: "background 0.3s",
-          boxShadow: gestureMode ? "0 0 6px rgba(10,132,255,0.5)" : "none",
-        }}
-      />
+      {/* A Dock indicator exists only while this app has a minimized window. */}
+      {isMinimized && (
+        <div
+          aria-hidden="true"
+          style={{
+            width: 4,
+            height: 4,
+            borderRadius: "50%",
+            background: gestureMode ? "rgba(10,132,255,0.9)" : "rgba(255,255,255,0.9)",
+            marginTop: 2,
+            boxShadow: gestureMode ? "0 0 6px rgba(10,132,255,0.6)" : "none",
+          }}
+        />
+      )}
     </button>
   )
 }
@@ -676,11 +792,15 @@ function MinDockIcon({
   id,
   title,
   gestureMode,
+  dockPosition,
+  size,
   onClick,
 }: {
   id: string
   title: string
   gestureMode: boolean
+  dockPosition: "bottom" | "right"
+  size: number
   onClick: () => void
 }) {
   const [hovered, setHovered] = useState(false)
@@ -693,9 +813,9 @@ function MinDockIcon({
       className="relative flex flex-col items-center focus:outline-none"
       style={{
         padding: "2px 4px",
-        transform: hovered ? "scale(1.22) translateY(-8px)" : "scale(1)",
+        transform: hovered ? `scale(1.22) ${dockPosition === "right" ? "translateX(-8px)" : "translateY(-8px)"}` : "scale(1)",
         transition: "transform 0.2s cubic-bezier(0.34,1.56,0.64,1)",
-        transformOrigin: "bottom center",
+        transformOrigin: dockPosition === "right" ? "right center" : "bottom center",
         filter: gestureMode && hovered ? "drop-shadow(0 0 8px rgba(10,132,255,0.6))" : "none",
       }}
     >
@@ -703,8 +823,8 @@ function MinDockIcon({
         src={lucideIconMap["Finder"]}
         alt={title}
         style={{
-          width: 32,
-          height: 32,
+          width: Math.max(20, size * 0.82),
+          height: Math.max(20, size * 0.82),
           objectFit: "contain",
           borderRadius: 8,
           boxShadow: gestureMode

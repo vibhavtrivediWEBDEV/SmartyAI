@@ -1,553 +1,206 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  Palette,
-  Image,
-  Type,
-  Settings as SettingsIcon,
-  X,
-  Menu
+  Accessibility, Battery, Bell, Bluetooth, ChevronRight, CircleUserRound, Cloud,
+  Gamepad2, Globe2, Hand, Info, Keyboard, Laptop, LockKeyhole, Menu, Monitor,
+  Moon, MousePointer2, Network, Palette, PanelRight, Printer, RotateCcw, Search,
+  ShieldCheck, SlidersHorizontal, Speaker, Sun, UserRound, Wifi, X,
 } from 'lucide-react'
-import { useSettings } from '@/app/context/settingContext'
+import { useSettings, type DesktopSettings } from '@/app/context/settingContext'
+import { DESKTOP_APPS } from '@/lib/desktopApps'
 
-type SettingTab = 'appearance' | 'wallpaper' | 'font' | 'advanced'
+type SettingTab = 'account' | 'network' | 'notifications' | 'sound' | 'focus' | 'general' | 'appearance' | 'accessibility' | 'control' | 'desktop' | 'display' | 'wallpaper' | 'battery' | 'privacy' | 'keyboard' | 'trackpad' | 'extras'
+type Item = { id: SettingTab; label: string; icon: typeof Palette; color: string; clickId?: string }
+type BluetoothNavigator = Navigator & { bluetooth?: { requestDevice: (options: { acceptAllDevices: boolean }) => Promise<{ name?: string }> } }
 
-const SIDEBAR_ITEMS = [
-  { id: 'appearance', label: 'Appearance', icon: Palette, clickId: "settings_sidebar_appearance" },
-  { id: 'wallpaper', label: 'Wallpaper', icon: Image, clickId: "settings_sidebar_wallpaper" },
-  { id: 'font', label: 'Font', icon: Type, clickId: "settings_sidebar_font" },
-  { id: 'advanced', label: 'Advanced', icon: SettingsIcon, clickId: "settings_sidebar_advanced" },
+const groups: Item[][] = [
+  [
+    { id: 'account', label: 'Apple Account', icon: CircleUserRound, color: '#8e8e93' },
+  ],
+  [
+    { id: 'network', label: 'Network', icon: Wifi, color: '#007aff' },
+    { id: 'notifications', label: 'Notifications', icon: Bell, color: '#ff3b30' },
+    { id: 'sound', label: 'Sound', icon: Speaker, color: '#ff375f' },
+    { id: 'focus', label: 'Focus', icon: Moon, color: '#5856d6' },
+  ],
+  [
+    { id: 'general', label: 'General', icon: SlidersHorizontal, color: '#8e8e93' },
+    { id: 'appearance', label: 'Appearance', icon: Palette, color: '#007aff', clickId: 'settings_sidebar_appearance' },
+    { id: 'accessibility', label: 'Accessibility', icon: Accessibility, color: '#007aff' },
+    { id: 'control', label: 'Control Center', icon: SlidersHorizontal, color: '#8e8e93' },
+  ],
+  [
+    { id: 'desktop', label: 'Desktop & Dock', icon: PanelRight, color: '#007aff' },
+    { id: 'display', label: 'Displays', icon: Monitor, color: '#5856d6' },
+    { id: 'wallpaper', label: 'Wallpaper', icon: Sun, color: '#32ade6', clickId: 'settings_sidebar_wallpaper' },
+    { id: 'battery', label: 'Battery', icon: Battery, color: '#34c759' },
+  ],
+  [
+    { id: 'privacy', label: 'Privacy & Security', icon: ShieldCheck, color: '#007aff' },
+    { id: 'keyboard', label: 'Keyboard', icon: Keyboard, color: '#8e8e93' },
+    { id: 'trackpad', label: 'Trackpad & Gestures', icon: Hand, color: '#8e8e93' },
+    { id: 'extras', label: 'More Settings', icon: Gamepad2, color: '#ff9500' },
+  ],
 ]
 
-const THEME_COLORS = [
-  { name: 'Slate', value: '215 20.2% 65.1%' },
-  { name: 'Gray', value: '220 8.9% 46.1%' },
-  { name: 'Zinc', value: '240 5.9% 10%' },
-  { name: 'Neutral', value: '0 0% 45.1%' },
-  { name: 'Stone', value: '25 5.3% 44.7%' },
-  { name: 'Red', value: '0 72.2% 50.6%' },
-  { name: 'Orange', value: '24.6 95% 53.1%' },
-  { name: 'Amber', value: '37.7 92.1% 50.2%' },
-  { name: 'Yellow', value: '47.9 95.8% 53.1%' },
-  { name: 'Lime', value: '84.2 85.2% 60.4%' },
-  { name: 'Green', value: '142.1 76.2% 36.3%' },
-  { name: 'Emerald', value: '152.4 81.4% 50.8%' },
-  { name: 'Teal', value: '173.4 80.4% 40%' },
-  { name: 'Cyan', value: '188.7 94.5% 42.7%' },
-  { name: 'Sky', value: '198.4 93.2% 59.6%' },
-  { name: 'Blue', value: '217.2 91.2% 59.8%' },
+const accents = [
+  { name: 'Graphite', value: '240 3% 52%' }, { name: 'Red', value: '3 100% 59%' },
+  { name: 'Orange', value: '35 100% 50%' }, { name: 'Yellow', value: '48 100% 50%' },
+  { name: 'Green', value: '135 59% 49%' }, { name: 'Blue', value: '211 100% 50%' },
+  { name: 'Purple', value: '248 53% 58%' }, { name: 'Pink', value: '340 100% 59%' },
 ]
 
-function hexToRgb(hex: string) {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-  if (!result) return null
+function Toggle({ value, onChange, id, label }: { value: boolean; onChange: (value: boolean) => void; id?: string; label: string }) {
+  return <button id={id} type="button" role="switch" aria-checked={value} aria-label={label} onClick={() => onChange(!value)} className="relative h-[22px] w-[38px] shrink-0 rounded-full transition-colors" style={{ background: value ? 'var(--theme-primary-color)' : 'var(--macos-secondary)' }}><span className={`absolute top-[2px] h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform ${value ? 'translate-x-[18px]' : 'translate-x-[2px]'}`} /></button>
+}
 
-  const r = parseInt(result[1], 16) / 255
-  const g = parseInt(result[2], 16) / 255
-  const b = parseInt(result[3], 16) / 255
+function SettingRow({ title, description, children, last = false }: { title: string; description?: string; children: React.ReactNode; last?: boolean }) {
+  return <div className={`flex min-h-[54px] items-center gap-4 px-4 py-2.5 ${last ? '' : 'border-b'}`} style={{ borderColor: 'var(--macos-border)' }}><div className="min-w-0 flex-1"><p className="text-[13px] font-medium">{title}</p>{description && <p className="mt-0.5 text-[11px] leading-4" style={{ color: 'var(--macos-secondary)' }}>{description}</p>}</div>{children}</div>
+}
 
-  const max = Math.max(r, g, b)
-  const min = Math.min(r, g, b)
-  let h = 0, s = 0, l = (max + min) / 2
+function Group({ children }: { children: React.ReactNode }) {
+  return <section className="overflow-hidden rounded-xl border shadow-sm" style={{ background: 'var(--macos-surface)', borderColor: 'var(--macos-border)' }}>{children}</section>
+}
 
-  if (max !== min) {
-    const d = max - min
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+function Slider({ value, onChange, min = 0, max = 100, id }: { value: number; onChange: (value: number) => void; min?: number; max?: number; id?: string }) {
+  return <div className="flex w-52 items-center gap-2"><span className="text-[11px]" style={{ color: 'var(--macos-secondary)' }}>{min}</span><input id={id} type="range" min={min} max={max} value={value} onChange={(event) => onChange(Number(event.target.value))} className="h-1.5 min-w-0 flex-1 cursor-pointer accent-[var(--theme-primary-color)]" /><span className="w-7 text-right text-[11px] tabular-nums" style={{ color: 'var(--macos-secondary)' }}>{value}</span></div>
+}
 
-    switch (max) {
-      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break
-      case g: h = ((b - r) / d + 2) / 6; break
-      case b: h = ((r - g) / d + 4) / 6; break
-    }
-  }
-
-  return {
-    h: Math.round(h * 360),
-    s: Math.round(s * 100),
-    l: Math.round(l * 100)
-  }
+function Select({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[] }) {
+  return <select value={value} onChange={(event) => onChange(event.target.value)} className="rounded-md border px-2 py-1 text-xs outline-none" style={{ background: 'var(--macos-surface-raised)', borderColor: 'var(--macos-border)' }}>{options.map((option) => <option key={option}>{option}</option>)}</select>
 }
 
 export default function SettingsModal() {
-  const {
-    settings,
-    updateSettings,
-    resetSettings,
-    wallpapers,
-    updateWallpaperQuery,
-    updateGithubProfile,
-    githubError,
-    wallpaperError,
-    isLoadingWallpapers,
-  } = useSettings()
-
+  const { settings, updateSettings, resetSettings, wallpapers, loadWallpapers, updateWallpaperQuery } = useSettings()
   const [activeTab, setActiveTab] = useState<SettingTab>('appearance')
-  const [selectedBg, setSelectedBg] = useState(settings.backgroundImage)
-  const [customColor, setCustomColor] = useState('#000000')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [searchingWallpapers, setSearchingWallpapers] = useState(false)
+  const [appLockPassword, setAppLockPassword] = useState('')
+  const [appLockStatus, setAppLockStatus] = useState('')
+  const [networkOnline, setNetworkOnline] = useState(true)
+  const [bluetoothDevice, setBluetoothDevice] = useState('')
 
-  const onBackgroundChange = (url: string) => {
-    updateSettings({ backgroundImage: url })
+  useEffect(() => {
+    const updateOnlineStatus = () => setNetworkOnline(navigator.onLine)
+    updateOnlineStatus()
+    window.addEventListener('online', updateOnlineStatus)
+    window.addEventListener('offline', updateOnlineStatus)
+    return () => {
+      window.removeEventListener('online', updateOnlineStatus)
+      window.removeEventListener('offline', updateOnlineStatus)
+    }
+  }, [])
+
+  const allItems = useMemo(() => groups.flat(), [])
+  const visibleGroups = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    if (!needle) return groups
+    const matched = allItems.filter((item) => item.label.toLowerCase().includes(needle))
+    return matched.length ? [matched] : []
+  }, [allItems, query])
+  const title = activeTab === 'account' ? 'Apple Account' : allItems.find((item) => item.id === activeTab)?.label || 'Settings'
+  const patch = <K extends keyof DesktopSettings>(key: K, value: DesktopSettings[K]) => updateSettings({ [key]: value } as Pick<DesktopSettings, K>)
+
+  const chooseTab = (tab: SettingTab) => { setActiveTab(tab); setSidebarOpen(false) }
+  const searchWallpapers = async () => {
+    setSearchingWallpapers(true)
+    await loadWallpapers(settings.wallpaperQuery || 'macOS wallpaper')
+    setSearchingWallpapers(false)
   }
 
-  return (
-    <div className=" inset-0 bg-black/50 flex items-center justify-center z-50 ">
-      <div
-        className={`shadow-2xl w-full  max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col  ${settings.darkMode ? 'bg-zinc-900' : 'bg-white'
-          }`}
-      >
-        {/* Mobile Header */}
-        <div className={`lg:hidden flex items-center justify-between p-4 border-b ${settings.darkMode ? 'border-gray-700' : 'border-gray-200'
-          }`}>
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
-          >
-            <Menu size={20} style={{ color: settings.textColor }} />
-          </button>
-          <h2 className="text-lg font-semibold" style={{ color: settings.textColor }}>
-            Settings
-          </h2>
+  const updateNotifications = async (enabled: boolean) => {
+    if (enabled && 'Notification' in window && Notification.permission === 'default') {
+      const permission = await Notification.requestPermission()
+      if (permission !== 'granted') return
+    }
+    patch('notificationsEnabled', enabled)
+  }
 
-        </div>
+  const saveAppLockPassword = async () => {
+    setAppLockStatus('Saving…')
+    const response = await fetch('/api/settings/app-lock', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: appLockPassword }),
+    })
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}))
+      setAppLockStatus(body.error || 'Could not save password')
+      return
+    }
+    setAppLockPassword('')
+    updateSettings({ appLockEnabled: true, hasAppLockPassword: true })
+    setAppLockStatus('Password saved securely')
+  }
 
-        {/* Main Content */}
-        <div className="flex flex-1 overflow-hidden">
-          {/* Sidebar - Mobile Drawer & Desktop Fixed */}
-          <div
-            className={`
-              fixed lg:relative inset-y-0 left-0 z-50 
-              w-64 lg:w-48 
-              border-r 
-              ${settings.darkMode ? 'border-gray-700 bg-zinc-900' : 'border-gray-200 bg-white'}
-              transform transition-transform duration-300 ease-in-out
-              ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-              overflow-y-auto
-            `}
-          >
-            {/* Close button for mobile */}
-            <div className="lg:hidden flex justify-end p-4">
-              <button
-                onClick={() => setSidebarOpen(false)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
-              >
-                <X size={20} style={{ color: settings.textColor }} />
-              </button>
-            </div>
+  const toggleLockedApp = (appName: string) => {
+    const lockedApps = settings.lockedApps.includes(appName)
+      ? settings.lockedApps.filter((name) => name !== appName)
+      : [...settings.lockedApps, appName]
+    patch('lockedApps', lockedApps)
+  }
 
-            {/* Search Inputs */}
-            <div className={`p-3 border-b ${settings.darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs font-medium mb-1 block" style={{ color: settings.textColor }}>
-                    Wallpaper
-                  </label>
-                  <input
-                    type="text"
-                    id="wallpaper_input"
-                    placeholder="Search wallpapers..."
-                    value={settings.wallpaperQuery}
-                    onChange={(e) => updateWallpaperQuery(e.target.value)}
-                    disabled={isLoadingWallpapers}
-                    className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 border ${wallpaperError
-                      ? 'border-red-500'
-                      : settings.darkMode
-                        ? 'bg-zinc-800 border-gray-600 text-gray-100 placeholder-gray-400'
-                        : 'bg-white border-gray-300 text-gray-900'
-                      }`}
-                  />
-                  {wallpaperError && (
-                    <p className="text-xs text-red-500 mt-1">{wallpaperError}</p>
-                  )}
-                  {isLoadingWallpapers && (
-                    <p className="text-xs text-blue-500 mt-1">Loading...</p>
-                  )}
-                </div>
+  const connectBluetoothDevice = async () => {
+    const bluetooth = (navigator as BluetoothNavigator).bluetooth
+    if (!bluetooth) {
+      setBluetoothDevice('Web Bluetooth is unavailable in this browser')
+      return
+    }
+    try {
+      const device = await bluetooth.requestDevice({ acceptAllDevices: true })
+      setBluetoothDevice(device.name || 'Bluetooth device authorized')
+      patch('bluetoothEnabled', true)
+    } catch (error) {
+      if ((error as DOMException).name !== 'NotFoundError') setBluetoothDevice('Bluetooth access failed')
+    }
+  }
 
-                <div>
-                  <label className="text-xs font-medium mb-1 block" style={{ color: settings.textColor }}>
-                    GitHub Profile
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="username"
-                    value={settings.githubProfile}
-                    onChange={(e) => updateGithubProfile(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 border ${githubError
-                      ? 'border-red-500'
-                      : settings.darkMode
-                        ? 'bg-zinc-800 border-gray-600 text-gray-100 placeholder-gray-400'
-                        : 'bg-white border-gray-300 text-gray-900'
-                      }`}
-                  />
-                  {githubError && (
-                    <p className="text-xs text-red-500 mt-1">{githubError}</p>
-                  )}
-                </div>
-              </div>
-            </div>
+  return <div className="flex h-full min-h-[560px] overflow-hidden font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Display','Segoe_UI',sans-serif]" style={{ background: 'var(--macos-bg)', color: 'var(--macos-text)' }}>
+    <aside className={`${sidebarOpen ? 'absolute inset-y-0 left-0 z-40 flex' : 'hidden'} w-[248px] shrink-0 flex-col border-r p-2.5 backdrop-blur-2xl md:flex`} style={{ background: settings.reduceTransparency ? 'var(--macos-surface)' : 'color-mix(in srgb, var(--macos-surface) 78%, transparent)', borderColor: 'var(--macos-border)' }}>
+      <div className="mb-2 flex items-center gap-2 px-1.5 pt-1"><div className="relative flex-1"><Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: 'var(--macos-secondary)' }} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" className="h-7 w-full rounded-lg border pl-7 pr-2 text-xs outline-none focus:ring-2" style={{ background: 'var(--macos-surface-raised)', borderColor: 'var(--macos-border)', '--tw-ring-color': 'var(--theme-primary-soft)' } as React.CSSProperties} /></div><button onClick={() => setSidebarOpen(false)} className="md:hidden"><X className="h-4 w-4" /></button></div>
+      <div className="mb-2 flex items-center gap-3 rounded-lg p-2"><div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-slate-300 to-slate-500 text-white"><CircleUserRound className="h-6 w-6" /></div><div className="min-w-0"><p className="truncate text-[13px] font-semibold">Desktop Settings</p><p className="truncate text-[10px]" style={{ color: 'var(--macos-secondary)' }}>Synced to your account</p></div></div>
+      <div className="overflow-y-auto pb-4">{visibleGroups.map((group, index) => <div key={index} className="mb-2 border-b pb-2" style={{ borderColor: 'var(--macos-border)' }}>{group.map((item) => { const Icon = item.icon; const selected = activeTab === item.id; return <button id={item.clickId} key={item.id} onClick={() => chooseTab(item.id)} className={`flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[12px] font-medium ${selected ? 'text-white' : ''}`} style={{ background: selected ? 'var(--theme-primary-color)' : 'transparent' }}><span className="grid h-[20px] w-[20px] place-items-center rounded-[5px] text-white shadow-sm" style={{ background: item.color }}><Icon className="h-3.5 w-3.5" /></span><span className="truncate">{item.label}</span></button>})}</div>)}</div>
+    </aside>
 
-            {/* Navigation */}
-            <nav className="p-2 space-y-1">
-              {SIDEBAR_ITEMS.map((item) => {
-                const IconComponent = item.icon
-                return (
-                  <button
-                    id={item.clickId}
-                    key={item.id}
-                    style={{ fontSize: settings.fontSize }}
-                    onClick={() => {
-                      setActiveTab(item.id as SettingTab)
-                      setSidebarOpen(false) // Close sidebar on mobile after selection
-                    }}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeTab === item.id
-                      ? 'bg-blue-500 text-white'
-                      : settings.darkMode
-                        ? 'text-gray-300 hover:bg-zinc-800'
-                        : 'text-gray-700 hover:bg-gray-100'
-                      }`}
-                  >
-                    <IconComponent size={18} />
-                    <span>{item.label}</span>
-                  </button>
-                )
-              })}
-            </nav>
-          </div>
+    <main className="min-w-0 flex-1 overflow-y-auto">
+      <header className="sticky top-0 z-20 flex h-12 items-center border-b px-4 backdrop-blur-2xl md:px-7" style={{ background: settings.reduceTransparency ? 'var(--macos-bg)' : 'color-mix(in srgb, var(--macos-bg) 84%, transparent)', borderColor: 'var(--macos-border)' }}><button onClick={() => setSidebarOpen(true)} className="mr-3 md:hidden"><Menu className="h-4 w-4" /></button><h1 className="text-[15px] font-semibold">{title}</h1></header>
+      <div className="mx-auto max-w-[760px] space-y-5 p-4 pb-14 md:p-7">
+        {activeTab === 'account' && <><div className="flex items-center gap-5 py-3"><div className="grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br from-slate-200 to-slate-500 text-white shadow-lg"><UserRound className="h-12 w-12" /></div><div><h2 className="text-2xl font-semibold">Vibhav Trivedi</h2><p className="text-sm" style={{ color: 'var(--macos-secondary)' }}>Personal profile for this Mac</p></div></div><Group><SettingRow title="iCloud" description="Photos, Drive, passwords, and app data"><Cloud className="h-5 w-5 text-sky-500" /></SettingRow><SettingRow title="Media & Purchases"><ChevronRight className="h-4 w-4 opacity-40" /></SettingRow><SettingRow title="Sign-In & Security" last><ChevronRight className="h-4 w-4 opacity-40" /></SettingRow></Group></>}
 
-          {/* Overlay for mobile sidebar */}
-          {sidebarOpen && (
-            <div
-              className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-              onClick={() => setSidebarOpen(false)}
-            />
-          )}
+        {activeTab === 'network' && <><Group><SettingRow title="Wi-Fi" description={!settings.wifiEnabled ? 'Wi-Fi is off for SmartyAI' : networkOnline ? 'Browser is online' : 'Browser is offline'}><Toggle label="Wi-Fi" value={settings.wifiEnabled} onChange={(value) => patch('wifiEnabled', value)} /></SettingRow><SettingRow title="Bluetooth" description={bluetoothDevice || (settings.bluetoothEnabled ? 'On · authorize a nearby device' : 'Bluetooth is off')}><div className="flex items-center gap-2">{settings.bluetoothEnabled && <button type="button" onClick={() => void connectBluetoothDevice()} className="rounded-md border px-2 py-1 text-[11px]" style={{ borderColor: 'var(--macos-border)' }}>Connect…</button>}<Toggle label="Bluetooth" value={settings.bluetoothEnabled} onChange={(value) => patch('bluetoothEnabled', value)} /></div></SettingRow><SettingRow title="Internet search engine" description="Used by the desktop browser"><Select value={settings.preferredSearchEngine} onChange={(value) => patch('preferredSearchEngine', value as DesktopSettings['preferredSearchEngine'])} options={['Google', 'Bing', 'DuckDuckGo']} /></SettingRow><SettingRow title="Network" description="Browser connectivity and connection details" last><Network className="h-5 w-5" style={{ color: 'var(--theme-primary-color)' }} /></SettingRow></Group></>}
 
-          {/* Content Area */}
-          <div className={`flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 ${settings.darkMode ? 'text-gray-100' : 'text-gray-900'
-            }`}>
-            {/* Appearance Tab */}
-            {activeTab === 'appearance' && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className={`text-xl sm:text-2xl font-bold mb-2 ${settings.darkMode ? 'text-gray-100' : 'text-gray-800'
-                    }`}>
-                    Appearance
-                  </h2>
-                  <p className={`text-sm sm:text-base ${settings.darkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>
-                    Customize the look and feel of your desktop
-                  </p>
-                </div>
+        {activeTab === 'notifications' && <Group><SettingRow title="Allow Notifications" description="Show alerts from desktop applications"><Toggle label="Allow notifications" value={settings.notificationsEnabled} onChange={(value) => void updateNotifications(value)} /></SettingRow><SettingRow title="Show previews" description={settings.notificationPreview} last><Select value={settings.notificationPreview} onChange={(value) => patch('notificationPreview', value as DesktopSettings['notificationPreview'])} options={['Always', 'When Unlocked', 'Never']} /></SettingRow></Group>}
 
-                <div className="space-y-4">
-                  {/* Dark Mode Toggle */}
-                  <div
-                    style={{ background: settings.darkMode ? '#1c1c1c' : '#ededed2e' }}
-                    className="rounded-lg p-4"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-semibold text-sm sm:text-base">Dark Mode</h3>
-                        <p className="text-xs sm:text-sm opacity-70">Use dark theme for the interface</p>
-                      </div>
-                      <button id="toggle_dark_mode"
-                        onClick={() => updateSettings({ darkMode: !settings.darkMode })}
-                        style={{ background: settings.darkMode ? '#3b3939' : '#ededed2e' }}
-                        className="relative w-12 h-6 rounded-full transition-colors"
-                      >
-                        <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${settings.darkMode ? 'translate-x-6' : 'translate-x-0.5'
-                          }`} />
-                      </button>
-                    </div>
-                  </div>
+        {activeTab === 'sound' && <Group><SettingRow title="Output volume"><Slider value={settings.soundVolume} onChange={(value) => patch('soundVolume', value)} /></SettingRow><SettingRow title="Mute"><Toggle label="Mute" value={settings.muted} onChange={(value) => patch('muted', value)} /></SettingRow><SettingRow title="Play interface sound effects" last><Toggle label="Interface sounds" value={settings.interfaceSounds} onChange={(value) => patch('interfaceSounds', value)} /></SettingRow></Group>}
 
-                  {/* Folder Color */}
-                  <div
-                    style={{ background: settings.darkMode ? '#1c1c1c' : '#ededed2e' }}
-                    className="rounded-lg p-4"
-                  >
-                    <h3 className={`font-semibold mb-3 text-sm sm:text-base ${settings.darkMode ? 'text-gray-200' : 'text-gray-700'
-                      }`}>
-                      Folder Color
-                    </h3>
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
-                      <input
-                        type="color"
-                        id="folder_color_picker"
-                        value={settings.folderColor}
-                        onChange={(e) => updateSettings({ folderColor: e.target.value })}
-                        className="w-16 h-16 rounded-lg cursor-pointer border-2 border-gray-300"
-                      />
-                      <div>
-                        <p className={`text-sm font-semibold ${settings.darkMode ? 'text-gray-200' : 'text-gray-700'
-                          }`}>
-                          {settings.folderColor}
-                        </p>
-                        <p className="text-xs sm:text-sm opacity-70">Customize folder icons color</p>
-                      </div>
-                    </div>
-                  </div>
+        {activeTab === 'focus' && <Group><SettingRow title="Focus" description="Silence notifications and reduce interruptions"><Toggle label="Focus mode" value={settings.focusMode} onChange={(value) => patch('focusMode', value)} /></SettingRow><SettingRow title="Share across devices" last><Toggle label="Share focus" value={settings.focusMode} onChange={(value) => patch('focusMode', value)} /></SettingRow></Group>}
 
-                  {/* Text Color */}
-                  <div
-                    style={{ background: settings.darkMode ? '#1c1c1c' : '#ededed2e' }}
-                    className="rounded-lg p-4"
-                  >
-                    <h3 className={`font-semibold mb-3 text-sm sm:text-base ${settings.darkMode ? 'text-gray-200' : 'text-gray-700'
-                      }`}>
-                      Text Color
-                    </h3>
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
-                      <input
-                        type="color"
-                        id="text_color_picker"
-                        value={settings.textColor}
-                        onChange={(e) => updateSettings({ textColor: e.target.value })}
-                        className="w-16 h-16 rounded-lg cursor-pointer border-2 border-gray-300"
-                      />
-                      <div>
-                        <p className={`text-sm font-semibold ${settings.darkMode ? 'text-gray-200' : 'text-gray-700'
-                          }`}>
-                          {settings.textColor}
-                        </p>
-                        <p className="text-xs sm:text-sm opacity-70">Customize text color across desktop</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+        {activeTab === 'appearance' && <><div><h2 className="text-lg font-semibold">Appearance</h2><p className="text-xs" style={{ color: 'var(--macos-secondary)' }}>Every option here updates the desktop immediately and syncs to your account.</p></div><Group><SettingRow title="Appearance"><div className="flex gap-2">{[{ label: 'Light', dark: false }, { label: 'Dark', dark: true }].map((option) => <button id={option.dark ? 'toggle_dark_mode' : undefined} key={option.label} onClick={() => patch('darkMode', option.dark)} className="w-20 rounded-lg border p-1.5 text-[10px]" style={{ borderColor: settings.darkMode === option.dark ? 'var(--theme-primary-color)' : 'var(--macos-border)', background: option.dark ? '#252527' : '#f5f5f7', color: option.dark ? 'white' : '#1d1d1f' }}><div className="mb-1 h-7 rounded bg-current opacity-10" />{option.label}</button>)}</div></SettingRow><SettingRow title="Accent color" description="Buttons, selections, links, and active controls"><div className="flex flex-wrap justify-end gap-1.5">{accents.map((accent) => <button key={accent.name} title={accent.name} onClick={() => patch('themeColor', accent.value)} className="h-5 w-5 rounded-full border-2" style={{ background: `hsl(${accent.value})`, borderColor: settings.themeColor === accent.value ? 'var(--macos-text)' : 'transparent', outline: settings.themeColor === accent.value ? `2px solid hsl(${accent.value})` : 'none' }} />)}</div></SettingRow><SettingRow title="Folder color"><input type="color" aria-label="Folder color" value={settings.folderColor} onChange={(event) => patch('folderColor', event.target.value)} className="h-7 w-10 cursor-pointer rounded border-0 bg-transparent" /></SettingRow><SettingRow title="Text size"><Slider id="font_size_slider" min={11} max={20} value={settings.fontSize} onChange={(value) => patch('fontSize', value)} /></SettingRow><SettingRow title="Reset desktop settings" last><button onClick={() => confirm('Reset every desktop setting?') && resetSettings()} className="flex items-center gap-1.5 text-xs font-medium text-red-500"><RotateCcw className="h-3.5 w-3.5" />Reset</button></SettingRow></Group></>}
 
-            {/* Wallpaper Tab */}
-            {activeTab === 'wallpaper' && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className={`text-xl sm:text-2xl font-bold mb-2 ${settings.darkMode ? 'text-gray-100' : 'text-gray-800'
-                    }`}>
-                    Desktop & Wallpaper
-                  </h2>
-                  <p className={`text-sm sm:text-base ${settings.darkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>
-                    Choose a wallpaper for your desktop background
-                  </p>
-                </div>
+        {activeTab === 'accessibility' && <><Group><SettingRow title="Reduce motion" description="Minimize interface animation"><Toggle label="Reduce motion" value={settings.reduceMotion} onChange={(value) => patch('reduceMotion', value)} /></SettingRow><SettingRow title="Reduce transparency" description="Use opaque window and menu backgrounds"><Toggle label="Reduce transparency" value={settings.reduceTransparency} onChange={(value) => patch('reduceTransparency', value)} /></SettingRow><SettingRow title="Increase contrast" description="Strengthen borders and controls" last><Toggle label="Increase contrast" value={settings.increaseContrast} onChange={(value) => patch('increaseContrast', value)} /></SettingRow></Group></>}
 
-                {/* Preview */}
-                <div className={`rounded-lg p-3 sm:p-4 ${settings.darkMode ? 'bg-zinc-800' : 'bg-gray-100'
-                  }`}>
-                  <p className={`text-xs font-semibold mb-3 uppercase ${settings.darkMode ? 'text-gray-400' : 'text-gray-500'
-                    }`}>
-                    Preview
-                  </p>
-                  <div className="relative h-40 sm:h-48 md:h-64 rounded-lg overflow-hidden border-2 border-gray-300 shadow-lg">
-                    {settings.backgroundImage ? (
-                      <img
-                        src={settings.backgroundImage}
-                        alt="Preview"
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.src = '/placeholder.svg'
-                        }}
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center">
-                        <span className="text-white text-sm sm:text-base">No wallpaper selected</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
+        {activeTab === 'control' && <Group><SettingRow title="Wi-Fi in Menu Bar"><Toggle label="Wi-Fi menu" value={settings.wifiEnabled} onChange={(value) => patch('wifiEnabled', value)} /></SettingRow><SettingRow title="Bluetooth in Menu Bar"><Toggle label="Bluetooth menu" value={settings.bluetoothEnabled} onChange={(value) => patch('bluetoothEnabled', value)} /></SettingRow><SettingRow title="Battery percentage" last><Toggle label="Battery percentage" value={settings.showBatteryPercentage} onChange={(value) => patch('showBatteryPercentage', value)} /></SettingRow></Group>}
 
-                {/* Wallpapers Grid */}
-                {wallpapers.length > 0 && (
-                  <div>
-                    <p className={`text-xs font-semibold mb-3 uppercase ${settings.darkMode ? 'text-gray-400' : 'text-gray-500'
-                      }`}>
-                      Wallpapers ({wallpapers.length})
-                    </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
-                      {wallpapers.map((url, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => {
-                            setSelectedBg(url)
-                            onBackgroundChange(url)
-                          }}
-                          id={`new_wallpaper_${idx}`}
-                          className={`relative h-20 sm:h-24 md:h-28 rounded-lg overflow-hidden border-2 transition-all ${selectedBg === url
-                            ? 'border-blue-500 shadow-lg ring-2 ring-blue-300'
-                            : settings.darkMode
-                              ? 'border-gray-600 hover:border-gray-500'
-                              : 'border-gray-200 hover:border-gray-300'
-                            }`}
-                        >
-                          <img
-                            src={url}
-                            alt={`Wallpaper ${idx + 1}`}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.src = '/placeholder.svg'
-                            }}
-                          />
-                          <div className="absolute top-1 right-1 text-xs font-semibold text-white bg-black/50 px-1.5 py-0.5 rounded">
-                            {idx + 1}
-                          </div>
-                          {selectedBg === url && (
-                            <div className="absolute inset-0 bg-blue-500/10 border-2 border-blue-500 flex items-center justify-center">
-                              <span className="text-white text-xl font-bold">✓</span>
-                            </div>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+        {activeTab === 'desktop' && <><Group><SettingRow title="Position on screen"><div className="flex rounded-lg border p-0.5" style={{ borderColor: 'var(--macos-border)' }}>{(['bottom', 'right'] as const).map((position) => <button key={position} onClick={() => patch('dockPosition', position)} className="rounded-md px-3 py-1 text-[11px] capitalize" style={{ background: settings.dockPosition === position ? 'var(--theme-primary-color)' : 'transparent', color: settings.dockPosition === position ? 'white' : 'inherit' }}>{position}</button>)}</div></SettingRow><SettingRow title="Dock size"><Slider min={36} max={72} value={settings.dockSize} onChange={(value) => patch('dockSize', value)} /></SettingRow><SettingRow title="Magnification"><Toggle label="Dock magnification" value={settings.dockMagnification} onChange={(value) => patch('dockMagnification', value)} /></SettingRow><SettingRow title="Automatically hide and show the Dock" last><Toggle label="Auto-hide Dock" value={settings.autoHideDock} onChange={(value) => patch('autoHideDock', value)} /></SettingRow></Group></>}
 
-                {wallpapers.length === 0 && !isLoadingWallpapers && (
-                  <div className={`text-center py-8 rounded-lg ${settings.darkMode ? 'bg-zinc-800' : 'bg-gray-100'
-                    }`}>
-                    <p className="text-sm opacity-70">Search for wallpapers to see results</p>
-                  </div>
-                )}
-              </div>
-            )}
+        {activeTab === 'display' && <Group><SettingRow title="Brightness"><div className="flex items-center gap-2"><Sun className="h-4 w-4 opacity-60" /><Slider value={settings.screenBrightness} onChange={(value) => patch('screenBrightness', value)} /></div></SettingRow><SettingRow title="Automatically adjust brightness" description="Use the current time to soften the display at night" last><Toggle label="Automatic brightness" value={settings.automaticBrightness} onChange={(value) => patch('automaticBrightness', value)} /></SettingRow></Group>}
 
-            {/* Font Tab */}
-            {activeTab === 'font' && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className={`text-xl sm:text-2xl font-bold mb-2 ${settings.darkMode ? 'text-gray-100' : 'text-gray-800'
-                    }`}>
-                    Font & Text
-                  </h2>
-                  <p className={`text-sm sm:text-base ${settings.darkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>
-                    Adjust font size and text rendering
-                  </p>
-                </div>
+        {activeTab === 'wallpaper' && <><div><h2 className="text-lg font-semibold">Pinterest HD Wallpapers</h2><p className="text-xs" style={{ color: 'var(--macos-secondary)' }}>Searches are optimized for landscape Mac displays and use original-resolution images.</p></div><div className="flex gap-2"><input id="wallpaper_input" value={settings.wallpaperQuery} onChange={(event) => updateWallpaperQuery(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && void searchWallpapers()} placeholder="Mountains, abstract, space…" className="h-8 min-w-0 flex-1 rounded-lg border px-3 text-xs outline-none" style={{ background: 'var(--macos-surface)', borderColor: 'var(--macos-border)' }} /><button disabled={searchingWallpapers} onClick={() => void searchWallpapers()} className="rounded-lg px-3 text-xs font-medium text-white disabled:opacity-60" style={{ background: 'var(--theme-primary-color)' }}>{searchingWallpapers ? 'Searching…' : 'Search 4K'}</button></div>{settings.backgroundImage && <div className="relative aspect-video max-h-64 overflow-hidden rounded-xl border shadow-md" style={{ borderColor: 'var(--theme-primary-color)' }}><img src={settings.backgroundImage} alt="Current desktop wallpaper" className="h-full w-full object-cover" /><span className="absolute bottom-2 right-2 rounded-full bg-black/70 px-2 py-1 text-[10px] font-semibold text-white">Current · Original HD</span></div>}<div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{wallpapers.map((url, index) => <button id={`new_wallpaper_${index}`} key={url} onClick={() => patch('backgroundImage', url)} className="group relative aspect-video overflow-hidden rounded-xl border-2 shadow-sm" style={{ borderColor: settings.backgroundImage === url ? 'var(--theme-primary-color)' : 'var(--macos-border)' }}><img src={url} alt={`HD Mac wallpaper ${index + 1}`} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" /><span className="absolute bottom-1.5 right-1.5 rounded bg-black/65 px-1.5 py-0.5 text-[9px] font-semibold text-white">HD</span></button>)}</div>{wallpapers.length === 0 && <div className="grid h-52 place-items-center rounded-xl border" style={{ background: 'var(--macos-surface)', borderColor: 'var(--macos-border)' }}><div className="text-center"><Sun className="mx-auto mb-2 h-8 w-8" style={{ color: 'var(--theme-primary-color)' }} /><p className="text-sm font-medium">Choose your desktop picture</p><p className="text-xs" style={{ color: 'var(--macos-secondary)' }}>Search Pinterest for original HD and 4K wallpapers.</p></div></div>}</>}
 
-                <div className="space-y-4">
-                  <div className={`rounded-lg p-4 ${settings.darkMode ? 'bg-zinc-800' : 'bg-gray-50'
-                    }`}>
-                    <h3 className={`font-semibold mb-4 text-sm sm:text-base ${settings.darkMode ? 'text-gray-200' : 'text-gray-700'
-                      }`}>
-                      Font Size: {settings.fontSize}px
-                    </h3>
-                    <input
-                      type="range"
-                      id="font_size_slider"
-                      min="9"
-                      max="40"
-                      value={settings.fontSize}
-                      onChange={(e) => updateSettings({ fontSize: parseInt(e.target.value) })}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                    />
-                    <div className="flex justify-between mt-2 text-xs opacity-70">
-                      <span>12px</span>
-                      <span>20px</span>
-                    </div>
-                    <p className="text-xs sm:text-sm opacity-70 mt-2">Affects all text on the desktop</p>
-                  </div>
-                </div>
-              </div>
-            )}
+        {activeTab === 'battery' && <Group><SettingRow title="Show percentage"><Toggle label="Show battery percentage" value={settings.showBatteryPercentage} onChange={(value) => patch('showBatteryPercentage', value)} /></SettingRow><SettingRow title="Low Power Mode" description="Reduce energy use and background activity" last><Toggle label="Low Power Mode" value={settings.lowPowerMode} onChange={(value) => patch('lowPowerMode', value)} /></SettingRow></Group>}
 
-            {/* Advanced Tab */}
-            {activeTab === 'advanced' && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className={`text-xl sm:text-2xl font-bold mb-2 ${settings.darkMode ? 'text-gray-100' : 'text-gray-800'
-                    }`}>
-                    Theme Color
-                  </h2>
-                  <p className={`text-sm sm:text-base ${settings.darkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>
-                    Customize your theme color
-                  </p>
-                </div>
+        {activeTab === 'privacy' && <><Group><SettingRow title="Location Services"><Toggle label="Location services" value={settings.locationServices} onChange={(value) => patch('locationServices', value)} /></SettingRow><SettingRow title="Analytics & Improvements" description="Share diagnostics to improve SmartyAI" last><Toggle label="Analytics sharing" value={settings.analyticsSharing} onChange={(value) => patch('analyticsSharing', value)} /></SettingRow></Group><Group><SettingRow title="App Lock" description={settings.hasAppLockPassword ? `${settings.lockedApps.length} protected apps` : 'Set a password to protect selected apps'}><Toggle label="App lock" value={settings.appLockEnabled} onChange={(value) => patch('appLockEnabled', value)} /></SettingRow><div className="space-y-3 p-4"><div className="flex gap-2"><input type="password" minLength={4} maxLength={72} value={appLockPassword} onChange={(event) => setAppLockPassword(event.target.value)} placeholder={settings.hasAppLockPassword ? 'Change app-lock password' : 'New password (4+ characters)'} className="h-8 min-w-0 flex-1 rounded-lg border px-3 text-xs outline-none" style={{ background: 'var(--macos-surface-raised)', borderColor: 'var(--macos-border)' }} /><button type="button" disabled={appLockPassword.length < 4} onClick={() => void saveAppLockPassword()} className="rounded-lg px-3 text-xs font-medium text-white disabled:opacity-40" style={{ background: 'var(--theme-primary-color)' }}>Save</button></div>{appLockStatus && <p className="text-[11px]" style={{ color: 'var(--macos-secondary)' }}>{appLockStatus}</p>}<div className="grid grid-cols-2 gap-1 sm:grid-cols-3">{DESKTOP_APPS.filter((app) => app.name !== 'Settings').map((app) => <button type="button" key={app.name} onClick={() => toggleLockedApp(app.name)} className="truncate rounded-md border px-2 py-1.5 text-left text-[11px]" style={{ borderColor: settings.lockedApps.includes(app.name) ? 'var(--theme-primary-color)' : 'var(--macos-border)', background: settings.lockedApps.includes(app.name) ? 'var(--theme-primary-soft)' : 'transparent' }}>{settings.lockedApps.includes(app.name) ? '🔒 ' : ''}{app.displayName}</button>)}</div></div></Group><Group><SettingRow title="FileVault" description="Your project data remains protected"><LockKeyhole className="h-5 w-5 text-green-500" /></SettingRow><SettingRow title="App permissions" description="Camera, microphone, automation, and files" last><ChevronRight className="h-4 w-4 opacity-40" /></SettingRow></Group></>}
 
-                {/* Preset Colors */}
-                <div className={`rounded-lg p-4 ${settings.darkMode ? 'bg-zinc-800' : 'bg-gray-50'
-                  }`}>
-                  <p className={`text-sm font-semibold mb-4 ${settings.darkMode ? 'text-gray-200' : 'text-gray-700'
-                    }`}>
-                    Preset Colors
-                  </p>
-                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 sm:gap-4">
-                    {THEME_COLORS.map((color,) => (
-                      <button
-                        key={color.name}
-                        id={color.name}
-                        onClick={() => updateSettings({ themeColor: color.value })}
-                        className={`flex flex-col items-center gap-1 sm:gap-2 p-2 sm:p-3 rounded-lg transition-colors ${settings.darkMode ? 'hover:bg-zinc-700' : 'hover:bg-white'
-                          }`}
-                      >
-                        <div
-                          className={`w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 rounded-lg border-2 shadow-md hover:shadow-lg transition-shadow ${settings.themeColor === color.value
-                            ? 'border-blue-500 ring-2 ring-blue-300'
-                            : 'border-gray-300'
-                            }`}
-                          style={{ backgroundColor: `hsl(${color.value})` }}
-                        />
-                        <span className="text-xs font-semibold truncate w-full text-center">
-                          {color.name}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+        {activeTab === 'keyboard' && <Group><SettingRow title="Keyboard brightness"><Slider value={settings.keyboardBrightness} onChange={(value) => patch('keyboardBrightness', value)} /></SettingRow><SettingRow title="Key repeat rate"><Slider value={settings.keyRepeat} onChange={(value) => patch('keyRepeat', value)} /></SettingRow><SettingRow title="Keyboard Shortcuts…" last><ChevronRight className="h-4 w-4 opacity-40" /></SettingRow></Group>}
 
-                {/* Custom Color Picker */}
-                <div className={`rounded-lg p-4 ${settings.darkMode ? 'bg-zinc-800' : 'bg-gray-50'
-                  }`}>
-                  <p className={`text-sm font-semibold mb-4 ${settings.darkMode ? 'text-gray-200' : 'text-gray-700'
-                    }`}>
-                    Custom Color
-                  </p>
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
-                    <input
-                      type="color"
-                      id="custom_theme_color"
-                      value={customColor}
-                      onChange={(e) => {
-                        setCustomColor(e.target.value)
-                        const rgb = hexToRgb(e.target.value)
-                        if (rgb) {
-                          updateSettings({ themeColor: `${rgb.h} ${rgb.s}% ${rgb.l}%` })
-                        }
-                      }}
-                      className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg cursor-pointer border-2 border-gray-300"
-                    />
-                    <div>
-                      <p className={`text-sm font-semibold ${settings.darkMode ? 'text-gray-200' : 'text-gray-700'
-                        }`}>
-                        {customColor}
-                      </p>
-                      <p className="text-xs sm:text-sm opacity-70">Click to select custom color</p>
-                    </div>
-                  </div>
-                </div>
+        {activeTab === 'trackpad' && <><div className="rounded-2xl border p-5 text-center" style={{ background: 'var(--macos-surface)', borderColor: 'var(--macos-border)' }}><Hand className="mx-auto h-14 w-14" style={{ color: 'var(--theme-primary-color)' }} /><h2 className="mt-2 font-semibold">Gesture Mode</h2><p className="mx-auto mt-1 max-w-md text-xs leading-5" style={{ color: 'var(--macos-secondary)' }}>Use hand gestures and the gesture dock to control apps. This setting is connected directly to the desktop.</p></div><Group><SettingRow title="Gesture control" description="Control apps with hand and eye gestures"><Toggle label="Gesture control" value={settings.gestureControl} onChange={(value) => patch('gestureControl', value)} /></SettingRow><SettingRow title="Tap to click"><Toggle label="Tap to click" value={settings.tapToClick} onChange={(value) => patch('tapToClick', value)} /></SettingRow><SettingRow title="Natural scrolling" description="Move content in the direction of finger movement"><Toggle label="Natural scrolling" value={settings.naturalScrolling} onChange={(value) => patch('naturalScrolling', value)} /></SettingRow><SettingRow title="Three-finger drag" last><Toggle label="Three-finger drag" value={settings.threeFingerDrag} onChange={(value) => patch('threeFingerDrag', value)} /></SettingRow></Group></>}
 
-                {/* Reset Button */}
-                <div className={`rounded-lg p-4 ${settings.darkMode ? 'bg-red-900/20' : 'bg-red-50'
-                  }`}>
-                  <button
-                    onClick={() => {
-                      if (confirm('Reset all settings to default?')) {
-                        resetSettings()
-                      }
-                    }}
-                    className="w-full px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium transition-colors text-sm sm:text-base"
-                  >
-                    Reset All Settings
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        {activeTab === 'general' && <><Group><SettingRow title="Language"><Select value={settings.language} onChange={(value) => patch('language', value)} options={['English', 'Hindi', 'Spanish', 'French', 'German', 'Japanese']} /></SettingRow><SettingRow title="Region"><Select value={settings.region} onChange={(value) => patch('region', value)} options={['India', 'United States', 'United Kingdom', 'Canada', 'Australia', 'Japan']} /></SettingRow><SettingRow title="24-hour time" last><Toggle label="24-hour time" value={settings.use24HourTime} onChange={(value) => patch('use24HourTime', value)} /></SettingRow></Group><Group><SettingRow title="Software Update" description="SmartyAI is up to date"><Info className="h-5 w-5" style={{ color: 'var(--theme-primary-color)' }} /></SettingRow><SettingRow title="Transfer or Reset" last><button onClick={() => confirm('Reset every desktop setting?') && resetSettings()} className="flex items-center gap-1.5 text-xs font-medium text-red-500"><RotateCcw className="h-3.5 w-3.5" />Reset All Settings</button></SettingRow></Group></>}
+
+        {activeTab === 'extras' && <div className="grid gap-3 sm:grid-cols-2">{[{ icon: MousePointer2, name: 'Mouse', text: 'Tracking, scrolling, and secondary click' }, { icon: Printer, name: 'Printers & Scanners', text: 'Add and manage printers' }, { icon: Gamepad2, name: 'Game Center', text: 'Controller and game preferences' }, { icon: Globe2, name: 'Internet Accounts', text: 'Mail, contacts, and calendars' }, { icon: Laptop, name: 'Users & Groups', text: 'Login and account options' }, { icon: LockKeyhole, name: 'Lock Screen', text: 'Password and display timing' }].map(({ icon: Icon, name, text }) => <button key={name} className="flex items-center gap-3 rounded-xl border p-4 text-left" style={{ background: 'var(--macos-surface)', borderColor: 'var(--macos-border)' }}><span className="grid h-9 w-9 place-items-center rounded-lg text-white" style={{ background: 'var(--theme-primary-color)' }}><Icon className="h-5 w-5" /></span><span><span className="block text-sm font-medium">{name}</span><span className="block text-[10px]" style={{ color: 'var(--macos-secondary)' }}>{text}</span></span><ChevronRight className="ml-auto h-4 w-4 opacity-30" /></button>)}</div>}
       </div>
-    </div>
-  )
+    </main>
+  </div>
 }

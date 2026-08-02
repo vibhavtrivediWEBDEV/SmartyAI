@@ -1,981 +1,623 @@
 "use client"
 
 import type React from "react"
-import { useState, useCallback, useEffect } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
-  FolderIcon,
-  FileTextIcon,
-  PlayCircleIcon,
-  FileIcon,
-  FileImage,
-  FileSpreadsheet,
-  FileArchive,
-  FileCode,
-  GlobeIcon,
+  Airplay,
+  ArrowLeft,
+  ArrowRight,
+  ChevronDown,
+  ChevronRight,
+  Clock3,
+  Cloud,
+  Columns3,
   Copy,
-  Scissors,
-  ClipboardPaste,
-  Trash2,
+  Download,
+  File,
+  FileArchive,
+  FileCode2,
+  FileImage,
+  FileJson,
+  FilePlus2,
+  FileSpreadsheet,
+  FileText,
+  Folder,
   FolderOpen,
+  FolderPlus,
+  GalleryHorizontal,
+  Grid3X3,
+  HardDrive,
+  Image as ImageIcon,
+  List,
+  Link as LinkIcon,
   Loader2,
-  Plus,
-  Edit3,
+  MoreHorizontal,
+  MonitorUp,
+  Music2,
+  Scissors,
+  Search,
+  Share,
+  Star,
+  Tag,
+  Trash2,
+  Upload,
+  Users,
+  Video,
 } from "lucide-react"
-import { useKeyboard } from "@/app/context/keyBoardContext"
-import { useSettings } from "@/app/context/settingContext"
+import { toast } from "sonner"
 
-interface ProjectFile {
+import { useKeyboard } from "@/app/context/keyBoardContext"
+
+export interface ProjectFile {
   id: string
   name: string
-  type: "folder" | "file"
+  type: "folder" | "document" | "image" | "video" | "spreadsheet" | "archive" | "code" | "link" | "other" | "file"
+  kind?: "folder" | "file" | "text" | "link"
   parentId?: string | null
   size?: string | null
-  children?: ProjectFile[]
-  createdAt?: Date
-  updatedAt?: Date
+  sizeBytes?: number
+  mimeType?: string | null
   files?: ProjectFile[]
   content?: string
   src?: string
   url?: string
+  isStarred?: boolean
+  showOnDesktop?: boolean
+  isTrashed?: boolean
+  createdAt?: string
+  updatedAt?: string
+  projectId?: string
 }
-
-
-interface OpenFile extends ProjectFile {
-  projectId: string
-}
-
 
 interface ProjectExplorerWindowProps {
-
   onOpenFile: (file: ProjectFile) => void
   onDataChange?: () => void
 }
 
-const FILE_EXTENSIONS = {
-  text: [".txt", ".md", ".doc", ".docx", ".pdf"],
-  image: [".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp", ".bmp"],
-  video: [".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv"],
-  audio: [".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a"],
-  code: [".js", ".ts", ".jsx", ".tsx", ".html", ".css", ".py", ".java", ".cpp"],
-  spreadsheet: [".xlsx", ".xls", ".csv", ".ods"],
-  archive: [".zip", ".rar", ".7z", ".tar", ".gz"],
+interface FinderSubscription {
+  plan: "free" | "starter" | "pro"
+  status: "active" | "past_due" | "cancelled"
+  finderStorageBytes: number
+  finderBytesUsed: number
+  finderBytesReserved: number
+}
+
+type ViewMode = "icons" | "list" | "columns" | "gallery"
+type SortMode = "name" | "date" | "size" | "kind"
+type SmartLocation = "recents" | "starred" | "trash" | null
+type FinderIconComponent = React.ComponentType<{ className?: string }>
+
+const viewOptions: Array<{ mode: ViewMode; label: string; icon: FinderIconComponent }> = [
+  { mode: "icons", label: "Icon View", icon: Grid3X3 },
+  { mode: "list", label: "List View", icon: List },
+  { mode: "columns", label: "Column View", icon: Columns3 },
+  { mode: "gallery", label: "Gallery View", icon: GalleryHorizontal },
+]
+
+const formatBytes = (bytes = 0) => {
+  if (!bytes) return "0 B"
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`
+  return `${(bytes / 1024 ** 2).toFixed(1)} MB`
+}
+
+const formatDate = (value?: string) => value
+  ? new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(value))
+  : "—"
+
+function FinderIcon({ item, size = 52 }: { item: ProjectFile; size?: number }) {
+  const className = "drop-shadow-[0_5px_8px_rgba(0,0,0,0.38)]"
+  if (item.type === "folder") return <Folder size={size} fill="#58a9ef" strokeWidth={1.25} className={className} color="#8ecbff" />
+  if (item.type === "image") return <FileImage size={size} color="#78c7ff" className={className} />
+  if (item.type === "video") return <Video size={size} color="#c795ff" className={className} />
+  if (item.type === "spreadsheet") return <FileSpreadsheet size={size} color="#64d17b" className={className} />
+  if (item.type === "archive") return <FileArchive size={size} color="#d9ad72" className={className} />
+  if (item.name.toLowerCase().endsWith(".json")) return <FileJson size={size} color="#f1cf65" className={className} />
+  if (item.type === "code") return <FileCode2 size={size} color="#70b9ff" className={className} />
+  if (/\.(mp3|wav|aac|flac)$/i.test(item.name)) return <Music2 size={size} color="#ef78ba" className={className} />
+  if (item.type === "document") return <FileText size={size} color="#f4f4f5" className={className} />
+  return <File size={size} color="#d4d4d8" className={className} />
+}
+
+function Preview({ item }: { item?: ProjectFile }) {
+  if (!item) return <div className="grid h-full place-items-center text-[13px] text-white/35">Select an item</div>
+  if (item.type === "image" && item.src) {
+    return <img src={item.src} alt={item.name} className="max-h-full max-w-full rounded-lg object-contain shadow-2xl" />
+  }
+  if ((item.type === "document" || item.type === "code") && item.content) {
+    return <pre className="max-h-full w-full overflow-auto whitespace-pre-wrap rounded-lg bg-white p-5 text-left font-mono text-[11px] leading-5 text-zinc-800 shadow-2xl">{item.content.slice(0, 8000)}</pre>
+  }
+  return <div className="flex flex-col items-center gap-5"><FinderIcon item={item} size={112} /><span className="max-w-sm truncate text-sm text-white/80">{item.name}</span></div>
 }
 
 export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplorerWindowProps) {
-  const [projects, setProjects] = useState<ProjectFile[]>([])
-
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-
-
+  const [nodes, setNodes] = useState<ProjectFile[]>([])
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
+  const [smartLocation, setSmartLocation] = useState<SmartLocation>("recents")
+  const [history, setHistory] = useState<Array<{ folderId: string | null; smart: SmartLocation }>>([{ folderId: null, smart: "recents" }])
+  const [historyIndex, setHistoryIndex] = useState(0)
+  const [viewMode, setViewMode] = useState<ViewMode>("icons")
+  const [sortMode, setSortMode] = useState<SortMode>("name")
+  const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [selectedCategory, setSelectedCategory] = useState<string>("")
-  const [renamingItem, setRenamingItem] = useState<string | null>(null)
+  const [subscription, setSubscription] = useState<FinderSubscription | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState("")
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
-  const [fileCreationDialog, setFileCreationDialog] = useState<{
-    isOpen: boolean
-    fileName: string
-    fileType: string
-    parentId: string
-  } | null>(null)
-
-  const { settings } = useSettings()
+  const [inspectorOpen, setInspectorOpen] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const {
     selectedItems,
     setSelectedItems,
     copyItems,
     cutItems,
-    pasteItems,
+    clearClipboard,
+    clipboardItems,
     showContextMenu,
     isCommandPressed,
-    clipboardItems,
     setCurrentTargetLocation,
   } = useKeyboard()
 
-  const fetchProjects = useCallback(async () => {
+  const fetchNodes = useCallback(async (trash = smartLocation === "trash") => {
     try {
       setLoading(true)
+      const [response, subscriptionResponse] = await Promise.all([
+        fetch(`/api/Projects${trash ? "?trash=true" : ""}`),
+        fetch("/api/subscription"),
+      ])
+      const [result, subscriptionResult] = await Promise.all([response.json(), subscriptionResponse.json()])
+      if (!response.ok) throw new Error(result.error || "Could not load Finder")
+      setNodes(result.data ?? [])
+      setSubscription(subscriptionResult.subscription ?? null)
       setError(null)
-      const response = await fetch("/api/Projects")
-      if (!response.ok) throw new Error("Failed to fetch projects")
-
-      const result = await response.json()
-      setProjects(result.data || [])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch projects")
-      console.error("[v0] Error fetching projects:", err)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load Finder")
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [smartLocation])
 
-  const createProject = useCallback(
-    async (name: string, type: "folder" | "file", parentId?: string) => {
-      try {
-        console.log("[v0] Creating:", name, "Type:", type, "ParentId:", parentId)
+  useEffect(() => { void fetchNodes() }, [fetchNodes])
 
-        if (type === "file" && parentId) {
-          const response = await fetch(`/api/Projects/${parentId}/files`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name,
-              type: "document", // IMPORTANT (match seed)
-              content: "",
-            }),
-          })
+  const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])
+  const rootFolders = useMemo(() => nodes.filter((node) => !node.parentId && node.type === "folder" && !node.isTrashed), [nodes])
+  const developerFolders = useMemo(() => rootFolders.filter((folder) => /^(Resume|About Me|Projects|GitHub\s—)/i.test(folder.name)), [rootFolders])
+  const otherRootFolders = useMemo(() => rootFolders.filter((folder) => !developerFolders.some((generated) => generated.id === folder.id)), [developerFolders, rootFolders])
+  const currentFolder = currentFolderId ? nodeById.get(currentFolderId) : undefined
 
-          if (!response.ok) throw new Error("Failed to create file")
+  const rawItems = useMemo(() => {
+    if (smartLocation === "recents") return [...nodes].filter((node) => !node.isTrashed).sort((a, b) => +new Date(b.updatedAt ?? 0) - +new Date(a.updatedAt ?? 0)).slice(0, 100)
+    if (smartLocation === "starred") return nodes.filter((node) => node.isStarred && !node.isTrashed)
+    if (smartLocation === "trash") return nodes.filter((node) => node.isTrashed)
+    return currentFolderId ? currentFolder?.files ?? [] : nodes.filter((node) => !node.parentId && !node.isTrashed)
+  }, [currentFolder, currentFolderId, nodes, smartLocation])
 
-          const result = await response.json()
-
-          setProjects(prev =>
-            prev.map(p =>
-              p.id === parentId
-                ? { ...p, files: [...(p.files || []), result.data] }
-                : p
-            )
-          )
-
-          onDataChange?.()
-          return result.data
-        }
-        else {
-          // Creating a folder at root level
-          const response = await fetch("/api/Projects", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name, type, parentId: parentId || null }),
-          })
-
-          if (!response.ok) throw new Error("Failed to create project")
-
-          const result = await response.json()
-          setProjects((prev) => [...prev, result.data])
-          onDataChange?.()
-          return result.data
-        }
-      } catch (err) {
-        console.error("[v0] Error creating project:", err)
-        throw err
-      }
-    },
-    [projects, onDataChange]
-  )
-
-  const deleteProject = useCallback(
-    async (id: string) => {
-      try {
-        const response = await fetch(`/api/Projects`, {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ id }),
-        })
-
-        if (!response.ok) throw new Error("Failed to delete project")
-
-        setProjects((prev) => prev.filter((p) => p.id !== id))
-        onDataChange?.()
-      } catch (err) {
-        console.error("[v0] Error deleting project:", err)
-        throw err
-      }
-    },
-    [onDataChange]
-  )
-
-  const copyProjectsToDatabase = useCallback(
-    async (sourceIds: string[], targetParentId?: string) => {
-      try {
-        const response = await fetch("/api/Projects/copy", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sourceIds, targetParentId }),
-        })
-
-        if (!response.ok) throw new Error("Failed to copy projects")
-
-        const result = await response.json()
-        setProjects((prev) => [...prev, ...result.data])
-        onDataChange?.()
-        return result.data
-      } catch (err) {
-        console.error("[v0] Error copying projects:", err)
-        throw err
-      }
-    },
-    [onDataChange]
-  )
-
-  const renameProject = useCallback(
-    async (id: string, newName: string) => {
-      try {
-        const response = await fetch(`/api/Projects/${id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: newName }),
-        })
-
-        if (!response.ok) throw new Error("Failed to rename project")
-
-        setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, name: newName } : p)))
-        onDataChange?.()
-        return
-      } catch (err) {
-        console.error("[v0] Error renaming project:", err)
-        throw err
-      }
-    },
-    [onDataChange]
-  )
-
-  const uploadFile = useCallback(
-    async (file: File, parentId?: string) => {
-      try {
-        const formData = new FormData()
-        formData.append("file", file)
-        formData.append("parentId", parentId || "")
-
-        const response = await fetch("/api/Projects/upload", {
-          method: "POST",
-          body: formData,
-        })
-
-        if (!response.ok) throw new Error("Failed to upload file")
-
-        const result = await response.json()
-        setProjects((prev) => [...prev, result.data])
-        onDataChange?.()
-        return result.data
-      } catch (err) {
-        console.error("[v0] Error uploading file:", err)
-        throw err
-      }
-    },
-    [onDataChange]
-  )
-
-  const handleDragStart = useCallback((e: React.DragEvent, file: ProjectFile) => {
-    e.dataTransfer.setData("application/json", JSON.stringify(file))
-    e.dataTransfer.effectAllowed = "move"
-  }, [])
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = "move"
-  }, [])
-
-  const handleDrop = useCallback(
-    async (e: React.DragEvent, targetId?: string) => {
-      e.preventDefault()
-      try {
-        const fileData = JSON.parse(e.dataTransfer.getData("application/json"))
-
-        const response = await fetch(`/api/Projects/${fileData.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ parentId: targetId }),
-        })
-
-        if (!response.ok) throw new Error("Failed to move file")
-
-        await fetchProjects()
-        onDataChange?.()
-      } catch (err) {
-        console.error("[v0] Error moving file:", err)
-      }
-    },
-    [fetchProjects, onDataChange]
-  )
-
-  const toggleFolderExpand = useCallback((folderId: string) => {
-    setExpandedFolders((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(folderId)) {
-        newSet.delete(folderId)
-      } else {
-        newSet.add(folderId)
-      }
-      return newSet
+  const visibleItems = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    const filtered = query ? rawItems.filter((item) => item.name.toLowerCase().includes(query)) : rawItems
+    return [...filtered].sort((a, b) => {
+      if (sortMode === "date") return +new Date(b.updatedAt ?? 0) - +new Date(a.updatedAt ?? 0)
+      if (sortMode === "size") return (b.sizeBytes ?? 0) - (a.sizeBytes ?? 0)
+      if (sortMode === "kind") return a.type.localeCompare(b.type) || a.name.localeCompare(b.name)
+      return Number(b.type === "folder") - Number(a.type === "folder") || a.name.localeCompare(b.name)
     })
-  }, [])
+  }, [rawItems, searchQuery, sortMode])
 
-  useEffect(() => {
-    fetchProjects()
-  }, [fetchProjects])
+  const selectedItem = selectedItems.length === 1 ? nodeById.get(selectedItems[0]) : undefined
 
-  useEffect(() => {
-    if (projects.length > 0 && !selectedCategory) {
-      const firstProject = projects.find((p) => !p.parentId) || projects[0]
-      if (firstProject) {
-        setSelectedCategory(firstProject.id)
-        setCurrentTargetLocation(firstProject.id)
-      }
+  const breadcrumbs = useMemo(() => {
+    const result: ProjectFile[] = []
+    let cursor = currentFolder
+    while (cursor) {
+      result.unshift(cursor)
+      cursor = cursor.parentId ? nodeById.get(cursor.parentId) : undefined
     }
-  }, [projects, selectedCategory, setCurrentTargetLocation])
+    return result
+  }, [currentFolder, nodeById])
 
-  const rootProjects = projects.filter((p) => !p.parentId)
-  const currentProject = projects.find((p) => p.id === selectedCategory)
-
-  const getFileIcon = (file: ProjectFile) => {
-    const iconSize = 28
-
-    if (file.type === "folder") {
-      return <FolderIcon size={iconSize} style={{ color: settings.folderColor }} />
+  const navigate = useCallback((folderId: string | null, smart: SmartLocation = null, record = true) => {
+    setCurrentFolderId(folderId)
+    setSmartLocation(smart)
+    setSelectedItems([])
+    setCurrentTargetLocation(folderId)
+    if (record) {
+      const next = history.slice(0, historyIndex + 1)
+      next.push({ folderId, smart })
+      setHistory(next)
+      setHistoryIndex(next.length - 1)
     }
+  }, [history, historyIndex, setCurrentTargetLocation, setSelectedItems])
 
-    const extension = file.name.split(".").pop()?.toLowerCase()
-
-    switch (extension) {
-      case "pdf":
-      case "doc":
-      case "docx":
-      case "txt":
-      case "md":
-        return <FileTextIcon size={iconSize} style={{ color: settings.folderColor }} />
-      case "mp4":
-      case "mov":
-      case "avi":
-        return <PlayCircleIcon size={iconSize} style={{ color: settings.folderColor }} />
-      case "jpg":
-      case "jpeg":
-      case "png":
-      case "gif":
-      case "svg":
-        return <FileImage size={iconSize} style={{ color: settings.folderColor }} />
-      case "xlsx":
-      case "xls":
-      case "csv":
-        return <FileSpreadsheet size={iconSize} style={{ color: settings.folderColor }} />
-      case "zip":
-      case "rar":
-      case "7z":
-        return <FileArchive size={iconSize} style={{ color: settings.folderColor }} />
-      case "js":
-      case "ts":
-      case "jsx":
-      case "tsx":
-      case "html":
-      case "css":
-        return <FileCode size={iconSize} style={{ color: settings.folderColor }} />
-      default:
-        if (file.name.includes(".com") || file.name.includes(".ai")) {
-          return <GlobeIcon size={iconSize} className="text-indigo-500" />
-        }
-        return <FileIcon size={iconSize} className="text-gray-500" />
-    }
+  const goHistory = (direction: -1 | 1) => {
+    const nextIndex = historyIndex + direction
+    const location = history[nextIndex]
+    if (!location) return
+    setHistoryIndex(nextIndex)
+    navigate(location.folderId, location.smart, false)
   }
 
-  const handleFileClick = useCallback(
-    (file: ProjectFile, event: React.MouseEvent) => {
-      if (renamingItem === file.id) return
-      // console.log("click-project",selectedCategory)
-      if (event.detail === 2) {
-        onOpenFile({ ...file, projectId: selectedCategory } as OpenFile)
-        return
-      }
+  const openItem = useCallback((item: ProjectFile) => {
+    if (item.type === "folder") navigate(item.id)
+    else onOpenFile({ ...item, projectId: item.parentId ?? currentFolderId ?? "root" })
+  }, [currentFolderId, navigate, onOpenFile])
 
-
-      if (isCommandPressed) {
-        setSelectedItems((prev) =>
-          prev.includes(file.id) ? prev.filter((id) => id !== file.id) : [...prev, file.id]
-        )
-      } else {
-        setSelectedItems([file.id])
-      }
-    },
-    [onOpenFile, isCommandPressed, selectedCategory, setSelectedItems, renamingItem]
-  )
-
-  const handleContextMenu = useCallback(
-    (file: ProjectFile, event: React.MouseEvent) => {
-      event.preventDefault()
-      event.stopPropagation()
-
-      if (!selectedItems.includes(file.id)) {
-        setSelectedItems([file.id])
-      }
-
-      const contextMenuItems = [
-        {
-          label: "Open",
-          icon: <FolderOpen className="h-4 w-4" />,
-          action: () => onOpenFile({ ...file, projectId: selectedCategory } as OpenFile),
-
-        },
-        { label: "---", disabled: true },
-        {
-          label: "Copy",
-          icon: <Copy className="h-4 w-4" />,
-          action: () => {
-            const items = selectedItems.map((id) => {
-              const fileData = projects.find((p) => p.id === id)
-              return {
-                id,
-                name: fileData?.name || "",
-                type: fileData?.type === "folder" ? "folder" : "file",
-                data: fileData,
-                operation: "copy" as const,
-                source: selectedCategory,
-              }
-            })
-            copyItems(items)
-          },
-        },
-        {
-          label: "Cut",
-          icon: <Scissors className="h-4 w-4" />,
-          action: () => {
-            const items = selectedItems.map((id) => {
-              const fileData = projects.find((p) => p.id === id)
-              return {
-                id,
-                name: fileData?.name || "",
-                type: fileData?.type === "folder" ? "folder" : "file",
-                data: fileData,
-                operation: "cut" as const,
-                source: selectedCategory,
-              }
-            })
-            cutItems(items)
-          },
-        },
-        {
-          label: "Paste",
-          icon: <ClipboardPaste className="h-4 w-4" />,
-          action: async () => {
-            const sourceIds = clipboardItems.map((item) => item.id)
-            await copyProjectsToDatabase(sourceIds, selectedCategory)
-            pasteItems(selectedCategory)
-            await fetchProjects()
-            onDataChange?.()
-          },
-          disabled: clipboardItems.length === 0,
-        },
-        { label: "---", disabled: true },
-        {
-          label: "Rename",
-          icon: <Edit3 className="h-4 w-4" />,
-          action: () => {
-            setRenamingItem(file.id)
-            setRenameValue(file.name)
-          },
-          disabled: selectedItems.length > 1,
-        },
-        {
-          label: "Delete",
-          icon: <Trash2 className="h-4 w-4" />,
-          action: async () => {
-            for (const id of selectedItems) {
-              await deleteProject(id)
-            }
-            setSelectedItems([])
-            onDataChange?.()
-          },
-        },
-      ]
-
-      showContextMenu(event.clientX, event.clientY, contextMenuItems)
-    },
-    [
-      selectedItems,
-      projects,
-      clipboardItems,
-      selectedCategory,
-      onOpenFile,
-      copyItems,
-      cutItems,
-      pasteItems,
-      showContextMenu,
-      copyProjectsToDatabase,
-      deleteProject,
-      fetchProjects,
-      onDataChange,
-    ]
-  )
-
-  const handleBlankAreaContextMenu = useCallback(
-    (event: React.MouseEvent) => {
-      event.preventDefault()
-
-      setSelectedItems([])
-
-      const contextMenuItems = [
-        {
-          label: "New Folder",
-          icon: <Plus className="h-4 w-4" />,
-          action: async () => {
-            const name = prompt("Enter folder name:")
-            if (!name) return
-            await createProject(name, "folder", selectedCategory)
-            onDataChange?.()
-          },
-        },
-        {
-          label: "New File",
-          icon: <Plus className="h-4 w-4" />,
-          action: () => {
-            setFileCreationDialog({
-              isOpen: true,
-              fileName: "",
-              fileType: "text",
-              parentId: selectedCategory,
-            })
-          },
-        },
-        { label: "---", disabled: true },
-        {
-          label: "Paste",
-          icon: <ClipboardPaste className="h-4 w-4" />,
-          action: async () => {
-            const sourceIds = clipboardItems.map((i) => i.id)
-            await copyProjectsToDatabase(sourceIds, selectedCategory)
-            pasteItems(selectedCategory)
-            await fetchProjects()
-            onDataChange?.()
-          },
-          disabled: clipboardItems.length === 0,
-        },
-      ]
-
-      showContextMenu(event.clientX, event.clientY, contextMenuItems)
-    },
-    [
-      clipboardItems,
-      selectedCategory,
-      createProject,
-      copyProjectsToDatabase,
-      pasteItems,
-      fetchProjects,
-      onDataChange,
-    ]
-  )
-
-
-
-
-  const handleRenameSubmit = useCallback(async () => {
-    if (renamingItem && renameValue.trim()) {
-      try {
-        await renameProject(renamingItem, renameValue.trim())
-        setRenamingItem(null)
-        setRenameValue("")
-      } catch (err) {
-        console.error("[v0] Failed to rename:", err)
-      }
-    }
-  }, [renamingItem, renameValue, renameProject])
-
-  const handleRenameCancel = useCallback(() => {
-    setRenamingItem(null)
-    setRenameValue("")
-  }, [])
-
-  const handleRenameKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter") {
-        e.preventDefault()
-        handleRenameSubmit()
-      } else if (e.key === "Escape") {
-        e.preventDefault()
-        handleRenameCancel()
-      }
-    },
-    [handleRenameSubmit, handleRenameCancel]
-  )
-
-  const handleCategorySelect = useCallback(
-    (categoryId: string) => {
-      setSelectedCategory(categoryId)
-      setCurrentTargetLocation(categoryId)
-    },
-    [setCurrentTargetLocation]
-  )
-
-  const handleProjectContextMenu = (event: React.MouseEvent, id: string) => {
-    const contextMenuItems = [
-      {
-        label: "Delete",
-        icon: <Trash2 className="h-4 w-4" />,
-        action: async () => {
-          try {
-            await deleteProject(id)
-            onDataChange?.()
-          } catch (err) {
-            console.error("[v0] Failed to delete project:", err)
-          }
-        },
-        shortcut: "Del",
-      },
-    ]
-
-    showContextMenu(event.clientX, event.clientY, contextMenuItems)
+  const createNode = async (type: "folder" | "file") => {
+    const defaultName = type === "folder" ? "untitled folder" : "untitled.txt"
+    const response = await fetch("/api/Projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: defaultName, type, parentId: currentFolderId }),
+    })
+    const result = await response.json()
+    if (!response.ok) return toast.error(result.error || "Could not create item")
+    await fetchNodes(false)
+    setSelectedItems([result.data.id])
+    setRenamingId(result.data.id)
+    setRenameValue(defaultName)
+    onDataChange?.()
   }
 
-  const handleEmptyFolderContextMenu = (event: React.MouseEvent, parentId: string) => {
+  const createLink = async () => {
+    const url = window.prompt("Enter the full website URL")?.trim()
+    if (!url) return
+    try {
+      new URL(url)
+    } catch {
+      return toast.error("Enter a valid URL, including https://")
+    }
+    const suggestedName = new URL(url).hostname.replace(/^www\./, "")
+    const name = window.prompt("Name this link", suggestedName)?.trim()
+    if (!name) return
+    const response = await fetch("/api/Projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, type: "link", url, parentId: currentFolderId }),
+    })
+    const result = await response.json()
+    if (!response.ok) return toast.error(result.error || "Could not create link")
+    await fetchNodes(false)
+    toast.success("Link added to Finder")
+    onDataChange?.()
+  }
+
+  const toggleDesktopVisibility = async (item: ProjectFile) => {
+    const response = await fetch(`/api/Projects/${item.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ showOnDesktop: !item.showOnDesktop }),
+    })
+    if (!response.ok) return toast.error("Could not update Desktop visibility")
+    await fetchNodes(false)
+    window.dispatchEvent(new Event("finder-desktop-change"))
+    toast.success(item.showOnDesktop ? "Removed from Desktop" : "Shown on Desktop")
+  }
+
+  const renameNode = async () => {
+    if (!renamingId || !renameValue.trim()) return setRenamingId(null)
+    const response = await fetch(`/api/Projects/${renamingId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: renameValue.trim() }),
+    })
+    if (response.ok) await fetchNodes(smartLocation === "trash")
+    else toast.error("Rename failed")
+    setRenamingId(null)
+  }
+
+  const trashSelection = useCallback(async () => {
+    if (!selectedItems.length) return
+    const response = await fetch("/api/Projects", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: selectedItems }),
+    })
+    if (!response.ok) return toast.error("Could not move items to Bin")
+    toast.success(`Moved ${selectedItems.length} item${selectedItems.length > 1 ? "s" : ""} to Bin`)
+    setSelectedItems([])
+    await fetchNodes(smartLocation === "trash")
+    onDataChange?.()
+  }, [fetchNodes, onDataChange, selectedItems, setSelectedItems, smartLocation])
+
+  const selectedClipboardItems = () => selectedItems.map((id) => {
+    const item = nodeById.get(id)
+    return { id, name: item?.name ?? "", type: item?.type === "folder" ? "folder" as const : "file" as const, data: item, operation: "copy" as const, source: item?.parentId ?? undefined }
+  })
+
+  const pasteClipboard = useCallback(async () => {
+    if (!clipboardItems.length) return toast("Nothing to paste")
+    const targetParentId = currentFolderId
+    if (clipboardItems[0].operation === "cut") {
+      await Promise.all(clipboardItems.map((item) => fetch(`/api/Projects/${item.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ parentId: targetParentId }),
+      })))
+      clearClipboard()
+    } else {
+      await fetch("/api/Projects/copy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceIds: clipboardItems.map((item) => item.id), targetParentId }),
+      })
+    }
+    await fetchNodes(false)
+    toast.success("Paste completed")
+  }, [clearClipboard, clipboardItems, currentFolderId, fetchNodes])
+
+  const uploadFiles = useCallback(async (files: FileList | File[]) => {
+    setUploading(true)
+    try {
+      for (const file of Array.from(files)) {
+        const form = new FormData()
+        form.append("file", file)
+        if (currentFolderId) form.append("parentId", currentFolderId)
+        const response = await fetch("/api/Projects/upload", { method: "POST", body: form })
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.error || `Could not upload ${file.name}`)
+      }
+      await fetchNodes(false)
+      toast.success(`${files.length} item${files.length > 1 ? "s" : ""} uploaded`)
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Upload failed")
+    } finally {
+      setUploading(false)
+    }
+  }, [currentFolderId, fetchNodes])
+
+  const handleDrop = useCallback(async (event: React.DragEvent, targetId = currentFolderId) => {
     event.preventDefault()
-    const contextMenuItems = [
-      {
-        label: "New File",
-        icon: <Plus className="h-4 w-4" />,
-        action: () => {
-          setFileCreationDialog({
-            isOpen: true,
-            fileName: "",
-            fileType: "text",
-            parentId: parentId,
-          })
-        },
-      },
-    ]
+    if (event.dataTransfer.files.length) return uploadFiles(event.dataTransfer.files)
+    const raw = event.dataTransfer.getData("application/x-smarty-finder") || event.dataTransfer.getData("application/json")
+    if (!raw) return
+    const item = JSON.parse(raw) as ProjectFile
+    const response = await fetch(`/api/Projects/${item.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ parentId: targetId }),
+    })
+    if (!response.ok) toast.error("Move failed")
+    else await fetchNodes(false)
+  }, [currentFolderId, fetchNodes, uploadFiles])
 
-    showContextMenu(event.clientX, event.clientY, contextMenuItems)
+  const selectItem = (item: ProjectFile, event: React.MouseEvent) => {
+    if (event.detail === 2) return openItem(item)
+    if (isCommandPressed) setSelectedItems(selectedItems.includes(item.id) ? selectedItems.filter((id) => id !== item.id) : [...selectedItems, item.id])
+    else setSelectedItems([item.id])
   }
 
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center w-full h-full bg-gray-100 text-red-600">
-        <p className="text-sm font-medium">Error loading projects</p>
-        <p className="text-xs text-gray-500 mt-1">{error}</p>
-        <button
-          onClick={fetchProjects}
-          className="mt-2 px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
-        >
-          Retry
-        </button>
-      </div>
-    )
+  const showItemMenu = (event: React.MouseEvent, item: ProjectFile) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!selectedItems.includes(item.id)) setSelectedItems([item.id])
+    showContextMenu(event.clientX, event.clientY, [
+      { label: "Open", icon: <FolderOpen className="h-4 w-4" />, action: () => openItem(item) },
+      { label: "---", disabled: true },
+      { label: "Copy", shortcut: "⌘C", icon: <Copy className="h-4 w-4" />, action: () => copyItems(selectedItems.includes(item.id) ? selectedClipboardItems() : [{ id: item.id, name: item.name, type: item.type === "folder" ? "folder" : "file", data: item, operation: "copy", source: item.parentId ?? undefined }]) },
+      { label: "Cut", shortcut: "⌘X", icon: <Scissors className="h-4 w-4" />, action: () => cutItems(selectedItems.includes(item.id) ? selectedClipboardItems() : [{ id: item.id, name: item.name, type: item.type === "folder" ? "folder" : "file", data: item, operation: "cut", source: item.parentId ?? undefined }]) },
+      { label: "Rename", shortcut: "↩", action: () => { setRenamingId(item.id); setRenameValue(item.name) } },
+      { label: item.isStarred ? "Remove from Favourites" : "Add to Favourites", icon: <Star className="h-4 w-4" />, action: async () => { await fetch(`/api/Projects/${item.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isStarred: !item.isStarred }) }); await fetchNodes(false) } },
+      { label: item.showOnDesktop ? "Remove from Desktop" : "Show on Desktop", icon: <MonitorUp className="h-4 w-4" />, action: () => void toggleDesktopVisibility(item) },
+      { label: "---", disabled: true },
+      { label: "Move to Bin", shortcut: "⌘⌫", icon: <Trash2 className="h-4 w-4" />, action: trashSelection },
+    ])
   }
 
-  // return (
-  //   <div className="flex w-full h-full bg-gray-100 text-gray-800 rounded overflow-hidden text-xs leading-tight">
-  //     {/* Sidebar */}
-  //     <div className="w-48 h-screen bg-gray-200 border-r border-gray-300 p-2 overflow-y-auto">
-  //       <h3 className="text-[10px] font-semibold text-gray-500 uppercase mb-1">Projects</h3>
-  //       <ul className="space-y-0.5">
-  //         {rootProjects.map((project) => (
-  //           <li key={project.id}>
-  //             <button
-  //               onClick={() => handleCategorySelect(project.id)}
-  //               onContextMenu={(e) => handleProjectContextMenu(e, project.id)}
-  //               onDragOver={handleDragOver}
-  //               onDrop={(e) => handleDrop(e, project.id)}
-  //               className={`flex items-center w-full text-left px-2 py-1 rounded transition-colors
-  //                 ${selectedCategory === project.id ? "bg-blue-500 text-white" : "hover:bg-gray-300 text-gray-700"}`}
-  //             >
-  //               <span className="truncate">{project.name}</span>
-  //             </button>
-  //           </li>
-  //         ))}
-  //       </ul>
-  //     </div>
+  const showBlankMenu = (event: React.MouseEvent) => {
+    event.preventDefault()
+    setSelectedItems([])
+    showContextMenu(event.clientX, event.clientY, [
+      { label: "New Folder", icon: <FolderPlus className="h-4 w-4" />, action: () => void createNode("folder") },
+      { label: "New Text File", icon: <FilePlus2 className="h-4 w-4" />, action: () => void createNode("file") },
+      { label: "New Link…", icon: <LinkIcon className="h-4 w-4" />, action: () => void createLink() },
+      { label: "Upload…", icon: <Upload className="h-4 w-4" />, action: () => fileInputRef.current?.click() },
+      { label: "---", disabled: true },
+      { label: "Paste Item", shortcut: "⌘V", disabled: !clipboardItems.length, action: () => void pasteClipboard() },
+      { label: "Get Info", shortcut: "⌘I", action: () => setInspectorOpen(true) },
+    ])
+  }
 
-  //     {/* Content Area */}
-  //     <div
-  //       className="flex-1 p-2 overflow-y-auto bg-white"
-  //       onContextMenu={handleBlankAreaContextMenu}
-  //       onDragOver={handleDragOver}
-  //       onDrop={(e) => handleDrop(e, selectedCategory)}
-  //     >
-  //       {currentProject ? (
-  //         <>
-  //           <h2 className="text-sm font-bold text-gray-700 mb-2 truncate">{currentProject.name}</h2>
-  //           <div className="grid grid-cols-3 gap-2">
-  //             {currentProject.files?.map((file) => {
-  //               const isSelected = selectedItems.includes(file.id)
-  //               const isCut = clipboardItems.some((item) => item.id === file.id && item.operation === "cut")
-  //               const isRenaming = renamingItem === file.id
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement
+      if (target.matches("input, textarea, [contenteditable='true']")) return
+      const command = event.metaKey || event.ctrlKey
+      if (command && event.key.toLowerCase() === "c" && selectedItems.length) { event.preventDefault(); copyItems(selectedClipboardItems()) }
+      if (command && event.key.toLowerCase() === "x" && selectedItems.length) { event.preventDefault(); cutItems(selectedClipboardItems()) }
+      if (command && event.key.toLowerCase() === "v") { event.preventDefault(); void pasteClipboard() }
+      if ((event.key === "Backspace" && command) || event.key === "Delete") { event.preventDefault(); void trashSelection() }
+      if (event.key === "Enter" && selectedItem) { setRenamingId(selectedItem.id); setRenameValue(selectedItem.name) }
+      if (command && event.key.toLowerCase() === "a") { event.preventDefault(); setSelectedItems(visibleItems.map((item) => item.id)) }
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  })
 
-  //               return (
-  //                 <div
-  //                   key={file.id}
-  //                   className={`flex flex-col items-center text-center p-1 rounded cursor-pointer transition-all duration-200
-  //                     ${isSelected
-  //                       ? "bg-blue-100 border-2 border-blue-400 shadow-sm"
-  //                       : "hover:bg-gray-100 border-2 border-transparent"
-  //                     }
-  //                     ${isCut ? "opacity-50" : ""}
-  //                   `}
-  //                   onClick={(e) => handleFileClick(file, e)}
-  //                   onContextMenu={(e) => handleContextMenu(file, e)}
-  //                   draggable={!isRenaming}
-  //                   onDragStart={(e) => handleDragStart(e, file)}
-  //                 >
-  //                   <div className={`transition-transform duration-200 ${isSelected ? "scale-105" : ""}`}>
-  //                     {getFileIcon(file)}
-  //                   </div>
-  //                   {isRenaming ? (
-  //                     <input
-  //                       type="text"
-  //                       value={renameValue}
-  //                       onChange={(e) => setRenameValue(e.target.value)}
-  //                       onKeyDown={handleRenameKeyDown}
-  //                       onBlur={handleRenameSubmit}
-  //                       className="text-[10px] mt-1 w-full text-center bg-white border border-blue-400 rounded px-1"
-  //                       autoFocus
-  //                     />
-  //                   ) : (
-  //                     <span
-  //                       className={`text-[10px] mt-1 truncate w-full transition-colors ${isSelected ? "text-blue-700 font-medium" : "text-gray-700"
-  //                         }`}
-  //                     >
-  //                       {file.name}
-  //                     </span>
-  //                   )}
-  //                 </div>
-  //               )
-  //             })}
-  //           </div>
-  //           {(!currentProject.files || currentProject.files.length === 0) && (
-  //             <div
-  //               className="flex items-center justify-center h-32 text-gray-400 text-sm cursor-context-menu"
-  //               onContextMenu={(e) => handleEmptyFolderContextMenu(e, selectedCategory)}
-  //             >
-  //               Right-click to add files and folders
-  //             </div>
-  //           )}
-  //         </>
-  //       ) : (
-  //         <div className="flex items-center justify-center h-full text-gray-400">No project selected</div>
-  //       )}
-  //     </div>
+  const itemLabel = (item: ProjectFile) => renamingId === item.id ? (
+    <input
+      autoFocus
+      value={renameValue}
+      onChange={(event) => setRenameValue(event.target.value)}
+      onBlur={() => void renameNode()}
+      onKeyDown={(event) => { if (event.key === "Enter") void renameNode(); if (event.key === "Escape") setRenamingId(null) }}
+      onClick={(event) => event.stopPropagation()}
+      className="w-full rounded border border-[#0a84ff] bg-[#2c2c2e] px-1 text-center text-[11px] text-white outline-none"
+    />
+  ) : <span className="line-clamp-2 max-w-full break-words rounded px-1 text-center text-[11px] leading-[15px] text-white/90">{item.name}</span>
 
-  {/* File Creation Dialog */ }
-
-
-
-  return (
-    <div className="flex w-full h-screen  text-gray-800 overflow-hidden">
-      {/* Mobile Overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/40 z-30 md:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <div
-        style={{ backgroundColor: settings.themeColor }}
-        className={`
-        fixed md:static z-40
-        top-0 left-0 h-full w-56 bg-gray-100
-         border-r border-gray-300 p-2
-        transform transition-transform duration-300
-        ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-        md:translate-x-0
-      `}
-      >
-        <h3 className="text-[10px] font-semibold text-gray-500 uppercase mb-2">
-          Projects
-        </h3>
-
-        <ul className="space-y-0.5">
-          {rootProjects.map((project) => (
-            <li key={project.id}>
-              <button
-                style={{ backgroundColor: selectedCategory === project.id ? settings.folderColor : '' }}
-                onClick={() => {
-                  handleCategorySelect(project.id)
-                  setSidebarOpen(false)
-                }}
-                onContextMenu={(e) => handleProjectContextMenu(e, project.id)}
-                onDragOver={handleDragOver}
-                onDrop={(e) => handleDrop(e, project.id)}
-                className={`w-full text-left px-2 py-1 rounded text-sm transition-colors
-                ${selectedCategory === project.id
-                    ? " text-white"
-                    : "text-gray-700 hover:bg-gray-300"
-                  }`}
-              >
-                <span className="truncate">{project.name}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col ">
-        {/* Top Bar (Mobile) */}
-        <div style={{ fontSize: settings.fontSize }} onClick={() => setSidebarOpen(true)} className="md:hidden flex items-center gap-2 px-3 py-2 border-b">
+  const renderIconView = () => (
+    <div className="grid auto-rows-[112px] grid-cols-[repeat(auto-fill,minmax(104px,1fr))] gap-x-3 gap-y-1 p-5">
+      {visibleItems.map((item) => {
+        const selected = selectedItems.includes(item.id)
+        const cut = clipboardItems.some((entry) => entry.id === item.id && entry.operation === "cut")
+        return (
           <button
-
-            className="text-xl text-white font-bold"
+            key={item.id}
+            draggable={renamingId !== item.id}
+            onDragStart={(event) => { event.dataTransfer.setData("application/x-smarty-finder", JSON.stringify(item)); event.dataTransfer.effectAllowed = "move" }}
+            onDragOver={(event) => item.type === "folder" && event.preventDefault()}
+            onDrop={(event) => item.type === "folder" && void handleDrop(event, item.id)}
+            onClick={(event) => selectItem(item, event)}
+            onContextMenu={(event) => showItemMenu(event, item)}
+            className={`group flex min-w-0 flex-col items-center gap-1.5 rounded-lg p-2 outline-none transition ${selected ? "bg-[#0a84ff]/75" : "hover:bg-white/[0.055]"} ${cut ? "opacity-45" : ""}`}
           >
-            ☰
+            <FinderIcon item={item} size={54} />
+            {itemLabel(item)}
           </button>
-          <span className=" text-white font-semibold truncate">
-            {currentProject?.name || "Explorer"}
-          </span>
+        )
+      })}
+    </div>
+  )
+
+  const renderListView = () => (
+    <div className="min-w-[640px] text-xs">
+      <div className="grid grid-cols-[minmax(260px,1fr)_150px_110px_90px] border-b border-white/10 bg-white/[0.025] px-3 py-1.5 text-white/45">
+        <span>Name</span><span>Date Modified</span><span>Kind</span><span className="text-right">Size</span>
+      </div>
+      {visibleItems.map((item, index) => (
+        <button
+          key={item.id}
+          draggable
+          onDragStart={(event) => event.dataTransfer.setData("application/x-smarty-finder", JSON.stringify(item))}
+          onClick={(event) => selectItem(item, event)}
+          onContextMenu={(event) => showItemMenu(event, item)}
+          className={`grid w-full grid-cols-[minmax(260px,1fr)_150px_110px_90px] items-center px-3 py-1 text-left ${selectedItems.includes(item.id) ? "bg-[#0a84ff]/70" : index % 2 ? "bg-white/[0.022]" : "hover:bg-white/[0.045]"}`}
+        >
+          <span className="flex min-w-0 items-center gap-2"><FinderIcon item={item} size={20} /><span className="truncate">{renamingId === item.id ? itemLabel(item) : item.name}</span></span>
+          <span className="text-white/55">{formatDate(item.updatedAt)}</span>
+          <span className="capitalize text-white/55">{item.type}</span>
+          <span className="text-right text-white/55">{formatBytes(item.sizeBytes)}</span>
+        </button>
+      ))}
+    </div>
+  )
+
+  const columnSets = useMemo(() => {
+    const path = breadcrumbs
+    const sets: Array<{ title: string; items: ProjectFile[] }> = [{ title: "My Files", items: nodes.filter((node) => !node.parentId && !node.isTrashed) }]
+    path.forEach((folder) => sets.push({ title: folder.name, items: folder.files ?? [] }))
+    return sets
+  }, [breadcrumbs, nodes])
+
+  const renderColumnView = () => (
+    <div className="flex h-full min-w-max">
+      {columnSets.map((set, columnIndex) => (
+        <div key={`${set.title}-${columnIndex}`} className="w-56 overflow-y-auto border-r border-white/10 p-1.5">
+          {set.items.map((item) => (
+            <button
+              key={item.id}
+              onClick={(event) => { selectItem(item, event); if (item.type === "folder") navigate(item.id) }}
+              onContextMenu={(event) => showItemMenu(event, item)}
+              className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs ${selectedItems.includes(item.id) || breadcrumbs.some((crumb) => crumb.id === item.id) ? "bg-[#0a84ff]" : "hover:bg-white/10"}`}
+            >
+              <FinderIcon item={item} size={19} /><span className="min-w-0 flex-1 truncate">{item.name}</span>{item.type === "folder" && <ChevronRight className="h-3 w-3" />}
+            </button>
+          ))}
         </div>
+      ))}
+      <div className="w-[360px] p-8"><Preview item={selectedItem} /></div>
+    </div>
+  )
 
-        {/* Content Area */}
-
-
-        {fileCreationDialog?.isOpen ? (
-          <div className=" inset-0  bg-opacity-40 flex items-center justify-center z-50 overflow-auto h-72">
-            <div className=" rounded-lg shadow-lg p-4 w-96">
-              <h3 className="text-sm font-bold mb-4">Create New File</h3>
-
-              <div className="space-y-4">
-                {/* File Name Input */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">File Name</label>
-                  <input
-                    type="text"
-                    style={{ color: settings.textColor }}
-                    value={fileCreationDialog.fileName}
-                    onChange={(e) =>
-                      setFileCreationDialog({
-                        ...fileCreationDialog,
-                        fileName: e.target.value,
-                      })
-                    }
-                    placeholder="Enter file name"
-                    className="w-full px-3  py-2 border border-gray-300 rounded text-xs focus:outline-none focus:border-blue-500"
-                    autoFocus
-                  />
-                </div>
-
-                {/* File Type Selection */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">File Type</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(FILE_EXTENSIONS).map(([type]) => (
-                      <button
-                        key={type}
-                        onClick={() =>
-                          setFileCreationDialog({
-                            ...fileCreationDialog,
-                            fileType: type,
-                          })
-                        }
-                        className={`px-3 py-2 rounded text-xs border transition-colors capitalize ${fileCreationDialog.fileType === type
-                          ? "bg-blue-100 border-blue-500 text-blue-700 font-medium"
-                          : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100"
-                          }`}
-                      >
-                        {type}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Extension Preview */}
-                <div className="bg-gray-50 p-2 rounded text-xs">
-                  <span className="text-gray-600">File will be: </span>
-                  <span className="font-mono font-medium text-gray-900">
-                    {fileCreationDialog.fileName || "filename"}
-                    {FILE_EXTENSIONS[fileCreationDialog.fileType as keyof typeof FILE_EXTENSIONS]?.[0] || ".file"}
-                  </span>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-2 mt-5">
-                <button
-                  onClick={async () => {
-                    if (fileCreationDialog.fileName.trim()) {
-                      try {
-                        const ext =
-                          FILE_EXTENSIONS[fileCreationDialog.fileType as keyof typeof FILE_EXTENSIONS]?.[0] || ""
-                        const fullName = `${fileCreationDialog.fileName.trim()}${ext}`
-                        await createProject(fullName, "file", fileCreationDialog.parentId)
-                        setFileCreationDialog(null)
-                        onDataChange?.()
-                      } catch (err) {
-                        console.error("[v0] Failed to create file:", err)
-                      }
-                    }
-                  }}
-                  className="flex-1 px-3 py-2 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 font-medium"
-                >
-                  Create
-                </button>
-                <button
-                  onClick={() => setFileCreationDialog(null)}
-                  className="flex-1 px-3 py-2 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        ) :
-          <div
-            className="flex-1  p-2 overflow-y-auto"
-            onContextMenu={handleBlankAreaContextMenu}
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, selectedCategory)}
-          >
-            {currentProject ? (
-              <>
-                {/* Desktop Title */}
-                <h2 className="hidden md:block text-sm font-bold text-gray-700 mb-2 truncate">
-                  {currentProject.name}
-                </h2>
-
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-                  {currentProject.files?.map((file) => {
-                    const isSelected = selectedItems.includes(file.id)
-                    const isCut = clipboardItems.some(
-                      (item) => item.id === file.id && item.operation === "cut"
-                    )
-                    const isRenaming = renamingItem === file.id
-
-                    return (
-                      <div
-                        key={file.id}
-                        style={{ background: isSelected ? "rgba(20, 9, 9, 0.37)" : "rgba(184, 172, 172, 0.04)" }}
-                        // onMouseEnter={()}
-                        className={`flex flex-col items-center text-center p-1 rounded cursor-pointer transition-all
-                      ${isSelected
-                            ? `bg-[${settings.folderColor}] border-1 border-grey-100`
-                            : "hover:bg-slate-800 border-2 border-transparent"
-                          }
-                      ${isCut ? "opacity-50" : ""}
-                    `}
-                        onClick={(e) => handleFileClick(file, e)}
-                        onContextMenu={(e) => handleContextMenu(file, e)}
-                        draggable={!isRenaming}
-                        onDragStart={(e) => handleDragStart(e, file)}
-                      >
-                        {getFileIcon(file)}
-
-                        {isRenaming ? (
-                          <input
-                            value={renameValue}
-                            onChange={(e) => setRenameValue(e.target.value)}
-                            onKeyDown={handleRenameKeyDown}
-                            onBlur={handleRenameSubmit}
-                            className="text-[10px] mt-1 w-full text-center border rounded"
-                            autoFocus
-                          />
-                        ) : (
-                          <span style={{ color: settings.textColor }} className=" mt-1 truncate w-full">
-                            {file.name}
-                          </span>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center justify-center h-full text-gray-400">
-                No project selected
-              </div>
-            )}
-          </div>}
-
+  const renderGalleryView = () => (
+    <div className="flex h-full flex-col">
+      <div className="grid min-h-0 flex-1 place-items-center overflow-hidden p-8"><Preview item={selectedItem ?? visibleItems[0]} /></div>
+      <div className="flex h-28 items-center gap-3 overflow-x-auto border-t border-white/10 bg-black/25 px-5">
+        {visibleItems.map((item) => <button key={item.id} onClick={(event) => selectItem(item, event)} onDoubleClick={() => openItem(item)} className={`flex h-20 w-24 shrink-0 flex-col items-center justify-center rounded-lg ${selectedItems.includes(item.id) ? "bg-[#0a84ff]/75 ring-2 ring-white/70" : "bg-white/[0.045] hover:bg-white/10"}`}><FinderIcon item={item} size={38} /><span className="mt-1 w-20 truncate text-[10px]">{item.name}</span></button>)}
       </div>
     </div>
   )
 
+  return (
+    <div className="flex h-full min-h-0 w-full select-none overflow-hidden bg-[#1c1c1e] font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Text',sans-serif] text-white">
+      <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(event) => { if (event.target.files) void uploadFiles(event.target.files); event.target.value = "" }} />
 
+      <aside className="hidden w-[168px] shrink-0 overflow-y-auto border-r border-white/[0.08] bg-[#242426]/90 px-2 py-3 backdrop-blur-2xl md:block">
+        <SidebarSection title="Favourites">
+          <SidebarItem active={smartLocation === "recents"} icon={Clock3} label="Recents" onClick={() => navigate(null, "recents")} />
+          <SidebarItem active={smartLocation === "starred"} icon={Star} label="Favourites" onClick={() => navigate(null, "starred")} />
+          <SidebarItem icon={HardDrive} label="My Files" active={!smartLocation && !currentFolderId} onClick={() => navigate(null)} />
+          <SidebarItem icon={Download} label="Downloads" onClick={() => navigate(null)} />
+        </SidebarSection>
+        <SidebarSection title="Locations">
+          <SidebarItem icon={Cloud} label="iCloud Drive" onClick={() => navigate(null)} />
+          <SidebarItem icon={Airplay} label="AirDrop" onClick={() => toast("AirDrop simulation coming soon")} />
+        </SidebarSection>
+        {!!developerFolders.length && <SidebarSection title="Developer">{developerFolders.map((folder) => <SidebarItem key={folder.id} icon={Folder} label={folder.name} active={currentFolderId === folder.id} onClick={() => navigate(folder.id)} />)}</SidebarSection>}
+        {!!otherRootFolders.length && <SidebarSection title="Folders">{otherRootFolders.map((folder) => <SidebarItem key={folder.id} icon={Folder} label={folder.name} active={currentFolderId === folder.id} onClick={() => navigate(folder.id)} />)}</SidebarSection>}
+        <SidebarSection title="Tags">
+          {["Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Grey"].map((tag) => <button key={tag} className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[12px] text-white/70 hover:bg-white/10"><span className={`h-2.5 w-2.5 rounded-full tag-${tag.toLowerCase()}`} />{tag}</button>)}
+        </SidebarSection>
+        <button onClick={() => navigate(null, "trash")} className={`mt-3 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs ${smartLocation === "trash" ? "bg-white/15" : "text-white/65 hover:bg-white/10"}`}><Trash2 className="h-4 w-4" />Bin</button>
+      </aside>
+
+      <main className="flex min-w-0 flex-1 flex-col">
+        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-white/10 bg-[#272729]/95 px-3 shadow-sm">
+          <div className="flex items-center">
+            <ToolbarButton label="Back" disabled={historyIndex === 0} onClick={() => goHistory(-1)}><ArrowLeft className="h-4 w-4" /></ToolbarButton>
+            <ToolbarButton label="Forward" disabled={historyIndex >= history.length - 1} onClick={() => goHistory(1)}><ArrowRight className="h-4 w-4" /></ToolbarButton>
+          </div>
+          <div className="min-w-0 flex-1 truncate px-2 text-[13px] font-semibold">{smartLocation ? smartLocation[0].toUpperCase() + smartLocation.slice(1) : currentFolder?.name ?? "My Files"}</div>
+          <div className="hidden overflow-hidden rounded-lg border border-white/10 bg-black/15 sm:flex">
+            {viewOptions.map(({ mode, label, icon: Icon }) => <button key={mode} title={label} onClick={() => setViewMode(mode)} className={`grid h-7 w-8 place-items-center border-r border-white/10 last:border-0 ${viewMode === mode ? "bg-white/18 text-white" : "text-white/55 hover:bg-white/10"}`}><Icon className="h-4 w-4" /></button>)}
+          </div>
+          <div className="relative hidden lg:block">
+            <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/45" />
+            <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search" className="h-7 w-44 rounded-lg border border-white/10 bg-black/20 pl-7 pr-2 text-xs outline-none focus:border-[#0a84ff]" />
+          </div>
+          <ToolbarButton label="Upload" onClick={() => fileInputRef.current?.click()}>{uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}</ToolbarButton>
+          <ToolbarButton label="Share" disabled={!selectedItems.length}><Share className="h-4 w-4" /></ToolbarButton>
+          <ToolbarButton label="Tags" disabled={!selectedItems.length}><Tag className="h-4 w-4" /></ToolbarButton>
+          <div className="relative group">
+            <ToolbarButton label="More"><MoreHorizontal className="h-4 w-4" /></ToolbarButton>
+            <div className="invisible absolute right-0 top-8 z-30 w-40 rounded-lg border border-white/10 bg-[#303033]/95 p-1 opacity-0 shadow-2xl backdrop-blur-xl transition group-hover:visible group-hover:opacity-100">
+              <button onClick={() => void createNode("folder")} className="w-full rounded px-2 py-1.5 text-left text-xs hover:bg-[#0a84ff]">New Folder</button>
+              <button onClick={() => void createNode("file")} className="w-full rounded px-2 py-1.5 text-left text-xs hover:bg-[#0a84ff]">New Text File</button>
+              <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)} className="mt-1 w-full rounded bg-black/20 px-2 py-1.5 text-xs outline-none"><option value="name">Sort by Name</option><option value="date">Sort by Date</option><option value="size">Sort by Size</option><option value="kind">Sort by Kind</option></select>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex h-7 shrink-0 items-center gap-1 overflow-x-auto border-b border-white/[0.07] bg-[#202022] px-4 text-[11px] text-white/55">
+          <button onClick={() => navigate(null)} className="hover:text-white">My Files</button>
+          {breadcrumbs.map((crumb) => <span key={crumb.id} className="flex items-center gap-1"><ChevronRight className="h-3 w-3" /><button onClick={() => navigate(crumb.id)} className="max-w-32 truncate hover:text-white">{crumb.name}</button></span>)}
+        </div>
+
+        <div className="relative flex min-h-0 flex-1" onContextMenu={showBlankMenu} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = event.dataTransfer.files.length ? "copy" : "move" }} onDrop={(event) => void handleDrop(event)}>
+          <div className="min-w-0 flex-1 overflow-auto">
+            {loading ? <div className="grid h-full place-items-center"><Loader2 className="h-6 w-6 animate-spin text-white/35" /></div>
+              : error ? <div className="grid h-full place-items-center text-sm text-red-300"><div className="text-center"><p>{error}</p><button onClick={() => void fetchNodes()} className="mt-3 rounded bg-[#0a84ff] px-3 py-1.5">Try Again</button></div></div>
+                : !visibleItems.length ? <div className="grid h-full place-items-center text-sm text-white/30"><div className="text-center"><FolderOpen className="mx-auto mb-3 h-12 w-12 opacity-45" /><p>Your private Finder is empty</p><p className="mt-1 text-xs">Only your files appear here. Drop files or right-click to begin.</p></div></div>
+                  : viewMode === "icons" ? renderIconView() : viewMode === "list" ? renderListView() : viewMode === "columns" ? renderColumnView() : renderGalleryView()}
+          </div>
+          {inspectorOpen && <aside className="w-64 shrink-0 overflow-y-auto border-l border-white/10 bg-[#242426] p-4"><div className="flex justify-between"><span className="text-sm font-semibold">Info</span><button onClick={() => setInspectorOpen(false)}>×</button></div><div className="mt-8 flex justify-center">{selectedItem && <FinderIcon item={selectedItem} size={72} />}</div><dl className="mt-6 space-y-3 text-xs"><InfoRow label="Name" value={selectedItem?.name ?? "Multiple items"} /><InfoRow label="Kind" value={selectedItem?.type ?? "—"} /><InfoRow label="Size" value={selectedItem ? formatBytes(selectedItem.sizeBytes) : "—"} /><InfoRow label="Modified" value={formatDate(selectedItem?.updatedAt)} /></dl></aside>}
+        </div>
+
+        <footer className="flex h-6 shrink-0 items-center justify-between border-t border-white/[0.08] bg-[#202022] px-3 text-[10px] text-white/45">
+          <span>{selectedItems.length ? `${selectedItems.length} of ${visibleItems.length} selected` : `${visibleItems.length} items`}</span>
+          {subscription && <span className="capitalize">{subscription.plan} · {formatBytes(subscription.finderBytesUsed + subscription.finderBytesReserved)} of {formatBytes(subscription.finderStorageBytes)}</span>}
+          <button onClick={() => setInspectorOpen((value) => !value)} className="hover:text-white">{inspectorOpen ? "Hide Info" : "Show Info"}</button>
+        </footer>
+      </main>
+      <style jsx global>{`.tag-red{background:#ff453a}.tag-orange{background:#ff9f0a}.tag-yellow{background:#ffd60a}.tag-green{background:#30d158}.tag-blue{background:#0a84ff}.tag-purple{background:#bf5af2}.tag-grey{background:#8e8e93}`}</style>
+    </div>
+  )
+}
+
+function SidebarSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return <section className="mb-4"><h3 className="mb-1 px-2 text-[10px] font-semibold text-white/35">{title}</h3><div>{children}</div></section>
+}
+
+function SidebarItem({ icon: Icon, label, active, onClick }: { icon: FinderIconComponent; label: string; active?: boolean; onClick: () => void }) {
+  return <button onClick={onClick} className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[12px] ${active ? "bg-white/12 text-white" : "text-white/70 hover:bg-white/[0.07]"}`}><Icon className="h-4 w-4 text-[#5ac8fa]" /><span className="truncate">{label}</span></button>
+}
+
+function ToolbarButton({ label, disabled, onClick, children }: { label: string; disabled?: boolean; onClick?: () => void; children: React.ReactNode }) {
+  return <button title={label} aria-label={label} disabled={disabled} onClick={onClick} className="grid h-7 w-8 place-items-center rounded-md text-white/65 hover:bg-white/10 hover:text-white disabled:opacity-25 disabled:hover:bg-transparent">{children}</button>
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return <div><dt className="text-white/35">{label}</dt><dd className="mt-0.5 break-words text-white/75">{value}</dd></div>
 }

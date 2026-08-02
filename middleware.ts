@@ -10,9 +10,8 @@ const authRoutes = ["/sign-in", "/sign-up"];
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
-  // Get auth token from cookies
-  const authToken = request.cookies.get("auth-token")?.value || 
-                    request.cookies.get("firebase-auth-token")?.value;
+  // The signed token is fully verified by server layouts/actions.
+  const authToken = request.cookies.get("smarty_session")?.value;
   const isAuthenticated = !!authToken;
 
   // Check if current path is a public route

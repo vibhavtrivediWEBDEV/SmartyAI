@@ -9,7 +9,7 @@ interface TranscriptDisplayProps {
   messages: Message[]
   isTyping: boolean
   userName: string
-  messagesEndRef: React.RefObject<HTMLDivElement>
+  messagesEndRef: React.RefObject<HTMLDivElement | null>
 }
 
 const TranscriptDisplay: React.FC<TranscriptDisplayProps> = ({ messages, isTyping, userName, messagesEndRef }) => {

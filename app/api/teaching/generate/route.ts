@@ -1,13 +1,16 @@
-import { createAIService } from '@/lib/ai'
 import { db } from "@/firebase/admin";
 import { getRandomInterviewCover } from "@/lib/utils";
+import { getCurrentUser } from "@/lib/actions/auth.action";
+import { chatOpenAIFirst } from "@/lib/ai/fallback";
 
 export async function POST(request: Request) {
-  const { subject, topic, difficulty, userId } = await request.json();
-
   try {
-    // Use AI abstraction layer (auto-detects: OpenAI, Bedrock, or Gemini)
-    const aiService = createAIService()
+    const user = await getCurrentUser();
+    if (!user) return Response.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    const { subject, topic, difficulty } = await request.json() as { subject?: string; topic?: string; difficulty?: string };
+    if (typeof subject !== "string" || !subject.trim() || subject.length > 200 || typeof topic !== "string" || !topic.trim() || topic.length > 300) {
+      return Response.json({ success: false, error: "A valid subject and topic are required." }, { status: 400 });
+    }
     
     const prompt = `Create a comprehensive teaching summary for a ${difficulty} level lesson on ${topic} in ${subject}.ay
         
@@ -28,15 +31,14 @@ export async function POST(request: Request) {
         The content will be read by a voice assistant, so avoid using special characters like "/" or "*" that might affect speech.
       `;
 
-    const response = await aiService.complete(prompt, {
+    const response = await chatOpenAIFirst([{ role: "user", content: prompt }], {
       temperature: 0.7,
-      maxTokens: 1500
+      maxTokens: 1500,
+      openAIModel: "gpt-5.6-sol",
     })
     
     const generatedContent = response.content
 
-    console.log("Raw generated content:", generatedContent);
-    
     // Clean up the response to handle potential markdown formatting
     let cleanedContent = generatedContent;
     
@@ -50,10 +52,11 @@ export async function POST(request: Request) {
     // Trim any whitespace
     cleanedContent = cleanedContent.trim();
     
-    console.log("Cleaned content:", cleanedContent);
-    
-    // Parse the cleaned content
-    const parsedContent = JSON.parse(cleanedContent);
+    const objectStart = cleanedContent.indexOf("{");
+    const objectEnd = cleanedContent.lastIndexOf("}");
+    if (objectStart < 0 || objectEnd <= objectStart) throw new Error("The lesson provider returned malformed content.");
+    const parsedContent = JSON.parse(cleanedContent.slice(objectStart, objectEnd + 1));
+    if (typeof parsedContent.summary !== "string") throw new Error("The lesson provider returned an invalid summary.");
     
     // Create the teaching session object
     const teachingSession = {
@@ -63,7 +66,7 @@ export async function POST(request: Request) {
       summary: parsedContent.summary,
       keyPoints: parsedContent.keyPoints || [],
       importantQuestions: parsedContent.importantQuestions || [],
-      userId,
+      userId: user.id,
       completed: false,
       coverImage: getRandomInterviewCover(),
       createdAt: new Date().toISOString(),
@@ -78,15 +81,16 @@ export async function POST(request: Request) {
       session: { id: docRef.id, ...teachingSession }
     }, { status: 200 });
   } catch (error) {
-    console.error("Error generating teaching content:", error);
+    console.error("Error generating teaching content:", error instanceof Error ? error.name : "unknown error");
     return Response.json({ 
       success: false, 
-      error: String(error),
-      rawContent: generatedContent || "No content generated" 
+      error: "Teaching content could not be generated. Please try again.",
     }, { status: 500 });
   }
 }
 
 export async function GET() {
+  const user = await getCurrentUser();
+  if (!user) return Response.json({ success: false, error: "Unauthorized" }, { status: 401 });
   return Response.json({ success: true, message: "Teaching generation API is working" }, { status: 200 });
 }

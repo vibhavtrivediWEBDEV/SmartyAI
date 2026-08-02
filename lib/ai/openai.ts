@@ -11,8 +11,12 @@ export class OpenAIService implements AIService {
 
   constructor(config: AIConfig) {
     this.config = config
+    const apiKey = config.apiKey || process.env.OPENAI_API_KEY
+    if (!apiKey || apiKey === 'dummy') {
+      throw new Error('OpenAI is not configured.')
+    }
     this.client = new OpenAI({
-      apiKey: config.apiKey || process.env.OPENAI_API_KEY
+      apiKey
     })
   }
 
@@ -66,21 +70,21 @@ export class OpenAIService implements AIService {
     options?: ChatOptions
   ): Promise<AIResponse> {
     try {
-      const model = options?.model || this.config.model
+      const model = options?.model || this.config.model || 'gpt-4o-mini'
       
       const stream = await this.client.chat.completions.create({
         model,
         messages: messages.map(m => ({
           role: m.role,
           content: m.content
-        })),
+        })) as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
         temperature: options?.temperature ?? 0.7,
         max_tokens: options?.maxTokens ?? 2048,
         stream: true
       })
 
       let fullContent = ''
-      let usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+      const usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
 
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content || ''
@@ -103,10 +107,10 @@ export class OpenAIService implements AIService {
   }
 
   private handleError(error: any): never {
-    console.error('❌ OpenAI Error:', error)
+    console.error('OpenAI request failed:', error?.status || error?.code || 'UNKNOWN')
     
     if (error.status === 401) {
-      throw new Error('OpenAI API key is invalid or missing. Check OPENAI_API_KEY in .env')
+      throw new Error('OpenAI credentials were rejected.')
     }
     
     if (error.status === 429) {

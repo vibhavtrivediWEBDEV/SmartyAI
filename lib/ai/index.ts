@@ -2,11 +2,12 @@
  * AI Service Factory - Creates appropriate service based on provider
  */
 
-import { getAIProvider, getAIConfig } from './providerFactory'
+import { getAIProvider, getAIConfig, getAIConfigForProvider } from './providerFactory'
 import { AIService } from './aiService'
 import { OpenAIService } from './openai'
 import { BedrockService } from './bedrock-glm'
 import { GeminiService } from './gemini'
+import { BedrockMantleService } from './bedrock-mantle'
 
 // Re-export types
 export type { AIService, ChatMessage, AIResponse, ChatOptions, AIConfig } from './aiService'
@@ -25,8 +26,8 @@ export function createAIService(): AIService {
       return new OpenAIService(config)
     
     case 'bedrock':
-      console.log('✅ Using AWS Bedrock GLM-5 (Direct SDK)')
-      return new BedrockService(config)
+      console.log('✅ Using AWS Bedrock')
+      return config.model?.startsWith('openai.') ? new BedrockMantleService(config) : new BedrockService(config)
     
     case 'gemini':
       console.log('✅ Using Google Gemini')
@@ -41,13 +42,13 @@ export function createAIService(): AIService {
  * Create AI service for specific provider (override)
  */
 export function createAIServiceForProvider(provider: 'openai' | 'bedrock' | 'gemini'): AIService {
-  const config = getAIConfig()
+  const config = getAIConfigForProvider(provider)
 
   switch (provider) {
     case 'openai':
       return new OpenAIService(config)
     case 'bedrock':
-      return new BedrockService(config)
+      return config.model?.startsWith('openai.') ? new BedrockMantleService(config) : new BedrockService(config)
     case 'gemini':
       return new GeminiService(config)
     default:
@@ -80,3 +81,4 @@ export * from './aiService'
 export { OpenAIService } from './openai'
 export { BedrockService } from './bedrock-glm'
 export { GeminiService } from './gemini'
+export { BedrockMantleService } from './bedrock-mantle'

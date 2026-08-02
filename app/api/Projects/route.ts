@@ -1,103 +1,53 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { db } from "@/firebase/admin"
-import { teachingCovers } from "@/constants"
+import { NextResponse } from "next/server";
+import { z } from "zod";
 
-// GET - Fetch all project categories
-export async function GET() {
+import { requireFinderSubscription } from "@/lib/auth/finder-access";
+import { createFinderNode, ensureSystemFinderNodes, listFinderNodes, trashFinderNodes } from "@/modules/finder/finder.repository";
+import { commitReservedStorage, releaseReservedStorage, reserveStorage } from "@/modules/storage/storage.repository";
+
+const createSchema = z.object({
+  name: z.string().trim().min(1).max(255),
+  type: z.string().default("folder"),
+  parentId: z.string().nullable().optional(),
+  content: z.string().max(5 * 1024 * 1024).optional(),
+  url: z.string().url().optional(),
+});
+
+export async function GET(request: Request) {
+  const access = await requireFinderSubscription();
+  if (access.response) return access.response;
+  const user = access.user!;
+  const includeTrash = new URL(request.url).searchParams.get("trash") === "true";
+  await ensureSystemFinderNodes(user.id);
+  return NextResponse.json({ data: await listFinderNodes(user.id, includeTrash) });
+}
+
+export async function POST(request: Request) {
+  const access = await requireFinderSubscription();
+  if (access.response) return access.response;
+  const user = access.user!;
+  const parsed = createSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Invalid Finder item", details: parsed.error.flatten().fieldErrors }, { status: 400 });
+  const bytes = Buffer.byteLength(parsed.data.content ?? "", "utf8");
+  if (bytes && !(await reserveStorage(user.id, user.plan, "text", bytes))) {
+    return NextResponse.json({ error: "Finder storage limit exceeded" }, { status: 413 });
+  }
   try {
-    const projectsRef = db.collection("ProjectCategory")
-    const snapshot = await projectsRef.get()
-
-    if (snapshot.empty) {
-      // Initialize with default data if collection is empty
-      const batch = db.batch()
-      teachingCovers.forEach((item) => {
-        const docRef = projectsRef.doc(item.id)
-        batch.set(docRef, {
-          ...item,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-      })
-      await batch.commit()
-
-      return NextResponse.json({ data: teachingCovers })
-    }
-
-    const projects = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }))
-
-    return NextResponse.json({ data: projects })
+    const data = await createFinderNode(user.id, parsed.data);
+    if (bytes) await commitReservedStorage(user.id, "text", bytes, bytes);
+    return NextResponse.json({ data }, { status: 201 });
   } catch (error) {
-    console.error("Error fetching projects:", error)
-    return NextResponse.json({ error: "Failed to fetch projects" }, { status: 500 })
+    if (bytes) await releaseReservedStorage(user.id, "text", bytes);
+    throw error;
   }
 }
 
-// POST - Create new project/folder
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { name, type, parentId, size } = body
-
-    const newItem = {
-      id: Date.now().toString(),
-      name,
-      type,
-      parentId: parentId || null,
-      size: size || null,
-      children: type === "folder" ? [] : undefined,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }
-
-    const docRef = db.collection("ProjectCategory").doc(newItem.id)
-    await docRef.set(newItem)
-
-    return NextResponse.json({ data: newItem })
-  } catch (error) {
-    console.error("Error creating project:", error)
-    return NextResponse.json({ error: "Failed to create project" }, { status: 500 })
-  }
-}
-
-
-export async function DELETE(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { id } = body
-
-    if (!id) {
-      return NextResponse.json({ error: "Folder ID is required" }, { status: 400 })
-    }
-
-    const docRef = db.collection("ProjectCategory").doc(id)
-    const docSnap = await docRef.get()
-
-    if (!docSnap.exists) {
-      return NextResponse.json({ error: "Folder not found" }, { status: 404 })
-    }
-
-    const folderData = docSnap.data()
-
-    // Ensure it's a folder type (not a file)
-    if (folderData.type !== "folder") {
-      return NextResponse.json({ error: "Item is not a folder" }, { status: 400 })
-    }
-
-    // OPTIONAL: If you want to prevent deleting non-empty folders
-    if (folderData.children && folderData.children.length > 0) {
-      return NextResponse.json({ error: "Folder is not empty" }, { status: 400 })
-    }
-
-    // Delete folder
-    await docRef.delete()
-
-    return NextResponse.json({ message: "Folder deleted successfully", id })
-  } catch (error) {
-    console.error("Error deleting folder:", error)
-    return NextResponse.json({ error: "Failed to delete folder" }, { status: 500 })
-  }
+export async function DELETE(request: Request) {
+  const access = await requireFinderSubscription();
+  if (access.response) return access.response;
+  const user = access.user!;
+  const body = await request.json().catch(() => null);
+  const ids = Array.isArray(body?.ids) ? body.ids : body?.id ? [body.id] : [];
+  if (!ids.length) return NextResponse.json({ error: "Item ID is required" }, { status: 400 });
+  return NextResponse.json({ deleted: await trashFinderNodes(user.id, ids) });
 }

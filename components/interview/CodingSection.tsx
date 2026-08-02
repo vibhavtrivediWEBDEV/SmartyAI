@@ -4,7 +4,7 @@ interface CodingSectionProps {
   showCodeEditor: boolean;
   currentCodingQuestion: string | null;
   toggleCodeEditor: (show: boolean) => void;
-  handleCodeSubmit: (code: string) => void;
+  handleCodeSubmit: (code: string, language: string) => void;
 }
 
 const CodingSection = ({
@@ -26,6 +26,7 @@ const CodingSection = ({
           </div>
           <CodeEditor
             onSubmit={handleCodeSubmit}
+            draftKey={`interview-code-${currentCodingQuestion ?? "practice"}`}
             initialCode={
               currentCodingQuestion ? `// ${currentCodingQuestion}\n\n// Write your solution below\n` : undefined
             }
