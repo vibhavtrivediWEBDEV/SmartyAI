@@ -4,6 +4,7 @@ import { motion, useInView } from "framer-motion";
 import { useRef, useState } from "react";
 import { ExternalLink, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 const applications = [
   {
@@ -134,7 +135,7 @@ export default function ApplicationShowcase() {
   const [activeApp, setActiveApp] = useState(applications[1]);
 
   return (
-    <section ref={ref} className="relative py-32 bg-gradient-to-b from-black via-gray-950 to-black">
+    <section ref={ref} id="applications" className="relative py-32 bg-gradient-to-b from-black via-gray-950 to-black">
       {/* Background */}
       <div className="absolute inset-0">
         <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-3xl" />
@@ -150,7 +151,7 @@ export default function ApplicationShowcase() {
           className="text-center mb-20"
         >
           <h2 className="text-5xl md:text-6xl font-bold text-white mb-6 tracking-tight">
-            50+ AI-Powered Apps
+            A complete AI app ecosystem
           </h2>
           <p className="text-xl text-gray-400 max-w-3xl mx-auto">
             Everything you need. One unified desktop. Zero context switching.
@@ -243,10 +244,12 @@ export default function ApplicationShowcase() {
                   </div>
 
                   {/* CTA */}
-                  <Button className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold rounded-xl">
-                    Try {activeApp.title}
-                    <ArrowRight className="w-4 h-4 ml-2" />
-                  </Button>
+                  <Link href="/apps">
+                    <Button className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold rounded-xl">
+                      Explore all apps
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </Button>
+                  </Link>
                 </div>
               </div>
             </motion.div>

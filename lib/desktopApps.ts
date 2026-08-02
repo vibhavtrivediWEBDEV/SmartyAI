@@ -57,6 +57,18 @@ export const DEFAULT_DOCK_APPS = [
   'Settings',
 ]
 
+export function getDesktopAppSlug(app: Pick<DesktopAppDefinition, 'displayName'>) {
+  return app.displayName
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
 export function getDesktopApp(name: string) {
   return DESKTOP_APPS.find((app) => app.name === name)
+}
+
+export function getDesktopAppBySlug(slug: string) {
+  return DESKTOP_APPS.find((app) => getDesktopAppSlug(app) === slug)
 }

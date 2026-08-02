@@ -12,6 +12,7 @@ import PricingSection from "./PricingSection";
 import Testimonials from "./Testimonials";
 import Footer from "./Footer";
 import Navigation from "./Navigation";
+import AudienceSection from "./AudienceSection";
 
 export default function VibhavMarketingPage() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -28,6 +29,9 @@ export default function VibhavMarketingPage() {
 
         {/* Feature Overview */}
         <FeatureOverview />
+
+        {/* Role-specific solutions */}
+        <AudienceSection />
 
         {/* Application Showcase */}
         <ApplicationShowcase />
@@ -101,7 +105,8 @@ function FloatingCTA() {
       style={{ opacity }}
       className="fixed bottom-8 right-8 z-40 hidden md:block"
     >
-      <motion.button
+      <motion.a
+        href="/sign-up"
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         className="px-6 py-4 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-2xl shadow-2xl shadow-blue-600/30 text-white font-semibold flex items-center gap-2"
@@ -113,7 +118,7 @@ function FloatingCTA() {
         >
           →
         </motion.span>
-      </motion.button>
+      </motion.a>
     </motion.div>
   );
 }

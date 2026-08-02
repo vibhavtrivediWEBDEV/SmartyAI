@@ -6,6 +6,7 @@ import { isAuthenticated } from "@/lib/actions/auth.action";
 export const metadata: Metadata = {
   title: "VibhavMacOS - Desktop",
   description: "Your AI-powered virtual desktop",
+  robots: { index: false, follow: false },
 };
 
 // This is the main desktop application route

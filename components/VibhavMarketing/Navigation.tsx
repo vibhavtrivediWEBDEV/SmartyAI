@@ -6,13 +6,13 @@ import { Menu, X, Sparkles, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { signOut } from "@/lib/actions/auth.action";
+import Link from "next/link";
 
 const navItems = [
   { label: "Features", href: "#features" },
-  { label: "Applications", href: "#applications" },
+  { label: "Solutions", href: "#solutions" },
+  { label: "Applications", href: "/apps" },
   { label: "Pricing", href: "#pricing" },
-  { label: "Docs", href: "#docs" },
-  { label: "Blog", href: "#blog" },
 ];
 
 export default function Navigation() {
@@ -68,14 +68,14 @@ export default function Navigation() {
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex items-center justify-between h-20">
             {/* Logo */}
-            <a href="/" className="flex items-center gap-2">
+            <Link href="/" className="flex items-center gap-2">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-600 flex items-center justify-center text-xl shadow-lg shadow-blue-600/30">
                 🖥️
               </div>
               <span className="text-xl font-bold text-white hidden sm:block">
                 VibhavOS
               </span>
-            </a>
+            </Link>
 
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center gap-8">
@@ -223,12 +223,22 @@ export default function Navigation() {
                 ) : (
                 <>
                   <Button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      router.push("/sign-in");
+                    }}
                     variant="outline"
                     className="w-full bg-white/5 hover:bg-white/10 text-white border-white/10"
                   >
                     Sign In
                   </Button>
-                  <Button className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white">
+                  <Button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      router.push("/sign-up");
+                    }}
+                    className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white"
+                  >
                     Get Started Free
                   </Button>
                 </>
