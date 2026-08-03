@@ -85,14 +85,10 @@ export default function HeroSection() {
 
         {/* Main Headline */}
         <div className="overflow-hidden mb-8">
-          <h1 className="text-6xl md:text-8xl lg:text-[10rem] font-bold tracking-tight leading-none">
-            <span className="hero-letter inline-block bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
-              Your AI
-            </span>
-          </h1>
+         
           <h1 className="text-6xl md:text-8xl lg:text-[10rem] font-bold tracking-tight leading-none -mt-4 md:-mt-6">
             <span className="hero-letter inline-block bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-              Operating System
+             Your AI Operating System
             </span>
           </h1>
         </div>

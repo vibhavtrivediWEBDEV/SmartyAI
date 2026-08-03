@@ -60,6 +60,7 @@ export function ATSResumeBuilder() {
       const saved = draftBody.atsDraft ?? local
       setResume(saved?.draft ?? source)
       setJobDescription(saved?.jobDescription ?? "")
+      
       const savedTemplate = draftBody.atsDraft?.selectedTemplate ?? local?.template
       if (savedTemplate && LATEX_TEMPLATES.some((item) => item.id === savedTemplate)) setTemplate(savedTemplate)
       setDiagnostic(analysisBody.diagnostic ?? EMPTY_PDF_DIAGNOSTIC)

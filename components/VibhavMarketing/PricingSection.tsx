@@ -8,8 +8,8 @@ import { SUBSCRIPTION_PLANS } from "@/modules/subscription/plans";
 
 const gradients = {
   free: "from-gray-600 to-gray-700",
-  starter: "from-blue-600 to-cyan-600",
-  pro: "from-purple-600 to-pink-600",
+  starter: "from-white to-gray-100",
+  pro: "from-gray-400 to-pink-600",
 };
 
 const pricingPlans = Object.values(SUBSCRIPTION_PLANS).map((plan) => ({
@@ -52,8 +52,8 @@ export default function PricingSection() {
     <section ref={ref} className="relative py-32 bg-black" id="pricing">
       {/* Background */}
       <div className="absolute inset-0">
-        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-gradient-to-br from-blue-600/10 via-purple-600/5 to-transparent rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-gradient-to-bl from-pink-600/10 via-purple-600/5 to-transparent rounded-full blur-3xl" />
+        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-gradient-to-br from-white/10 via-gray-400/5 to-transparent rounded-full blur-3xl" />
+        <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-gradient-to-bl from-pink-600/10 via-gray-400/5 to-transparent rounded-full blur-3xl" />
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-6">
@@ -85,7 +85,7 @@ export default function PricingSection() {
               {/* Popular Badge */}
               {plan.popular && (
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20">
-                  <div className="flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-semibold shadow-lg">
+                  <div className="flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-gray-400 to-pink-600 text-white text-xs font-semibold shadow-lg">
                     <Sparkles className="w-3 h-3" />
                     Most Popular
                   </div>
@@ -94,7 +94,7 @@ export default function PricingSection() {
 
               <div className={`relative h-full p-6 rounded-3xl border backdrop-blur-xl ${
                 plan.popular
-                  ? "bg-gradient-to-br from-white/15 to-white/10 border-purple-500/30 shadow-2xl shadow-purple-600/20"
+                  ? "bg-gradient-to-br from-white/15 to-white/10 border-gray-500/30 shadow-2xl shadow-gray-400/20"
                   : "bg-gradient-to-br from-white/10 to-white/5 border-white/10"
               }`}>
                 {/* Gradient Top Border */}
@@ -140,7 +140,7 @@ export default function PricingSection() {
                   disabled={plan.id !== "free"}
                   className={`w-full py-6 rounded-2xl font-semibold text-lg ${
                     plan.popular
-                      ? "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white"
+                      ? "bg-gradient-to-r from-gray-400 to-pink-600 hover:from-gray-500 hover:to-pink-500 text-white"
                       : "bg-white/10 hover:bg-white/20 text-white border border-white/10"
                   }`}
                 >
@@ -156,7 +156,7 @@ export default function PricingSection() {
           initial={{ opacity: 0, y: 40 }}
           animate={isInView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.8, delay: 0.4 }}
-          className="mt-16 p-8 rounded-3xl bg-gradient-to-br from-blue-600/10 to-cyan-600/10 border border-white/10 backdrop-blur-xl"
+          className="mt-16 p-8 rounded-3xl bg-gradient-to-br from-white/10 to-gray-100/10 border border-white/10 backdrop-blur-xl"
         >
           <h3 className="text-2xl font-bold text-white mb-4 text-center">
             AI Credits System
@@ -170,7 +170,7 @@ export default function PricingSection() {
             ].map((item, index) => (
               <div key={index} className="text-center p-4 rounded-xl bg-black/30">
                 <div className="text-sm text-gray-300 mb-1">{item.action}</div>
-                <div className="text-lg font-semibold text-cyan-400">{item.cost}</div>
+                <div className="text-lg font-semibold text-gray-200">{item.cost}</div>
               </div>
             ))}
           </div>
@@ -196,7 +196,7 @@ export default function PricingSection() {
               >
                 <div className={`p-6 rounded-2xl border transition-all duration-300 ${
                   activeFAQ === index
-                    ? "bg-gradient-to-br from-white/15 to-white/10 border-blue-500/30"
+                    ? "bg-gradient-to-br from-white/15 to-white/10 border-gray-100/30"
                     : "bg-white/5 border-white/10 hover:bg-white/10"
                 }`}>
                   <div className="flex items-center justify-between">

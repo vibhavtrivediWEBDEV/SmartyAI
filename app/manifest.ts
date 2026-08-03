@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "SmartyAI — AI Workspace",
-    short_name: "SmartyAI",
+    name: "VibhavMacOS — AI Workspace",
+    short_name: "VibhavMacOS",
     description:
       "A macOS-inspired AI workspace for developers, teachers, students, and creators.",
     start_url: "/",

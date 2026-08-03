@@ -47,12 +47,12 @@ export default function Footer() {
   return (
     <footer className="relative bg-black border-t border-white/10">
       {/* Gradient Top Border */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-600/50 to-transparent" />
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent" />
 
       {/* Background */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute bottom-0 left-1/4 w-[500px] h-[500px] bg-gradient-to-t from-blue-600/10 via-transparent to-transparent rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-gradient-to-t from-purple-600/10 via-transparent to-transparent rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-1/4 w-[500px] h-[500px] bg-gradient-to-t from-white/10 via-transparent to-transparent rounded-full blur-3xl" />
+        <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-gradient-to-t from-gray-400/10 via-transparent to-transparent rounded-full blur-3xl" />
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-6">
@@ -73,7 +73,7 @@ export default function Footer() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <a href="/desktop">
-                <Button size="lg" className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold px-8 py-6 rounded-2xl shadow-xl shadow-blue-600/25">
+                <Button size="lg" className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold px-8 py-6 rounded-2xl shadow-xl shadow-blue-600/25">
                   Start Free Trial
                   <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
@@ -92,7 +92,7 @@ export default function Footer() {
           {/* Brand */}
           <div className="col-span-2 md:col-span-4 lg:col-span-1">
             <div className="flex items-center gap-2 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-600 flex items-center justify-center text-xl">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-white to-gray-100 flex items-center justify-center text-xl">
                 🖥️
               </div>
               <span className="text-2xl font-bold text-white">VibhavOS</span>

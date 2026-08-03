@@ -1,7 +1,9 @@
 "use client";
 
 import { motion, useScroll, useTransform } from "framer-motion";
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/dist/ScrollTrigger";
 import Hero from "./Hero";
 import FeatureOverview from "./FeatureOverview";
 import ApplicationShowcase from "./ApplicationShowcase";
@@ -14,11 +16,30 @@ import Footer from "./Footer";
 import Navigation from "./Navigation";
 import AudienceSection from "./AudienceSection";
 
+// Register GSAP plugins
+if (typeof window !== "undefined") {
+  gsap.registerPlugin(ScrollTrigger);
+}
+
 export default function VibhavMarketingPage() {
   const containerRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    // No GSAP timeline animations needed - using CSS visibility
+    return () => {
+      ScrollTrigger.getAll().forEach(trigger => trigger.kill());
+    };
+  }, []);
+
   return (
-    <div ref={containerRef} className="min-h-screen bg-black text-white overflow-x-hidden">
+    <div ref={containerRef} className="min-h-screen bg-gradient-to-b from-[#0a0a0f] via-[#0d0d15] to-[#000000] text-white overflow-x-hidden relative">
+      {/* Global Gradient Overlay */}
+      <div className="gradient-overlay fixed inset-0 pointer-events-none z-0 opacity-40">
+        <div className="absolute inset-0 bg-gradient-to-br from-[#1a1a2e] via-[#0f0f1a] to-[#000000]" />
+        <div className="absolute top-0 left-0 w-1/2 h-1/2 bg-gradient-radial from-blue-900/20 via-transparent to-transparent blur-3xl" />
+        <div className="absolute bottom-0 right-0 w-1/2 h-1/2 bg-gradient-radial from-cyan-900/20 via-transparent to-transparent blur-3xl" />
+      </div>
+      
       {/* Navigation */}
       <Navigation />
 
@@ -37,7 +58,7 @@ export default function VibhavMarketingPage() {
         <ApplicationShowcase />
 
         {/* AI Section */}
-        <AISection />
+        {/* <AISection /> */}
 
         {/* Productivity Section */}
         <ProductivitySection />
@@ -109,7 +130,7 @@ function FloatingCTA() {
         href="/sign-up"
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        className="px-6 py-4 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-2xl shadow-2xl shadow-blue-600/30 text-white font-semibold flex items-center gap-2"
+        className="px-6 py-4 bg-gradient-to-r from-white to-gray-100 rounded-2xl shadow-2xl shadow-white/30 text-white font-semibold flex items-center gap-2"
       >
         Start Free Trial
         <motion.span

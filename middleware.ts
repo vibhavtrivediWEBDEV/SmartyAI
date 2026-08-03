@@ -2,7 +2,16 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 // Public routes that don't require authentication
-const publicRoutes = ["/", "/sign-in", "/sign-up", "/forgot-password"];
+const publicRoutes = [
+  "/",
+  "/apps",
+  "/sign-in",
+  "/sign-up",
+  "/forgot-password",
+  "/robots.txt",
+  "/sitemap.xml",
+  "/manifest.webmanifest",
+];
 
 // Routes that should redirect to desktop if already authenticated
 const authRoutes = ["/sign-in", "/sign-up"];
@@ -45,6 +54,6 @@ export const config = {
      * - favicon.ico (favicon file)
      * - public folder
      */
-    "/((?!api|_next/static|_next/image|favicon.ico|public).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|public|.*\\..*).*)",
   ],
 };

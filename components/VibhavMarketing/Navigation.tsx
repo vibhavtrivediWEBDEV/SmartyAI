@@ -69,7 +69,7 @@ export default function Navigation() {
           <div className="flex items-center justify-between h-20">
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-600 flex items-center justify-center text-xl shadow-lg shadow-blue-600/30">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-white to-gray-100 flex items-center justify-center text-xl shadow-lg shadow-white/30">
                 🖥️
               </div>
               <span className="text-xl font-bold text-white hidden sm:block">
@@ -122,7 +122,7 @@ export default function Navigation() {
                     </Button>
                   </a>
                   <a href="/desktop">
-                    <Button className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold text-sm shadow-lg shadow-blue-600/25">
+                    <Button className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold text-sm shadow-lg shadow-blue-600/25">
                       <span className="flex items-center gap-2">
                         Start Free Trial
                         <Sparkles className="w-4 h-4" />
@@ -175,7 +175,7 @@ export default function Navigation() {
 
               {/* Logo */}
               <div className="flex items-center gap-2 mb-12">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-600 flex items-center justify-center text-xl shadow-lg">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-white to-gray-100 flex items-center justify-center text-xl shadow-lg">
                   🖥️
                 </div>
                 <span className="text-xl font-bold text-white">VibhavOS</span>
@@ -237,7 +237,7 @@ export default function Navigation() {
                       setIsMobileMenuOpen(false);
                       router.push("/sign-up");
                     }}
-                    className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white"
+                    className="w-full bg-gradient-to-r from-white to-gray-100 hover:from-gray-100 hover:to-gray-50 text-white"
                   >
                     Get Started Free
                   </Button>

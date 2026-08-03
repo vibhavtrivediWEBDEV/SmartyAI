@@ -9,6 +9,7 @@ import {
   getDesktopAppSlug,
 } from "@/lib/desktopApps";
 import { getSiteUrl } from "@/lib/site";
+import { generateAppMetadata, generateAppJsonLd, generateBreadcrumbJsonLd } from "@/lib/seo";
 
 type AppDetailPageProps = {
   params: Promise<{ slug: string }>;
@@ -23,17 +24,7 @@ export async function generateMetadata({ params }: AppDetailPageProps): Promise<
   const app = getDesktopAppBySlug(slug);
   if (!app) return {};
 
-  return {
-    title: `${app.displayName} — AI App`,
-    description: `${app.description} Explore ${app.displayName} inside the SmartyAI macOS-inspired workspace.`,
-    alternates: { canonical: `/apps/${slug}` },
-    openGraph: {
-      type: "website",
-      title: `${app.displayName} | SmartyAI`,
-      description: app.description,
-      url: `/apps/${slug}`,
-    },
-  };
+  return generateAppMetadata(app);
 }
 
 export default async function AppDetailPage({ params }: AppDetailPageProps) {
@@ -44,29 +35,30 @@ export default async function AppDetailPage({ params }: AppDetailPageProps) {
   const relatedApps = DESKTOP_APPS.filter(
     (candidate) => candidate.category === app.category && candidate.name !== app.name,
   ).slice(0, 3);
+
+  // Generate structured data for SEO
   const siteUrl = getSiteUrl();
-  const softwareJsonLd = {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: app.displayName,
-    description: app.description,
-    applicationCategory: `${app.category}Application`,
-    operatingSystem: "Web",
-    url: `${siteUrl}/apps/${slug}`,
-    offers: {
-      "@type": "Offer",
-      price: "0",
-      priceCurrency: "USD",
-      category: "Free trial",
-    },
-  };
+  const appJsonLd = generateAppJsonLd(app);
+  const breadcrumbJsonLd = generateBreadcrumbJsonLd([
+    { name: "Home", path: "/" },
+    { name: "Apps", path: "/apps" },
+    { name: app.displayName, path: `/apps/${slug}` },
+  ]);
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#050506] text-white">
+      {/* SoftwareApplication Schema */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(softwareJsonLd).replace(/</g, "\\u003c"),
+          __html: JSON.stringify(appJsonLd).replace(/</g, "\\u003c"),
+        }}
+      />
+      {/* BreadcrumbList Schema */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(breadcrumbJsonLd).replace(/</g, "\\u003c"),
         }}
       />
       <div className="fixed inset-0 pointer-events-none">
@@ -79,7 +71,7 @@ export default async function AppDetailPage({ params }: AppDetailPageProps) {
             <span className="grid h-10 w-10 place-items-center rounded-[13px] bg-gradient-to-br from-blue-500 to-cyan-400">
               <Sparkles className="h-5 w-5" />
             </span>
-            SmartyAI
+            VibhavMacOS
           </Link>
           <Link href="/apps" className="flex items-center gap-2 text-sm text-white/60 transition hover:text-white">
             <ArrowLeft className="h-4 w-4" /> All apps
@@ -111,7 +103,7 @@ export default async function AppDetailPage({ params }: AppDetailPageProps) {
               <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
               <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
               <span className="h-3 w-3 rounded-full bg-[#28c840]" />
-              <span className="ml-3 text-xs text-white/35">SmartyAI · {app.displayName}</span>
+              <span className="ml-3 text-xs text-white/35">VibhavMacOS · {app.displayName}</span>
             </div>
             <div className="grid min-h-[390px] place-items-center rounded-b-[24px] bg-black/40 p-12">
               <div className="text-center">
@@ -130,7 +122,7 @@ export default async function AppDetailPage({ params }: AppDetailPageProps) {
         <div className="mx-auto max-w-7xl px-6 py-20">
           <div className="grid gap-8 md:grid-cols-3">
             {[
-              ["Native workspace", "Use the app without leaving your SmartyAI desktop or losing context."],
+              ["Native workspace", "Use the app without leaving your VibhavMacOS desktop or losing context."],
               ["AI-assisted", "Work faster with intelligent actions and connected workspace context."],
               ["Ready everywhere", "Access your workspace from a modern browser on desktop or mobile."],
             ].map(([title, description]) => (

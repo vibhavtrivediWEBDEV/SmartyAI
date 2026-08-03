@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Cesium Globe — From/To Auto Navigate</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<script src="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Cesium.js"></script>
+<link href="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
+
+<style>
+  html, body, #cesiumContainer {
+    width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
+    font-family: sans-serif;
+  }
+
+  #toolbar {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(0,0,0,0.75);
+    color: white;
+    padding: 14px;
+    border-radius: 10px;
+    z-index: 999;
+    font-size: 13px;
+    width: 260px;
+  }
+
+  #toolbar h3 { margin: 0 0 8px 0; font-size: 14px; }
+
+  #toolbar label { display: block; margin-top: 8px; font-size: 12px; color: #cfd8ff; }
+
+  #toolbar select, #toolbar input {
+    width: 100%;
+    padding: 5px 6px;
+    margin-top: 3px;
+    border-radius: 4px;
+    border: none;
+    font-size: 12px;
+    box-sizing: border-box;
+  }
+
+  #toolbar button {
+    width: 100%;
+    margin-top: 12px;
+    padding: 8px;
+    background: #3b67ff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  #toolbar button:hover { background: #2f52d1; }
+
+  #toolbar button.secondary {
+    background: transparent;
+    border: 1px solid #556;
+    margin-top: 6px;
+  }
+
+  #status {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #9fe89f;
+    min-height: 16px;
+  }
+</style>
+</head>
+<body>
+
+<div id="cesiumContainer"></div>
+
+<div id="toolbar">
+  <h3>✈️ From → To Auto Navigate</h3>
+
+  <label>From</label>
+  <select id="fromSelect">
+    <option value="delhi">Delhi, India</option>
+    <option value="mumbai">Mumbai, India</option>
+    <option value="newyork">New York, USA</option>
+    <option value="london">London, UK</option>
+    <option value="tokyo">Tokyo, Japan</option>
+  </select>
+
+  <label>To</label>
+  <select id="toSelect">
+    <option value="newyork">New York, USA</option>
+    <option value="delhi">Delhi, India</option>
+    <option value="london">London, UK</option>
+    <option value="tokyo">Tokyo, Japan</option>
+    <option value="mumbai">Mumbai, India</option>
+  </select>
+
+  <label>Flight speed</label>
+  <select id="speedSelect">
+    <option value="20">Slow</option>
+    <option value="45" selected>Normal</option>
+    <option value="80">Fast</option>
+  </select>
+
+  <button onclick="startFlight()">Start Flight</button>
+  <button class="secondary" onclick="resetView()">Reset View</button>
+
+  <div id="status"></div>
+</div>
+
+<script>
+  Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI2ZWY3Nzk2NS1mYTAzLTQxMTMtYWE5YS05ZDdlMDJkNmE5NmQiLCJpZCI6NDYzMTc0LCJpc3MiOiJodHRwczovL2FwaS5jZXNpdW0uY29tIiwiYXVkIjoidW5kZWZpbmVkX2RlZmF1bHQiLCJpYXQiOjE3ODU2OTI2MTZ9.-fR3ype6oMo7Mo3qEPmf5SI70elIcRVm-bQ8gmrM6oM';
+
+  const LOCATIONS = {
+    delhi:   { lat: 28.6139, lon: 77.2090, name: "Delhi" },
+    mumbai:  { lat: 19.0760, lon: 72.8777, name: "Mumbai" },
+    newyork: { lat: 40.7128, lon: -74.0060, name: "New York" },
+    london:  { lat: 51.5074, lon: -0.1278, name: "London" },
+    tokyo:   { lat: 35.6762, lon: 139.6503, name: "Tokyo" },
+  };
+
+  let viewer;
+  let planeEntity;
+  let pathEntity;
+  let animating = false;
+
+  async function initViewer() {
+    const terrainProvider = await Cesium.createWorldTerrainAsync();
+
+    viewer = new Cesium.Viewer('cesiumContainer', {
+      terrainProvider,
+      animation: false,
+      timeline: false,
+      baseLayerPicker: true,
+      geocoder: true,
+      homeButton: true,
+      sceneModePicker: true,
+      navigationHelpButton: false,
+      fullscreenButton: true,
+    });
+
+    viewer.scene.globe.depthTestAgainstTerrain = true;
+
+    resetView();
+  }
+
+  function resetView() {
+    viewer.camera.flyHome(1.5);
+    document.getElementById('status').innerText = '';
+  }
+
+  // Great-circle interpolation between two lat/lon points (so path curves naturally over the globe)
+  function greatCircleInterpolate(lat1, lon1, lat2, lon2, fraction) {
+    const phi1 = Cesium.Math.toRadians(lat1);
+    const lam1 = Cesium.Math.toRadians(lon1);
+    const phi2 = Cesium.Math.toRadians(lat2);
+    const lam2 = Cesium.Math.toRadians(lon2);
+
+    const d = 2 * Math.asin(Math.sqrt(
+      Math.sin((phi2 - phi1) / 2) ** 2 +
+      Math.cos(phi1) * Math.cos(phi2) * Math.sin((lam2 - lam1) / 2) ** 2
+    ));
+
+    if (d === 0) return { lat: lat1, lon: lon1 };
+
+    const A = Math.sin((1 - fraction) * d) / Math.sin(d);
+    const B = Math.sin(fraction * d) / Math.sin(d);
+
+    const x = A * Math.cos(phi1) * Math.cos(lam1) + B * Math.cos(phi2) * Math.cos(lam2);
+    const y = A * Math.cos(phi1) * Math.sin(lam1) + B * Math.cos(phi2) * Math.sin(lam2);
+    const z = A * Math.sin(phi1) + B * Math.sin(phi2);
+
+    const lat = Math.atan2(z, Math.sqrt(x * x + y * y));
+    const lon = Math.atan2(y, x);
+
+    return { lat: Cesium.Math.toDegrees(lat), lon: Cesium.Math.toDegrees(lon) };
+  }
+
+  function startFlight() {
+    if (animating) return;
+
+    const fromKey = document.getElementById('fromSelect').value;
+    const toKey = document.getElementById('toSelect').value;
+    const speed = parseFloat(document.getElementById('speedSelect').value); // seconds total
+
+    if (fromKey === toKey) {
+      document.getElementById('status').innerText = 'Please pick two different locations.';
+      return;
+    }
+
+    const from = LOCATIONS[fromKey];
+    const to = LOCATIONS[toKey];
+
+    // Clean up previous run
+    if (planeEntity) viewer.entities.remove(planeEntity);
+    if (pathEntity) viewer.entities.remove(pathEntity);
+
+    animating = true;
+    document.getElementById('status').innerText = `Flying: ${from.name} → ${to.name} ...`;
+
+    const start = Cesium.JulianDate.now();
+    const stop = Cesium.JulianDate.addSeconds(start, speed, new Cesium.JulianDate());
+
+    const positionProperty = new Cesium.SampledPositionProperty();
+    const steps = 200;
+    const maxHeight = 800000; // peak altitude mid-flight (meters)
+
+    for (let i = 0; i <= steps; i++) {
+      const fraction = i / steps;
+      const point = greatCircleInterpolate(from.lat, from.lon, to.lat, to.lon, fraction);
+
+      // Arc height: 0 at start/end, peak in the middle
+      const height = Math.sin(fraction * Math.PI) * maxHeight + 5000;
+
+      const time = Cesium.JulianDate.addSeconds(start, fraction * speed, new Cesium.JulianDate());
+      const cartesian = Cesium.Cartesian3.fromDegrees(point.lon, point.lat, height);
+      positionProperty.addSample(time, cartesian);
+    }
+
+    // Draw the static path line for reference
+    const pathPositions = [];
+    for (let i = 0; i <= steps; i++) {
+      const fraction = i / steps;
+      const point = greatCircleInterpolate(from.lat, from.lon, to.lat, to.lon, fraction);
+      const height = Math.sin(fraction * Math.PI) * maxHeight + 5000;
+      pathPositions.push(Cesium.Cartesian3.fromDegrees(point.lon, point.lat, height));
+    }
+
+    pathEntity = viewer.entities.add({
+      polyline: {
+        positions: pathPositions,
+        width: 2,
+        material: new Cesium.PolylineDashMaterialProperty({ color: Cesium.Color.YELLOW }),
+        clampToGround: false,
+      }
+    });
+
+    // Moving plane entity
+    planeEntity = viewer.entities.add({
+      availability: new Cesium.TimeIntervalCollection([
+        new Cesium.TimeInterval({ start, stop })
+      ]),
+      position: positionProperty,
+      orientation: new Cesium.VelocityOrientationProperty(positionProperty),
+      point: { pixelSize: 14, color: Cesium.Color.CYAN, outlineColor: Cesium.Color.BLACK, outlineWidth: 2 },
+      path: {
+        resolution: 1,
+        material: new Cesium.PolylineGlowMaterialProperty({ glowPower: 0.2, color: Cesium.Color.CYAN }),
+        width: 6,
+      },
+      label: {
+        text: `→ ${to.name}`,
+        font: '12px sans-serif',
+        pixelOffset: new Cesium.Cartesian2(0, -22),
+        fillColor: Cesium.Color.WHITE,
+      }
+    });
+
+    // Mark from/to points
+    viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(from.lon, from.lat, 0),
+      point: { pixelSize: 10, color: Cesium.Color.LIME },
+      label: { text: from.name, font: '12px sans-serif', pixelOffset: new Cesium.Cartesian2(0, -18), fillColor: Cesium.Color.WHITE }
+    });
+    viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(to.lon, to.lat, 0),
+      point: { pixelSize: 10, color: Cesium.Color.RED },
+      label: { text: to.name, font: '12px sans-serif', pixelOffset: new Cesium.Cartesian2(0, -18), fillColor: Cesium.Color.WHITE }
+    });
+
+    // Drive the clock to animate + camera tracks the plane
+    viewer.clock.startTime = start.clone();
+    viewer.clock.stopTime = stop.clone();
+    viewer.clock.currentTime = start.clone();
+    viewer.clock.clockRange = Cesium.ClockRange.CLAMPED;
+    viewer.clock.multiplier = 1;
+    viewer.clock.shouldAnimate = true;
+
+    viewer.trackedEntity = planeEntity;
+
+    // Stop tracking + reset status when flight completes
+    const checkDone = setInterval(() => {
+      if (Cesium.JulianDate.greaterThanOrEquals(viewer.clock.currentTime, stop)) {
+        clearInterval(checkDone);
+        animating = false;
+        viewer.trackedEntity = undefined;
+        document.getElementById('status').innerText = `Arrived at ${to.name} ✅`;
+      }
+    }, 300);
+  }
+
+  initViewer();
+</script>
+
+</body>
+</html>

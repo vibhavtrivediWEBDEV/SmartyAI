@@ -6,21 +6,21 @@ const audiences = [
     title: "For developers",
     description: "Move from idea to running code with an editor, terminal, AI debugging, live previews, projects, and browser research in one workspace.",
     icon: Code2,
-    accent: "from-blue-500 to-cyan-400",
+    accent: "from-gray-100 to-gray-200",
     apps: "VS Code · Terminal · Projects · AI Search",
   },
   {
     title: "For teachers",
     description: "Create lessons, generate structured learning material, explain concepts visually, manage documents, and teach with an interactive AI assistant.",
     icon: GraduationCap,
-    accent: "from-purple-500 to-pink-400",
+    accent: "from-gray-500 to-pink-400",
     apps: "Smarty Teacher · AI Book · PDF · Tables",
   },
   {
     title: "For students",
     description: "Study difficult topics, practice interviews, explore NCERT material, organize notes, analyze files, and get focused help whenever it is needed.",
     icon: BookOpen,
-    accent: "from-emerald-500 to-cyan-400",
+    accent: "from-emerald-500 to-gray-200",
     apps: "Science Book · Interview · Notes · AI Search",
   },
 ];
@@ -31,7 +31,7 @@ export default function AudienceSection() {
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(59,130,246,.13),transparent_42%)]" />
       <div className="relative mx-auto max-w-7xl px-6">
         <div className="max-w-3xl">
-          <span className="text-sm font-semibold uppercase tracking-[0.22em] text-blue-300">One workspace, built around you</span>
+          <span className="text-sm font-semibold uppercase tracking-[0.22em] text-gray-300">One workspace, built around you</span>
           <h2 className="mt-5 text-5xl font-semibold tracking-[-0.05em] text-white sm:text-6xl">
             Serious tools without the complexity.
           </h2>

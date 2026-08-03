@@ -12,8 +12,8 @@ export default function ProductivitySection() {
     <section ref={ref} className="relative py-32 bg-gradient-to-b from-black via-gray-950 to-black">
       {/* Background */}
       <div className="absolute inset-0">
-        <div className="absolute top-1/2 left-0 w-[500px] h-[500px] bg-gradient-to-r from-purple-600/10 via-transparent to-transparent rounded-full blur-3xl" />
-        <div className="absolute top-1/2 right-0 w-[500px] h-[500px] bg-gradient-to-l from-blue-600/10 via-transparent to-transparent rounded-full blur-3xl" />
+        <div className="absolute top-1/2 left-0 w-[500px] h-[500px] bg-gradient-to-r from-gray-400/10 via-transparent to-transparent rounded-full blur-3xl" />
+        <div className="absolute top-1/2 right-0 w-[500px] h-[500px] bg-gradient-to-l from-white/10 via-transparent to-transparent rounded-full blur-3xl" />
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-6">
@@ -42,7 +42,7 @@ export default function ProductivitySection() {
             className="relative p-8 rounded-3xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 backdrop-blur-xl"
           >
             <div className="flex items-start gap-6 mb-8">
-              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-600/20 to-blue-600/20 flex items-center justify-center text-purple-400 flex-shrink-0">
+              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-gray-400/20 to-gray-300/20 flex items-center justify-center text-gray-400 flex-shrink-0">
                 <Workflow className="w-10 h-10" />
               </div>
               <div>
@@ -59,10 +59,10 @@ export default function ProductivitySection() {
             <div className="relative">
               <div className="p-6 rounded-2xl bg-black/50 border border-white/10">
                 <div className="flex items-center gap-4 mb-4">
-                  <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-blue-600/20 flex items-center justify-center">
-                    <Clock className="w-5 h-5 text-blue-400" />
+                  <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                    <Clock className="w-5 h-5 text-gray-200" />
                   </div>
-                  <div className="h-px flex-1 bg-gradient-to-r from-blue-600/50 to-transparent" />
+                  <div className="h-px flex-1 bg-gradient-to-r from-white/50 to-transparent" />
                   <div className="text-sm text-gray-500">9:00 AM</div>
                 </div>
                 
@@ -72,15 +72,15 @@ export default function ProductivitySection() {
                     <span className="text-sm text-gray-300">Open Calendar</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full bg-blue-400" />
+                    <div className="w-2 h-2 rounded-full bg-gray-200" />
                     <span className="text-sm text-gray-300">Check emails</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full bg-purple-400" />
+                    <div className="w-2 h-2 rounded-full bg-gray-400" />
                     <span className="text-sm text-gray-300">Start development environment</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full bg-cyan-400" />
+                    <div className="w-2 h-2 rounded-full bg-gray-200" />
                     <span className="text-sm text-gray-300">Generate daily report</span>
                   </div>
                 </div>
@@ -96,7 +96,7 @@ export default function ProductivitySection() {
             className="relative p-8 rounded-3xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 backdrop-blur-xl"
           >
             <div className="flex items-start gap-6 mb-8">
-              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-cyan-600/20 to-green-600/20 flex items-center justify-center text-cyan-400 flex-shrink-0">
+              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-gray-200/20 to-green-600/20 flex items-center justify-center text-gray-200 flex-shrink-0">
                 <Zap className="w-10 h-10" />
               </div>
               <div>
@@ -143,7 +143,7 @@ export default function ProductivitySection() {
           initial={{ opacity: 0, y: 40 }}
           animate={isInView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.8, delay: 0.4 }}
-          className="mt-16 p-8 rounded-3xl bg-gradient-to-r from-blue-600/10 via-purple-600/10 to-cyan-600/10 border border-white/10 backdrop-blur-xl"
+          className="mt-16 p-8 rounded-3xl bg-gradient-to-r from-white/10 via-gray-400/10 to-gray-100/10 border border-white/10 backdrop-blur-xl"
         >
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             {[
@@ -153,7 +153,7 @@ export default function ProductivitySection() {
               { value: "100%", label: "Customizable" },
             ].map((stat, index) => (
               <div key={index}>
-                <div className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent mb-2">
+                <div className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-gray-200 to-gray-200 bg-clip-text text-transparent mb-2">
                   {stat.value}
                 </div>
                 <div className="text-sm text-gray-500 uppercase tracking-wider">

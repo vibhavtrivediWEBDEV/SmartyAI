@@ -52,7 +52,7 @@ export default function FeatureOverview() {
     <section ref={ref} id="features" className="relative py-32 bg-black">
       {/* Background */}
       <div className="absolute inset-0">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-to-br from-blue-600/10 via-purple-600/5 to-transparent rounded-full blur-3xl" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-to-br from-white/10 via-gray-400/5 to-transparent rounded-full blur-3xl" />
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-6">
@@ -81,10 +81,10 @@ export default function FeatureOverview() {
               transition={{ duration: 0.6, delay: index * 0.1 }}
               className="group relative"
             >
-              <div className="relative p-8 rounded-3xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 backdrop-blur-xl hover:border-white/20 transition-all duration-500 hover:shadow-2xl hover:shadow-blue-600/10">
+              <div className="relative p-8 rounded-3xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 backdrop-blur-xl hover:border-white/20 transition-all duration-500 hover:shadow-2xl hover:shadow-white/10">
                 {/* Icon Container */}
                 <div className="mb-6">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600/20 to-cyan-600/20 flex items-center justify-center text-blue-400 group-hover:scale-110 transition-transform duration-300">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-white/20 to-gray-100/20 flex items-center justify-center text-gray-200 group-hover:scale-110 transition-transform duration-300">
                     {feature.icon}
                   </div>
                 </div>
@@ -98,7 +98,7 @@ export default function FeatureOverview() {
                 </p>
 
                 {/* Hover Gradient */}
-                <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-blue-600/5 via-transparent to-purple-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-white/5 via-transparent to-gray-400/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
               </div>
             </motion.div>
           ))}
@@ -118,7 +118,7 @@ export default function FeatureOverview() {
             { value: "24/7", label: "Support" },
           ].map((stat, index) => (
             <div key={index} className="text-center">
-              <div className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent mb-2">
+              <div className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-gray-200 to-gray-200 bg-clip-text text-transparent mb-2">
                 {stat.value}
               </div>
               <div className="text-sm text-gray-500 uppercase tracking-wider">

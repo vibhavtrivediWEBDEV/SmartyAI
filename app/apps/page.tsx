@@ -7,13 +7,14 @@ import {
   getDesktopAppSlug,
   type DesktopAppCategory,
 } from "@/lib/desktopApps";
+import { generatePageMetadata, generateAppsListJsonLd } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "AI Apps Directory",
+export const metadata: Metadata = generatePageMetadata({
+  title: "AI Apps Directory | VibhavMacOS",
   description:
-    "Search and explore every SmartyAI application for coding, teaching, studying, research, productivity, and creativity.",
-  alternates: { canonical: "/apps" },
-};
+    "Explore all AI-powered applications in the VibhavMacOS workspace. Developer tools, productivity apps, creative software, teaching assistants, and more.",
+  path: "/apps",
+});
 
 const categories: Array<"All" | DesktopAppCategory> = [
   "All",
@@ -41,8 +42,18 @@ export default async function AppsPage({ searchParams }: AppsPageProps) {
     return matchesCategory && (!query || searchable.includes(query));
   });
 
+  // Generate ItemList schema for SEO
+  const appsListJsonLd = generateAppsListJsonLd(DESKTOP_APPS);
+
   return (
     <main className="min-h-screen bg-[#050506] text-white">
+      {/* ItemList Schema for apps directory */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(appsListJsonLd).replace(/</g, "\\u003c"),
+        }}
+      />
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute left-1/2 top-[-20rem] h-[40rem] w-[60rem] -translate-x-1/2 rounded-full bg-blue-600/20 blur-[140px]" />
         <div className="absolute bottom-[-20rem] right-[-10rem] h-[35rem] w-[35rem] rounded-full bg-purple-600/15 blur-[120px]" />
@@ -54,7 +65,7 @@ export default async function AppsPage({ searchParams }: AppsPageProps) {
             <span className="grid h-10 w-10 place-items-center rounded-[13px] bg-gradient-to-br from-blue-500 to-cyan-400 shadow-lg shadow-blue-500/20">
               <Sparkles className="h-5 w-5" />
             </span>
-            <span>SmartyAI</span>
+            <span>VibhavMacOS</span>
           </Link>
           <div className="flex items-center gap-3">
             <Link href="/sign-in" className="hidden text-sm text-white/65 transition hover:text-white sm:block">

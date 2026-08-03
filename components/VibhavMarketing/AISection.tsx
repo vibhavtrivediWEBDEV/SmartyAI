@@ -12,8 +12,8 @@ export default function AISection() {
     <section ref={ref} className="relative py-32 bg-black">
       {/* Background */}
       <div className="absolute inset-0">
-        <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-gradient-to-br from-blue-600/20 via-purple-600/10 to-transparent rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-gradient-to-bl from-cyan-600/20 via-blue-600/10 to-transparent rounded-full blur-3xl" />
+        <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-gradient-to-br from-white/20 via-gray-400/10 to-transparent rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-gradient-to-bl from-gray-200/20 via-white/10 to-transparent rounded-full blur-3xl" />
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-6">
@@ -25,7 +25,7 @@ export default function AISection() {
           className="text-center mb-20"
         >
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-white/10 bg-white/5 backdrop-blur-xl mb-6">
-            <Brain className="w-4 h-4 text-cyan-400" />
+            <Brain className="w-4 h-4 text-gray-200" />
             <span className="text-sm text-gray-300 font-medium tracking-wide">
               Powered by Advanced AI
             </span>
@@ -60,18 +60,18 @@ export default function AISection() {
                     repeat: Infinity,
                     ease: "easeInOut",
                   }}
-                  className="w-64 h-64 rounded-full bg-gradient-to-br from-blue-600/40 via-cyan-600/30 to-transparent blur-3xl"
+                  className="w-64 h-64 rounded-full bg-gradient-to-br from-white/40 via-gray-200/30 to-transparent blur-3xl"
                 />
                 <div className="absolute inset-0 flex items-center justify-center">
                   <motion.div
                     animate={{ rotate: 360 }}
                     transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-                    className="w-40 h-40 rounded-full border-2 border-blue-400/30"
+                    className="w-40 h-40 rounded-full border-2 border-gray-200/30"
                   />
                   <motion.div
                     animate={{ rotate: -360 }}
                     transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
-                    className="absolute w-48 h-48 rounded-full border-2 border-cyan-400/20"
+                    className="absolute w-48 h-48 rounded-full border-2 border-gray-200/20"
                   />
                 </div>
                 <div className="absolute inset-0 flex items-center justify-center">
@@ -98,7 +98,7 @@ export default function AISection() {
                   initial={{ opacity: 0, x: 20 }}
                   animate={isInView ? { opacity: 1, x: 0 } : {}}
                   transition={{ delay: 0.7 }}
-                  className="px-6 py-4 rounded-2xl bg-gradient-to-br from-blue-600/20 to-cyan-600/20 backdrop-blur-xl border border-blue-400/30 max-w-sm"
+                  className="px-6 py-4 rounded-2xl bg-gradient-to-br from-white/20 to-gray-100/20 backdrop-blur-xl border border-gray-200/30 max-w-sm"
                 >
                   <p className="text-sm text-gray-300">
                     You have 5 meetings scheduled. Opening Calendar...
@@ -135,7 +135,7 @@ export default function AISection() {
               transition={{ duration: 0.6, delay: 0.2 + index * 0.1 }}
               className="p-8 rounded-3xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 backdrop-blur-xl hover:border-white/20 transition-all duration-300"
             >
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600/20 to-cyan-600/20 flex items-center justify-center text-cyan-400 mb-6">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-white/20 to-gray-100/20 flex items-center justify-center text-gray-200 mb-6">
                 {item.icon}
               </div>
               <h3 className="text-xl font-semibold text-white mb-3">

@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { DEFAULT_DOCK_APPS } from '@/lib/desktopApps'
+import { usePathname } from 'next/navigation'
 
 export interface DesktopSettings {
   fontSize: number
@@ -115,6 +116,7 @@ interface SettingsContextType {
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined)
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
   const [settings, setSettings] = useState<DesktopSettings>(DEFAULT_SETTINGS)
   const [wallpapers, setWallpapers] = useState<string[]>([])
   const [mounted, setMounted] = useState(false)
@@ -146,6 +148,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   // Load persisted settings from MongoDB on mount. Search results and device
   // detection remain session-only because they are not desktop preferences.
   useEffect(() => {
+    const isPublicPage = pathname === '/' || pathname.startsWith('/apps') || pathname.startsWith('/sign-')
+    if (isPublicPage) {
+      setMounted(true)
+      return
+    }
+
     let cancelled = false
     const loadSettings = async () => {
       try {
@@ -164,7 +172,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
     void loadSettings()
     return () => { cancelled = true }
-  }, [])
+  }, [pathname])
 
   useEffect(() => {
     setSettings((prev) => ({
