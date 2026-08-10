@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useMemo, useRef, useState } from "react"
-import { Download, FilePlus2, Loader2, Plus, Redo2, Send, Sparkles, Table2, Undo2, Upload } from "lucide-react"
+import { Download, FilePlus2, Loader2, MessageSquare, Plus, Redo2, Send, Sparkles, Table2, Undo2, Upload, X } from "lucide-react"
 import { Spreadsheet, type CellBase } from "react-spreadsheet"
 import { toast } from "sonner"
 import * as XLSX from "xlsx"
@@ -56,6 +56,7 @@ export function ExcelEditor() {
   const [chat, setChat] = useState<ChatItem[]>([{ role: "assistant", text: "Import a workbook or describe the spreadsheet you want to create." }])
   const [undoStack, setUndoStack] = useState<WorkbookState[]>([])
   const [redoStack, setRedoStack] = useState<WorkbookState[]>([])
+  const [isChatOpen, setIsChatOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const activeMatrix = workbook[activeSheet] ?? blankSheet()
   const spreadsheetData = useMemo(() => toSpreadsheetData(activeMatrix), [activeMatrix])
@@ -167,10 +168,11 @@ export function ExcelEditor() {
         <button onClick={() => inputRef.current?.click()} className="toolbar-button"><Upload className="h-4 w-4" />Open</button>
         <button onClick={() => exportWorkbook("csv")} className="toolbar-button">CSV</button>
         <button onClick={() => exportWorkbook("xlsx")} className="toolbar-button bg-[#217346] text-white hover:bg-[#185c37]"><Download className="h-4 w-4" />Export</button>
+        <button onClick={() => setIsChatOpen(!isChatOpen)} className={`toolbar-button ${isChatOpen ? "bg-[#0a84ff] text-white hover:bg-[#0a84ff]" : ""}`}>{isChatOpen ? <X className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}{isChatOpen ? "Close" : "AI Chat"}</button>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <main className="flex min-w-0 flex-[1.7] flex-col border-r border-black/10 bg-white">
+        <main className={`flex min-w-0 flex-col border-r border-black/10 bg-white transition-all duration-300 ${isChatOpen ? "flex-[1.7]" : "flex-1"}`}>
           <div className="flex h-10 shrink-0 items-center gap-2 border-b border-black/10 bg-[#fafafa] px-3 text-xs text-black/55">
             <span className="rounded bg-[#217346]/10 px-2 py-1 font-semibold text-[#217346]">fx</span>
             <span>Click any cell to edit · formulas start with =</span>
@@ -184,27 +186,29 @@ export function ExcelEditor() {
           </div>
         </main>
 
-        <aside className="flex min-w-[280px] flex-1 flex-col bg-[#f7f7f9]">
-          <div className="border-b border-black/10 bg-white/70 p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold"><span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-[#34c759] to-[#0a84ff] text-white"><Sparkles className="h-4 w-4" /></span>Smarty Excel AI</div>
-            <p className="mt-2 text-[11px] leading-4 text-black/45">Create, calculate, clean, sort, and transform the active sheet. Changes appear instantly.</p>
-            <div className="mt-2 text-[10px] font-medium text-[#217346]">{remaining === null ? "Unlimited AI operations" : remaining === undefined ? "Free plan: 10 AI operations/month" : `${remaining} free AI operations remaining`}</div>
-            <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
-              {AI_SUGGESTIONS.map((suggestion, index) => <button key={suggestion} onClick={() => setPrompt(suggestion)} title={suggestion} className="shrink-0 rounded-full border border-[#217346]/15 bg-[#217346]/[0.07] px-2.5 py-1 text-[10px] font-medium text-[#185c37] hover:bg-[#217346]/15">{["Create", "Clean", "Analyze", "Formulas"][index]}</button>)}
+        {isChatOpen && (
+          <aside className="flex min-w-[280px] flex-1 flex-col bg-[#f7f7f9] animate-in slide-in-from-right duration-300">
+            <div className="border-b border-black/10 bg-white/70 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold"><span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-[#34c759] to-[#0a84ff] text-white"><Sparkles className="h-4 w-4" /></span>Smarty Excel AI</div>
+              <p className="mt-2 text-[11px] leading-4 text-black/45">Create, calculate, clean, sort, and transform the active sheet. Changes appear instantly.</p>
+              <div className="mt-2 text-[10px] font-medium text-[#217346]">{remaining === null ? "Unlimited AI operations" : remaining === undefined ? "Free plan: 10 AI operations/month" : `${remaining} free AI operations remaining`}</div>
+              <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
+                {AI_SUGGESTIONS.map((suggestion, index) => <button key={suggestion} onClick={() => setPrompt(suggestion)} title={suggestion} className="shrink-0 rounded-full border border-[#217346]/15 bg-[#217346]/[0.07] px-2.5 py-1 text-[10px] font-medium text-[#185c37] hover:bg-[#217346]/15">{["Create", "Clean", "Analyze", "Formulas"][index]}</button>)}
+              </div>
             </div>
-          </div>
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-            {chat.map((item, index) => <div key={index} className={`max-w-[92%] rounded-2xl px-3 py-2 text-xs leading-5 shadow-sm ${item.role === "user" ? "ml-auto bg-[#0a84ff] text-white" : "border border-black/[0.06] bg-white text-black/70"}`}>{item.text}</div>)}
-            {isRunning && <div className="flex items-center gap-2 text-xs text-black/45"><Loader2 className="h-4 w-4 animate-spin text-[#217346]" />Building your spreadsheet…</div>}
-          </div>
-          <div className="border-t border-black/10 bg-white/80 p-3">
-            <div className="flex items-end gap-2 rounded-2xl border border-black/10 bg-white p-2 shadow-sm focus-within:border-[#0a84ff]/50 focus-within:ring-2 focus-within:ring-[#0a84ff]/10">
-              <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void runPrompt() } }} rows={2} disabled={isRunning} placeholder="Create a monthly budget with totals…" className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-1 text-xs leading-5 outline-none placeholder:text-black/30" />
-              <button onClick={() => void runPrompt()} disabled={!prompt.trim() || isRunning} className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#0a84ff] text-white disabled:opacity-35"><Send className="h-4 w-4" /></button>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+              {chat.map((item, index) => <div key={index} className={`max-w-[92%] rounded-2xl px-3 py-2 text-xs leading-5 shadow-sm ${item.role === "user" ? "ml-auto bg-[#0a84ff] text-white" : "border border-black/[0.06] bg-white text-black/70"}`}>{item.text}</div>)}
+              {isRunning && <div className="flex items-center gap-2 text-xs text-black/45"><Loader2 className="h-4 w-4 animate-spin text-[#217346]" />Building your spreadsheet…</div>}
             </div>
-            <button onClick={() => { commitWorkbook({ Sheet1: blankSheet() }); setActiveSheet("Sheet1"); setFileName("Untitled.xlsx") }} className="mt-2 flex items-center gap-1 text-[10px] text-black/40 hover:text-black/70"><FilePlus2 className="h-3 w-3" />New blank workbook</button>
-          </div>
-        </aside>
+            <div className="border-t border-black/10 bg-white/80 p-3">
+              <div className="flex items-end gap-2 rounded-2xl border border-black/10 bg-white p-2 shadow-sm focus-within:border-[#0a84ff]/50 focus-within:ring-2 focus-within:ring-[#0a84ff]/10">
+                <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void runPrompt() } }} rows={2} disabled={isRunning} placeholder="Create a monthly budget with totals…" className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-1 text-xs leading-5 outline-none placeholder:text-black/30" />
+                <button onClick={() => void runPrompt()} disabled={!prompt.trim() || isRunning} className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#0a84ff] text-white disabled:opacity-35"><Send className="h-4 w-4" /></button>
+              </div>
+              <button onClick={() => { commitWorkbook({ Sheet1: blankSheet() }); setActiveSheet("Sheet1"); setFileName("Untitled.xlsx") }} className="mt-2 flex items-center gap-1 text-[10px] text-black/40 hover:text-black/70"><FilePlus2 className="h-3 w-3" />New blank workbook</button>
+            </div>
+          </aside>
+        )}
       </div>
       <style jsx global>{`
         .toolbar-button { display:inline-flex; height:30px; align-items:center; gap:6px; border-radius:7px; padding:0 10px; font-size:11px; font-weight:600; color:#3a3a3c; transition:background .15s; }

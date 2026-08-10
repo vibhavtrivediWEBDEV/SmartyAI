@@ -2,9 +2,8 @@
 
 import { motion, useInView } from "framer-motion";
 import { useRef, useState } from "react";
-import { Check, Sparkles } from "lucide-react";
+import { Check, Sparkles, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SUBSCRIPTION_PLANS } from "@/modules/subscription/plans";
 
 const gradients = {
   free: "from-gray-600 to-gray-700",
@@ -12,13 +11,66 @@ const gradients = {
   pro: "from-gray-400 to-pink-600",
 };
 
-const pricingPlans = Object.values(SUBSCRIPTION_PLANS).map((plan) => ({
-  ...plan,
-  price: `$${plan.priceMonthly}`,
-  period: plan.priceMonthly ? "per month" : "forever",
-  cta: plan.id === "free" ? "Start with 1 GB" : "Paid checkout coming soon",
-  gradient: gradients[plan.id],
-}));
+const pricingPlans = [
+  {
+    id: "free",
+    name: "Personal Desktop",
+    description: "For developers starting their journey",
+    price: "₹0",
+    period: "forever",
+    cta: "Create My Desktop - Free",
+    gradient: "from-emerald-500 to-cyan-400",
+    popular: true,
+    features: [Is the personal desktop really free?",
+    answer: "Yes! Your shareable portfolio desktop is free forever. Upload resume, get your interactive portfolio, share your URL - all free. No credit card required.",
+  },
+  {
+    question: "What do I get in the free tier?",
+    answer: "Public portfolio desktop, 1 GB storage, resume AI extraction, basic apps (Projects, Resume, About, Skills), shareable URL, and basic customization. Perfect for getting started.",
+  },
+  {
+    question: "When should I upgrade?",
+    answer: "Upgrade when you need: Private files, more storage, AI credits for advanced features, custom domains, or interview prep AI. Start free, upgrade only if you need more.",
+  },
+  {
+    question: "What are AI credits?",
+    answer: "AI credits power advanced features: Your personal AI assistant, interview question generation, project analysis, content creation. Free tier includes limited credits; paid plans offer more.",
+  },
+  {
+    question: "Can I export my desktop?",
+    answer: "Yes, you can export your desktop data anytime. Your data is always yours. We use end-to-end encryption for all your personal informa
+    popular: false,
+    features: [
+      "Everything in Personal",
+      "10 GB storage",
+      "100 AI credits/month",
+      "Private files",
+      "Custom domain",
+      "Interview prep AI",
+      "Priority support",
+    ],
+  },
+  {
+    id: "pro",
+    name: "Professional",
+    description: "For serious professionals",
+    price: "₹799",
+    period: "per month",
+    cta: "Coming Soon",
+    gradient: "from-blue-500 to-indigo-400",
+    popular: false,
+    features: [
+      "Everything in Starter",
+      "Unlimited storage",
+      "500 AI credits/month",
+      "Advanced analytics",
+      "Password protection",
+      "Custom apps & themes",
+      "API access",
+      "White-label option",
+    ],
+  },
+];
 
 const faqs = [
   {
@@ -65,10 +117,13 @@ export default function PricingSection() {
           className="text-center mb-20"
         >
           <h2 className="text-5xl md:text-6xl font-bold text-white mb-6 tracking-tight">
-            Simple, Transparent Pricing
+            Start Free.{" "}
+            <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+              Upgrade When Ready.
+            </span>
           </h2>
           <p className="text-xl text-gray-400 max-w-3xl mx-auto">
-            Start for free. Scale as you grow. No hidden fees.
+            Your professional desktop is free forever. Pay only for AI usage and advanced features.
           </p>
         </motion.div>
 
@@ -86,9 +141,9 @@ export default function PricingSection() {
               {plan.popular && (
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20">
                   <div className="flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-gray-400 to-pink-600 text-white text-xs font-semibold shadow-lg">
-                    <Sparkles className="w-3 h-3" />
-                    Most Popular
-                  </div>
+                    <Sparkles className="w-3 h-3" />emerald-500 to-cyan-500 text-white text-xs font-semibold shadow-lg">
+                    <Star className="w-3 h-3" />
+                    Start Here
                 </div>
               )}
 
@@ -140,8 +195,8 @@ export default function PricingSection() {
                   disabled={plan.id !== "free"}
                   className={`w-full py-6 rounded-2xl font-semibold text-lg ${
                     plan.popular
-                      ? "bg-gradient-to-r from-gray-400 to-pink-600 hover:from-gray-500 hover:to-pink-500 text-white"
-                      : "bg-white/10 hover:bg-white/20 text-white border border-white/10"
+                      ? "id === "free"
+                      ? "bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-6
                   }`}
                 >
                   {plan.cta}

@@ -15,6 +15,9 @@ import Testimonials from "./Testimonials";
 import Footer from "./Footer";
 import Navigation from "./Navigation";
 import AudienceSection from "./AudienceSection";
+import HowItWorks from "./HowItWorks";
+import DesktopShowcase from "./DesktopShowcase";
+import SocialProof from "./SocialProof";
 
 // Register GSAP plugins
 if (typeof window !== "undefined") {
@@ -47,27 +50,24 @@ export default function VibhavMarketingPage() {
       <main className="relative">
         {/* Hero Section */}
         <Hero />
+How It Works */}
+        <HowItWorks />
 
+        {/* 
         {/* Feature Overview */}
         <FeatureOverview />
 
         {/* Role-specific solutions */}
         <AudienceSection />
 
+        {/* Desktop Showcase */}
+        <DesktopShowcase />
+
+        {/* Social Proof */}
+        {/* <SocialProof /> */}
+
         {/* Application Showcase */}
-        <ApplicationShowcase />
-
-        {/* AI Section */}
-        {/* <AISection /> */}
-
-        {/* Productivity Section */}
-        <ProductivitySection />
-
-        {/* Dashboard Preview */}
-        <DashboardPreview />
-
-        {/* Pricing Section */}
-        <PricingSection />
+        {/* <ApplicationShowcase /> */}
 
         {/* Testimonials */}
         <Testimonials />
@@ -84,7 +84,10 @@ export default function VibhavMarketingPage() {
         html {
           scroll-behavior: smooth;
         }
-        
+        Pricing Section */}
+        <PricingSection />
+
+        {/* 
         * {
           scrollbar-width: thin;
           scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);

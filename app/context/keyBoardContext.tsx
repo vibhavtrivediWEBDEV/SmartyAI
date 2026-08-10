@@ -226,19 +226,19 @@ export function KeyboardProvider({ children, onUndo, onRedo, onSave, onFind, onS
 
       if (isCmd) {
         switch (event.key.toLowerCase()) {
-          case "c":
-            if (selectedItems.length > 0) {
-              event.preventDefault()
-              const items: ClipboardItem[] = selectedItems.map((id) => ({
-                id,
-                name: id,
-                type: "file" as const,
-                data: { id },
-                operation: "copy" as const,
-              }))
-              copyItems(items)
-            }
-            break
+          // case "c":
+          //   if (selectedItems.length > 0) {
+          //     event.preventDefault()
+          //     const items: ClipboardItem[] = selectedItems.map((id) => ({
+          //       id,
+          //       name: id,
+          //       type: "file" as const,
+          //       data: { id },
+          //       operation: "copy" as const,
+          //     }))
+          //     copyItems(items)
+          //   }
+          //   break
           case "x":
             if (selectedItems.length > 0) {
               event.preventDefault()

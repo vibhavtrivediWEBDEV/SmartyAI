@@ -14,33 +14,39 @@ import {
 const features = [
   {
     icon: <Sparkles className="w-6 h-6" />,
-    title: "AI-Native",
-    description: "Built from the ground up with AI at its core. Every interaction learns and adapts to you.",
-  },
-  {
-    icon: <Zap className="w-6 h-6" />,
-    title: "Lightning Fast",
-    description: "Optimized performance with WebGL rendering and GPU acceleration for butter-smooth experiences.",
-  },
-  {
-    icon: <Shield className="w-6 h-6" />,
-    title: "Privacy First",
-    description: "Your data stays on your device. End-to-end encryption for all AI interactions.",
-  },
-  {
-    icon: <Globe className="w-6 h-6" />,
-    title: "Works Everywhere",
-    description: "Access your AI desktop from any browser, any device. Your workspace travels with you.",
+    title: "AI Extraction",
+    description: "Upload resume → AI extracts your profile, projects, skills, and experience automatically.",
+    gradient: "from-blue-500 to-cyan-400",
   },
   {
     icon: <Layers className="w-6 h-6" />,
-    title: "Integrated Apps",
-    description: "All your tools in one place. No more switching between apps. Everything connects seamlessly.",
+    title: "Personal Desktop",
+    description: "Your own macOS-style desktop with folders: Projects, Skills, Experience, About, and custom apps.",
+    gradient: "from-purple-500 to-pink-400",
   },
   {
     icon: <Cpu className="w-6 h-6" />,
-    title: "Smart Automation",
-    description: "Automate repetitive tasks with AI. Create workflows that understand your intentions.",
+    title: "Your AI Assistant",
+    description: "User-specific AI that knows YOUR background. Answers HR questions about your experience accurately.",
+    gradient: "from-emerald-500 to-teal-400",
+  },
+  {
+    icon: <Globe className="w-6 h-6" />,
+    title: "Shareable URL",
+    description: "Get your unique link: smarty-ai.com/u/yourname. Send to HR, clients, or anyone instantly.",
+    gradient: "from-orange-500 to-yellow-400",
+  },
+  {
+    icon: <Shield className="w-6 h-6" />,
+    title: "Privacy Controls",
+    description: "Set visibility: Public, Private, or Unlisted. Control what's shareable, what's private.",
+    gradient: "from-red-500 to-pink-400",
+  },
+  {
+    icon: <Zap className="w-6 h-6" />,
+    title: "5-Minute Setup",
+    description: "From resume to professional desktop in under 5 minutes. No manual portfolio building needed.",
+    gradient: "from-indigo-500 to-purple-400",
   },
 ];
 
@@ -63,11 +69,15 @@ export default function FeatureOverview() {
           transition={{ duration: 0.8 }}
           className="text-center mb-20"
         >
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/10 backdrop-blur-xl rounded-full border border-blue-400/20 mb-6">
+            <Zap className="w-4 h-4 text-blue-400" />
+            <span className="text-sm text-blue-300 font-medium">Powered by AI</span>
+          </div>
           <h2 className="text-5xl md:text-6xl font-bold text-white mb-6 tracking-tight">
-            Why VibhavMacOS?
+            Your Resume Becomes Your Desktop
           </h2>
           <p className="text-xl text-gray-400 max-w-3xl mx-auto">
-            Not just another desktop. A complete reimagining of how you interact with technology.
+            AI extracts your profile, projects, skills, and experience. Your interactive desktop is ready in minutes, not weeks.
           </p>
         </motion.div>
 

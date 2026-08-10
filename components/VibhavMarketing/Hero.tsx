@@ -140,11 +140,12 @@ export default function Hero() {
           animate="visible"
           className="hero-headline text-center mb-6 lg:mb-8"
         >
-          <span className="hero-headline-text inline-block text-6xl sm:text-7xl md:text-8xl lg:text-[7.5rem] xl:text-[8.5rem] font-bold tracking-[-0.04em] leading-[0.95] bg-gradient-to-b from-white via-gray-100 to-gray-400 bg-clip-text text-transparent">
-            Your AI
+          <span className="hero-headline-text block text-5xl sm:text-6xl md:text-7xl lg:text-[6rem] xl:text-[7rem] font-bold tracking-[-0.04em] leading-[1.1] bg-gradient-to-b from-white via-gray-100 to-gray-400 bg-clip-text text-transparent mb-2">
+            Your Resume.
           </span>
-          <span className="hero-headline-text inline-block text-6xl sm:text-7xl md:text-8xl lg:text-[7.5rem] xl:text-[8.5rem] font-bold tracking-[-0.04em] leading-[0.95] ml-4 bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-500 bg-clip-text text-transparent">
-            Operating System
+          <span className="hero-headline-text block text-5xl sm:text-6xl md:text-7xl lg:text-[6rem] xl:text-[7rem] font-bold tracking-[-0.04em] leading-[1.1] mb-2">
+            <span className="bg-gradient-to-b from-white via-gray-100 to-gray-400 bg-clip-text text-transparent">Your </span>
+            <span className="bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-500 bg-clip-text text-transparent">Personal Desktop.</span>
           </span>
         </motion.h1>
         
@@ -153,10 +154,10 @@ export default function Hero() {
           variants={fadeInVariants}
           initial="hidden"
           animate="visible"
-          className="hero-subheadline text-lg sm:text-xl md:text-2xl text-gray-300 text-center max-w-2xl mb-12 lg:mb-16 leading-relaxed px-4"
+          className="hero-subheadline text-lg sm:text-xl md:text-2xl text-gray-300 text-center max-w-3xl mb-12 lg:mb-16 leading-relaxed px-4"
         >
-          A unified desktop experience powered by AI.{" "}
-          <span className="text-blue-300 font-medium">Everything you need, beautifully organized.</span>
+          Upload your resume → AI extracts your profile → Get a professional developer desktop. {" "}
+          <span className="text-blue-300 font-medium">Share with anyone, anywhere.</span>
         </motion.p>
         
         {/* CTA Buttons */}
@@ -229,7 +230,7 @@ function Badge() {
           <Sparkles className="w-4 h-4 text-cyan-400" />
         </motion.div>
         <span className="text-sm text-gray-200 font-medium tracking-wide">
-          Introducing VibhavMacOS
+          No manual portfolio building anymore
         </span>
       </div>
     </motion.div>
@@ -238,9 +239,9 @@ function Badge() {
 
 function PrimaryButton() {
   return (
-    <a href="/desktop" className="group relative inline-flex">
+    <a href="/sign-up" className="group relative inline-flex">
       <button className="relative flex items-center gap-2.5 px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold text-lg rounded-2xl shadow-2xl shadow-blue-600/30 transition-all duration-300">
-        <span>Start Free</span>
+        <span>Create My Desktop</span>
         <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" />
       </button>
     </a>
