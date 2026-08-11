@@ -50,10 +50,10 @@ export default function VibhavMarketingPage() {
       <main className="relative">
         {/* Hero Section */}
         <Hero />
-How It Works */}
+
+        {/* How It Works */}
         <HowItWorks />
 
-        {/* 
         {/* Feature Overview */}
         <FeatureOverview />
 

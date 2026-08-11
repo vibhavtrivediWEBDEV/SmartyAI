@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createAIService } from '@/lib/ai'
+import { getCurrentUser } from '@/lib/actions/auth.action'
+import { generateDesktopAssistantPrompt } from '@/lib/ai/userAIContext'
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,16 +16,36 @@ export async function POST(request: NextRequest) {
 
     console.log('🎯 Stream API called with prompt:', prompt);
 
+    // Get current user context
+    const user = await getCurrentUser();
+    
+    if (!user) {
+      return new Response(JSON.stringify({ error: 'Authentication required' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
     const aiService = createAIService()
+    
+    // Generate user-specific system prompt
+    let systemPrompt = `You are a helpful assistant for ${user.name}. Respond naturally and helpfully.`;
+    
+    // Try to get full user context (optional - don't fail if unavailable)
+    try {
+      const { getUserAIContext } = await import('@/lib/ai/userAIContext');
+      const userContext = await getUserAIContext();
+      if (userContext) {
+        systemPrompt = generateDesktopAssistantPrompt(userContext);
+      }
+    } catch (ctxError) {
+      console.warn('Could not load full user context, using fallback:', ctxError);
+    }
     
     const fullMessages = [
       {
         role: 'system' as const,
-        content: `You are an assistant that acts on behalf of the user Vibhav Trivedi.
-Vibhav is a frontend developer with over 3 year of experience in React.js, Next.js, Tailwind CSS, GSAP, Framer Motion, and Node.js.
-He has built several real-world projects like subscription apps, doctor platforms, admin dashboards with PDF/Excel export, and AI-powered tools.
-Always respond as Vibhav himself, using his tone and experience.
-        `.trim(),
+        content: systemPrompt,
       },
       {
         role: 'user' as const,

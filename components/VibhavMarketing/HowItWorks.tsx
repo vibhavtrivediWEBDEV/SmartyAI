@@ -2,7 +2,7 @@
 
 import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
-import { Upload, Sparkles, Desktop, Share2, CheckCircle2 } from "lucide-react";
+import { Upload, Sparkles, Monitor, Share2, CheckCircle2 } from "lucide-react";
 
 const steps = [
   {
@@ -20,7 +20,7 @@ const steps = [
     gradient: "from-purple-500 to-pink-400",
   },
   {
-    icon: Desktop,
+    icon: Monitor,
     title: "Desktop Automatically Created",
     description: "Your personal developer desktop appears with all your data organized.",
     detail: "Folders, apps, AI assistant - all ready.",

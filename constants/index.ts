@@ -487,7 +487,7 @@ Important: Do NOT ask for chapter numbers, textbook references, or exercise numb
 export const desktopAssistant: CreateAssistantDTO = {
   name: "Desktop Assistant",
   firstMessage:
-    "Hi How can i help You!",
+    "Hi How can i help You! (User's AI Assistant)",
   transcriber: {
     provider: "deepgram",
     model: "nova-2",

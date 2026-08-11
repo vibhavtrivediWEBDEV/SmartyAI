@@ -11,7 +11,7 @@ interface CursorPosition {
 }
 
 interface AutomationCommand {
-  action: 'move' | 'click' | 'open' | 'close' | 'type' | 'minimize' | 'maximize' | 'focus' | 'setValue';
+  action: 'move' | 'click' | 'open' | 'close' | 'type' | 'minimize' | 'maximize' | 'focus' | 'setValue' | 'wait' | 'speak';
   target?: string; // Window ID or element ID
   params?: any; // Additional parameters
   delay?: number; // Delay before execution
@@ -155,6 +155,11 @@ export function useCursorAutomation(
       });
       element.dispatchEvent(event);
     });
+
+    // Dispatch automation click event for visual cursor
+    window.dispatchEvent(new CustomEvent('cursor-automation-click', {
+      detail: { x: position.x, y: position.y, type: 'click' }
+    }));
   }, []);
 
 
@@ -193,7 +198,10 @@ export function useCursorAutomation(
     const delay = baseDelay + (Math.random() * 40 - 20);
 
     // Focus if not already
-    input.focus();
+    if (document.activeElement !== input) {
+      console.log('[simulateTypingChar] Warning: Input not focused, focusing...');
+      input.focus();
+    }
 
     // Simulate key events (optional but good)
     dispatchKeyboardEvent(input, 'keydown', char);
@@ -212,6 +220,8 @@ export function useCursorAutomation(
       input.value += char; // fallback
     }
 
+    console.log(`[simulateTypingChar] After inserting "${char}", value: "${input.value}"`);
+
     // Move cursor
     input.selectionStart = input.selectionEnd = input.value.length;
 
@@ -229,6 +239,8 @@ export function useCursorAutomation(
     await new Promise(r => setTimeout(r, delay));
 
     dispatchKeyboardEvent(input, 'keyup', char);
+
+    console.log(`[simulateTypingChar] After typing "${char}", activeElement: ${document.activeElement?.id || document.activeElement?.tagName}`);
   }, [dispatchKeyboardEvent]);
 
 
@@ -341,12 +353,16 @@ export function useCursorAutomation(
   ): Promise<boolean> => {
     try {
       log(`Typing into element: ${elementId} → "${text}"`, 'info');
+      log(`Options: delay=${options.delay}, humanLike=${options.humanLike}`, 'info');
 
       const element = findElement(elementId);
-      if (!element) return false;
+      if (!element) {
+        log(`Element not found: ${elementId}`, 'error');
+        return false;
+      }
 
       if (element.tagName !== 'INPUT' && element.tagName !== 'TEXTAREA') {
-        log(`Element ${elementId} is not an input or textarea`, 'error');
+        log(`Element ${elementId} is not an input or textarea (tag: ${element.tagName})`, 'error');
         return false;
       }
 
@@ -355,27 +371,63 @@ export function useCursorAutomation(
       // 1️⃣ Make sure element is visible & focused
       await scrollIntoView(input);
       input.focus();
+      log(`Element focused: ${elementId}, current value: "${input.value}"`, 'info');
 
-      // 2️⃣ 🔥 CLEAR TEXT (REACT SAFE, ALWAYS WORKS)
-      input.value = '';
-      dispatchEvent(input, 'input');
-      dispatchEvent(input, 'change');
+      // 2️⃣ Clear existing value using React-safe method
+      const currentValue = input.value;
+      if (currentValue) {
+        log(`Input has existing value "${currentValue}", clearing...`, 'info');
+        // Use native setter to clear
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype,
+          'value'
+        )?.set;
+        if (nativeInputValueSetter) {
+          nativeInputValueSetter.call(input, '');
+          // Trigger React events
+          const inputEvent = new InputEvent('input', {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            inputType: 'deleteContent',
+          });
+          input.dispatchEvent(inputEvent);
+          dispatchEvent(input, 'change');
+          log(`Cleared using native setter`, 'info');
+        }
+        // Wait for React to process the clear
+        await new Promise(r => setTimeout(r, 200));
+      }
 
       if (options.humanLike) {
-        await new Promise(r => setTimeout(r, 120));
+        log(`Human-like wait: 150ms`, 'info');
+        await new Promise(r => setTimeout(r, 150));
       }
 
       // 3️⃣ TYPE EACH CHARACTER (human-like)
+      log(`Starting to type ${text.length} characters...`, 'info');
+      let charIndex = 0;
       for (const char of text) {
+        charIndex++;
+        log(`Typing character ${charIndex}/${text.length}: "${char}"`, 'info');
+        
+        // DON'T refocus during typing - it can cause React state resets
+        // Trust that the input stays focused
+        
         await simulateTypingChar(input, char, options.delay ?? 80);
+        log(`After char ${charIndex}, value: "${input.value}"`, 'info');
       }
 
-      // 4️⃣ FINAL EVENTS (very important for React)
+      // 4️⃣ FINAL EVENTS (very important for React) - DON'T BLUR YET
       dispatchEvent(input, 'input');
       dispatchEvent(input, 'change');
-      dispatchEvent(input, 'blur');
+      // DON'T dispatch blur - it causes focus issues
+      // dispatchEvent(input, 'blur');
 
-      log(`Successfully typed "${text}" into #${elementId}`, 'success');
+      // 5️⃣ WAIT FOR REACT TO UPDATE
+      await new Promise(r => setTimeout(r, 500));
+
+      log(`Successfully typed "${text}" into #${elementId}, final value: "${input.value}"`, 'success');
       return true;
     } catch (error) {
       log(`Error typing into ${elementId}: ${error}`, 'error');
@@ -727,15 +779,54 @@ export function useCursorAutomation(
         case 'setValue': {
           if (!command.target || command.params?.value == null) return false
 
-          const el = document.getElementById(command.target) as HTMLInputElement | null
+          const el = document.getElementById(command.target) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
           if (!el) return false
 
-          el.value = String(command.params.value)
+          const newValue = String(command.params.value)
 
-          // ✅ React controlled input ke liye
-          if (el.type === 'range' || el.type === 'color') {
-            const event = new Event('input', { bubbles: true })
-            el.dispatchEvent(event)
+          // ✅ Use React's native setter for text inputs
+          if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+              window.HTMLInputElement.prototype,
+              'value'
+            )?.set || Object.getOwnPropertyDescriptor(
+              window.HTMLTextAreaElement.prototype,
+              'value'
+            )?.set;
+
+            if (nativeInputValueSetter) {
+              nativeInputValueSetter.call(el, newValue);
+            } else {
+              el.value = newValue;
+            }
+
+            // Dispatch proper React InputEvent
+            const inputEvent = new InputEvent('input', {
+              bubbles: true,
+              cancelable: true,
+              composed: true,
+              inputType: 'insertText',
+              data: newValue,
+            });
+            el.dispatchEvent(inputEvent);
+            
+            // Also dispatch change event
+            const changeEvent = new Event('change', { bubbles: true });
+            el.dispatchEvent(changeEvent);
+            
+            log(`setValue: Set ${command.target} to "${newValue}", current value: "${el.value}"`, 'success');
+          } 
+          // ✅ Handle range/color inputs
+          else if (el.tagName === 'INPUT' && (el.type === 'range' || el.type === 'color')) {
+            el.value = newValue;
+            const event = new Event('input', { bubbles: true });
+            el.dispatchEvent(event);
+          }
+          // ✅ Handle select elements
+          else if (el.tagName === 'SELECT') {
+            el.value = newValue;
+            const event = new Event('change', { bubbles: true });
+            el.dispatchEvent(event);
           }
 
           return true
@@ -748,7 +839,200 @@ export function useCursorAutomation(
           }
           break;
 
+        case 'wait':
+          // Wait for element to appear or condition to be met
+          if (command.params?.timeout || command.delay) {
+            const timeout = command.params?.timeout || command.delay || 2000;
+            const checkInterval = command.params?.checkInterval || 200;
+            const condition = command.params?.condition;
+            
+            log(`Waiting ${timeout}ms for ${command.target || 'completion'} (condition: ${condition || 'none'})`, 'info');
+            
+            const startTime = Date.now();
+            let conditionMet = false;
+            
+            // Wait for element existence
+            if (condition === 'exists' && command.target) {
+              log(`Waiting for element #${command.target} to exist...`, 'info');
+              
+              while (!conditionMet && Date.now() - startTime < timeout) {
+                const element = document.getElementById(command.target);
+                
+                if (element) {
+                  conditionMet = true;
+                  log(`Element #${command.target} found!`, 'success');
+                } else {
+                  await new Promise(resolve => setTimeout(resolve, checkInterval));
+                }
+              }
+              
+              if (!conditionMet) {
+                log(`Timeout waiting for element #${command.target}, proceeding anyway...`, 'warn');
+              }
+              
+              result = true;
+            }
+            // Wait for images to load
+            else if (condition === 'imagesLoaded' && command.target) {
+              log(`Waiting for images in ${command.target}...`, 'info');
+              
+              while (!conditionMet && Date.now() - startTime < timeout) {
+                const container = document.getElementById(command.target) || 
+                                 document.querySelector(`[data-automation-id="${command.target}"]`);
+                
+                if (container) {
+                  const images = container.querySelectorAll('img');
+                  
+                  if (images.length > 0) {
+                    log(`Found ${images.length} images, checking if loaded...`, 'info');
+                    
+                    const firstImage = images[0] as any;
+                    if (firstImage.complete && firstImage.naturalHeight !== 0) {
+                      conditionMet = true;
+                      log('First image loaded successfully!', 'success');
+                    } else {
+                      log(`Image exists but not loaded yet (complete: ${firstImage.complete}, naturalHeight: ${firstImage.naturalHeight})`, 'info');
+                    }
+                  } else {
+                    log('No images found yet, waiting...', 'info');
+                  }
+                } else {
+                  log(`Container ${command.target} not found yet`, 'info');
+                }
+                
+                if (!conditionMet) {
+                  await new Promise(resolve => setTimeout(resolve, checkInterval));
+                }
+              }
+              
+              if (!conditionMet) {
+                log('Timeout waiting for images, proceeding anyway...', 'warn');
+              }
+              
+              result = true;
+            }
+            // Wait for input field to be filled
+            else if (condition === 'inputFilled' && command.target) {
+              log(`Waiting for input #${command.target} to be filled...`, 'info');
+              
+              while (!conditionMet && Date.now() - startTime < timeout) {
+                const element = document.getElementById(command.target) || 
+                                document.querySelector(`[data-automation-id="${command.target}"]`) as HTMLInputElement | HTMLTextAreaElement;
+                
+                if (element) {
+                  const value = (element as HTMLInputElement | HTMLTextAreaElement).value;
+                  
+                  if (value && value.trim().length > 0) {
+                    conditionMet = true;
+                    log(`Input #${command.target} is filled with: "${value}"`, 'success');
+                  } else {
+                    log(`Input #${command.target} exists but empty, waiting...`, 'info');
+                  }
+                } else {
+                  log(`Input #${command.target} not found yet`, 'info');
+                }
+                
+                if (!conditionMet) {
+                  await new Promise(resolve => setTimeout(resolve, checkInterval));
+                }
+              }
+              
+              if (!conditionMet) {
+                log(`Timeout waiting for input #${command.target} to be filled`, 'warn');
+              }
+              
+              result = true;
+            }
+            // Wait for element to have text content
+            else if (condition === 'notEmpty' && command.target) {
+              log(`Waiting for element #${command.target} to have content...`, 'info');
+              
+              while (!conditionMet && Date.now() - startTime < timeout) {
+                const element = document.getElementById(command.target) || 
+                                document.querySelector(`[data-automation-id="${command.target}"]`) as HTMLInputElement | HTMLTextAreaElement;
+                
+                if (element) {
+                  const value = (element as HTMLInputElement | HTMLTextAreaElement).value || element.textContent;
+                  
+                  if (value && value.trim().length > 0) {
+                    conditionMet = true;
+                    log(`Element #${command.target} has content: "${value.substring(0, 50)}..."`, 'success');
+                  } else {
+                    log(`Element #${command.target} exists but empty, waiting...`, 'info');
+                  }
+                } else {
+                  log(`Element #${command.target} not found yet`, 'info');
+                }
+                
+                if (!conditionMet) {
+                  await new Promise(resolve => setTimeout(resolve, checkInterval));
+                }
+              }
+              
+              if (!conditionMet) {
+                log(`Timeout waiting for element #${command.target} to have content`, 'warn');
+              }
+              
+              result = true;
+            }
+            // Wait for page to contain text
+            else if (condition?.startsWith('textContains:') && !command.target) {
+              const searchText = condition.replace('textContains:', '');
+              log(`Waiting for page to contain text: "${searchText}"...`, 'info');
+              
+              while (!conditionMet && Date.now() - startTime < timeout) {
+                const bodyText = document.body.innerText || document.body.textContent || '';
+                
+                if (bodyText.includes(searchText)) {
+                  conditionMet = true;
+                  log(`Found text "${searchText}" in page`, 'success');
+                } else {
+                  await new Promise(resolve => setTimeout(resolve, checkInterval));
+                }
+              }
+              
+              if (!conditionMet) {
+                log(`Timeout waiting for text "${searchText}"`, 'warn');
+              }
+              
+              result = true;
+            }
+            // Simple timeout wait
+            else {
+              await new Promise(resolve => setTimeout(resolve, timeout));
+              result = true;
+            }
+          } else {
+            result = true;
+          }
+          break;
 
+        case 'speak':
+          // Text-to-speech with polite voice
+          if (command.params?.text) {
+            if ('speechSynthesis' in window) {
+              window.speechSynthesis.cancel();
+              const utterance = new SpeechSynthesisUtterance(command.params.text);
+              
+              // Set voice options for lovely polite voice
+              if (command.params?.options?.rate) utterance.rate = command.params.options.rate;
+              if (command.params?.options?.pitch) utterance.pitch = command.params.options.pitch;
+              
+              // Try to use a friendly voice
+              const voices = window.speechSynthesis.getVoices();
+              const preferredVoice = voices.find(v => 
+                v.name.includes('Samantha') || 
+                v.name.includes('Google UK English Female') ||
+                (v.lang.startsWith('en') && v.name.includes('Female'))
+              );
+              if (preferredVoice) utterance.voice = preferredVoice;
+              
+              window.speechSynthesis.speak(utterance);
+              log(`🔊 Speaking: "${command.params.text}"`, 'info');
+            }
+            result = true;
+          }
+          break;
 
         default:
           log(`Unknown action: ${command.action}`, 'error');
@@ -803,32 +1087,119 @@ export function useCursorAutomation(
     // App name mapping - maps lowercase input to exact app names
     const appNameMap: Record<string, string> = {
       'terminal': 'Terminal',
+      'terminal app': 'Terminal',
       'settings': 'Settings',
+      'settings app': 'Settings',
       'safari': 'Safari',
+      'safari app': 'Safari',
       'vscode': 'vscode',
+      'vscode app': 'vscode',
       'chrome': 'chrome',
+      'chrome app': 'chrome',
       'browser': 'chrome',
+      'browser app': 'chrome',
       'spotify': 'Spotify',
+      'spotify app': 'Spotify',
       'calendar': 'Calendar',
+      'calendar app': 'Calendar',
       'maps': 'Maps',
+      'maps app': 'Maps',
       'youtube': 'Youtube',
+      'youtube app': 'Youtube',
       'excel': 'Excel Editor',
+      'excel app': 'Excel Editor',
+      'excel editor': 'Excel Editor',
+      'excel editor app': 'Excel Editor',
       'mail': 'Mail',
+      'mail app': 'Mail',
       'pdf': 'PDF Viewer',
+      'pdf app': 'PDF Viewer',
+      'pdf viewer': 'PDF Viewer',
+      'pdf viewer app': 'PDF Viewer',
       'finder': 'Finder',
+      'finder app': 'Finder',
       'photos': 'Photos',
+      'photos app': 'Photos',
       'tv': 'TV',
+      'tv app': 'TV',
       'game': 'game',
+      'game app': 'game',
       'science': 'Science Book',
+      'science app': 'Science Book',
+      'science book': 'Science Book',
+      'science book app': 'Science Book',
       'book': 'Science Book',
+      'book app': 'Science Book',
+      'ai book': 'AI Book',
+      'ai book app': 'AI Book',
       'app store': 'App Store',
-      'launchpad': 'App Store'
+      'appstore': 'App Store',
+      'appstore app': 'App Store',
+      'app store app': 'App Store',
+      'launchpad': 'App Store',
+      'launchpad app': 'App Store',
+      'about': 'About Me',
+      'about app': 'About Me',
+      'about me': 'About Me',
+      'about me app': 'About Me',
+      'projects': 'Projects',
+      'projects app': 'Projects',
+      'resume': 'Resume',
+      'resume app': 'Resume',
+      'resume pdf': 'Resume PDF',
+      'resume pdf app': 'Resume PDF',
+      'notes': 'Notes',
+      'notes app': 'Notes',
+      'figma': 'figma',
+      'figma app': 'figma',
+      'ats': 'ATS',
+      'ats app': 'ATS',
+      'ats resume': 'ATS',
+      'ats resume app': 'ATS',
+      'data table': 'Data Table',
+      'data table app': 'Data Table',
+      'table': 'Data Table',
+      'table app': 'Data Table',
+      'table studio': 'Data Table',
+      'table studio app': 'Data Table',
+      'interview': 'Interview',
+      'interview app': 'Interview',
+      'smarty interview': 'Interview',
+      'smarty interview app': 'Interview',
+      'teacher': 'Smarty Teacher',
+      'teacher app': 'Smarty Teacher',
+      'smarty teacher': 'Smarty Teacher',
+      'smarty teacher app': 'Smarty Teacher',
+      'portfolio': 'website',
+      'portfolio app': 'website',
+      'website': 'website',
+      'website app': 'website',
+      'trash': "Don't Look",
+      'trash app': "Don't Look",
+      "don't look": "Don't Look",
+      "don't look app": "Don't Look",
+      'dump': "Don't Look",
+      'dump app': "Don't Look"
     };
 
     // Pattern: "open <app>"
     if (lower.startsWith('open ')) {
-      const appInput = lower.substring(5).trim();
-      const appName = appNameMap[appInput] || trimmed.substring(5).trim();
+      let appInput = lower.substring(5).trim();
+      
+      // Try exact match first
+      let appName = appNameMap[appInput];
+      
+      // If not found, remove "app" suffix and try again
+      if (!appName && appInput.endsWith(' app')) {
+        const withoutApp = appInput.substring(0, appInput.length - 4).trim();
+        appName = appNameMap[withoutApp];
+      }
+      
+      // If still not found, use the original input (stripped of "app" if present)
+      if (!appName) {
+        appName = trimmed.substring(5).trim();
+      }
+      
       return { action: 'open', target: appName };
     }
 

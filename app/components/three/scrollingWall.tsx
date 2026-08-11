@@ -10,8 +10,8 @@ export function RetroScrollingTextWall({mode}) {
   const [typedText, setTypedText] = useState<string[]>([])
 
   const lines = [
-    "Welcome to Vibhav's Portfolio 🚀",
-    "I am a Frontend Developer specializing in React.js",
+    "Welcome to Your Portfolio 🚀",
+    "Your Personal AI-Powered Desktop",
     "Over 4 year of professional experience",
     "Skilled in Next.js, Tailwind, GSAP, Framer Motion",
     "Built subscription platforms and dashboards",

@@ -2,17 +2,20 @@
 
 import { useVoiceAutomation } from '@/hooks/useDekstopAgent';
 import React from 'react';
+import type { UserAIContext } from '@/lib/ai/userAIContext';
 
 interface VoiceControlButtonProps {
     openApplication: (appName: string, x?: number, y?: number, command?: string, arg?: any) => void;
     openWindows: any[];
     setOpenWindows: React.Dispatch<React.SetStateAction<any[]>>;
+    userContext?: UserAIContext | null;
 }
 
 export function VoiceControlButton({
     openApplication,
     openWindows,
-    setOpenWindows
+    setOpenWindows,
+    userContext
 }: VoiceControlButtonProps) {
     const {
         callStatus,
@@ -25,7 +28,8 @@ export function VoiceControlButton({
     } = useVoiceAutomation({
         openApplication,
         openWindows,
-        setOpenWindows
+        setOpenWindows,
+        userContext
     });
 
     const [showLog, setShowLog] = React.useState(false);
@@ -174,8 +178,15 @@ export function VoiceControlButton({
  * USAGE in Desktop.tsx:
  * 
  * import { VoiceControlButton } from './VoiceControlButton';
+ * import { getUserAIContext, type UserAIContext } from '@/lib/ai/userAIContext';
  * 
  * function Desktop() {
+ *   const [userContext, setUserContext] = useState<UserAIContext | null>(null);
+ *   
+ *   useEffect(() => {
+ *     getUserAIContext().then(ctx => setUserContext(ctx));
+ *   }, []);
+ * 
  *   return (
  *     <div>
  *       {/* Your desktop content *\/}
@@ -184,6 +195,7 @@ export function VoiceControlButton({
  *         openApplication={openApplication}
  *         openWindows={openWindows}
  *         setOpenWindows={setOpenWindows}
+ *         userContext={userContext}
  *       />
  *     </div>
  *   );

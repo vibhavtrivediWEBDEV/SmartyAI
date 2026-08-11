@@ -2,134 +2,836 @@
   "settings.wallpaper.change": [
     { "action": "open", "target": "Settings", "delay": 500 },
     { "action": "maximize", "target": "Settings", "delay": 700 },
-
     { "action": "move", "target": "settings_sidebar_wallpaper", "delay": 1000 },
     { "action": "click", "target": "settings_sidebar_wallpaper", "delay": 1200 },
-
     { "action": "move", "target": "wallpaper_input", "delay": 1500 },
     { "action": "click", "target": "wallpaper_input", "delay": 1700 },
-
     {
       "action": "type",
       "target": "wallpaper_input",
-      "params": {
-        "text": "{{prompt}}",
-        "options": { "delay": 70, "humanLike": true }
-      },
+      "params": { "text": "{{prompt}}", "options": { "delay": 70, "humanLike": true } },
       "delay": 300
     },
+    { "action": "move", "target": "wallpaper_search_button", "delay": 500 },
+    { "action": "click", "target": "wallpaper_search_button", "delay": 700 },
+    { "action": "wait", "target": "wallpaper_results_container", "params": { "timeout": 8000, "condition": "imagesLoaded" } },
+    { "action": "move", "target": "{{wallpaperResultId}}", "delay": 1000 },
+    { "action": "click", "target": "{{wallpaperResultId}}", "delay": 1200 },
+    { "action": "close", "target": "Settings", "delay": 500 },
+    {
+      "action": "speak",
+      "params": { "text": "Wallpaper changed successfully, {{username}}!", "options": { "rate": 0.9 } }
+    }
+  ],
 
-    { "action": "move", "target": "{{wallpaperResultId}}", "delay": 800 },
-    { "action": "click", "target": "{{wallpaperResultId}}", "delay": 1000 },
+  "settings.wallpaper.search": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_wallpaper", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_wallpaper", "delay": 1200 },
+    { "action": "move", "target": "wallpaper_input", "delay": 1500 },
+    { "action": "click", "target": "wallpaper_input", "delay": 1700 },
+    {
+      "action": "type",
+      "target": "wallpaper_input",
+      "params": { "text": "{{query}}", "options": { "delay": 70 } }
+    },
+    { "action": "click", "target": "wallpaper_search_button", "delay": 500 }
+  ],
 
-    { "action": "close", "target": "Settings", "delay": 500 }
+  "settings.wallpaper.selectResult": [
+    { "action": "wait", "target": "wallpaper_results_container", "params": { "timeout": 8000, "condition": "imagesLoaded" } },
+    { "action": "move", "target": "{{wallpaperResultId}}", "delay": 1000 },
+    { "action": "click", "target": "{{wallpaperResultId}}", "delay": 1000 }
   ],
 
   "settings.appearance.toggleDarkMode": [
     { "action": "open", "target": "Settings", "delay": 500 },
     { "action": "maximize", "target": "Settings", "delay": 700 },
-
     { "action": "move", "target": "settings_sidebar_appearance", "delay": 1000 },
     { "action": "click", "target": "settings_sidebar_appearance", "delay": 1200 },
-
     { "action": "move", "target": "toggle_dark_mode", "delay": 1500 },
     { "action": "click", "target": "toggle_dark_mode", "delay": 1700 },
-
     { "action": "close", "target": "Settings", "delay": 500 }
   ],
 
-  "settings.appearance.changeTheme": [
+  "settings.appearance.toggleLightMode": [
     { "action": "open", "target": "Settings", "delay": 500 },
     { "action": "maximize", "target": "Settings", "delay": 700 },
-
     { "action": "move", "target": "settings_sidebar_appearance", "delay": 1000 },
     { "action": "click", "target": "settings_sidebar_appearance", "delay": 1200 },
-
-    { "action": "move", "target": "{{themeId}}", "delay": 1500 },
-    { "action": "click", "target": "{{themeId}}", "delay": 1700 },
-
+    { "action": "move", "target": "toggle_light_mode", "delay": 1500 },
+    { "action": "click", "target": "toggle_light_mode", "delay": 1700 },
     { "action": "close", "target": "Settings", "delay": 500 }
   ],
 
-   "settings.appearance.folderColor": [
+  "settings.appearance.setAccentColor": [
     { "action": "open", "target": "Settings", "delay": 500 },
     { "action": "maximize", "target": "Settings", "delay": 700 },
-    { "action": "click", "target": "folder_color_picker", "delay": 1200 },
-
-  {
-    "action": "type",
-    "target": "folder_color_picker",
-    "params": {
-      "value": "{{hexColor}}"
-    }
-  },
-
-    { "action": "close", "target": "Settings", "delay": 500 }
-  ],
-
-  "settings.appearance.customThemeColor": [
-    { "action": "open", "target": "Settings", "delay": 500 },
-    { "action": "maximize", "target": "Settings", "delay": 700 },
-
     { "action": "move", "target": "settings_sidebar_appearance", "delay": 1000 },
     { "action": "click", "target": "settings_sidebar_appearance", "delay": 1200 },
+    { "action": "move", "target": "{{accentColorId}}", "delay": 1500 },
+    { "action": "click", "target": "{{accentColorId}}", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
 
+  "settings.appearance.folderColor": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_appearance", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_appearance", "delay": 1200 },
+    { "action": "move", "target": "folder_color_picker", "delay": 1500 },
+    { "action": "click", "target": "folder_color_picker", "delay": 1700 },
     {
       "action": "type",
-      "target": "custom_theme_color",
-      "params": {
-        "text": "{{hexColor}}"
-      },
-      "delay": 300
+      "target": "folder_color_picker",
+      "params": { "text": "{{hexColor}}" }
     },
-
     { "action": "close", "target": "Settings", "delay": 500 }
   ],
 
- "settings.font.changeSize": [
-  { "action": "open", "target": "Settings", "delay": 500 },
-  { "action": "maximize", "target": "Settings", "delay": 700 },
-  { "action": "move", "target": "settings_sidebar_font", "delay": 1000 },
-  { "action": "click", "target": "settings_sidebar_font", "delay": 1200 },
-  {
-    "action": "setValue",
-    "target": "font_size_slider",
-    "params": { "value": "{{fontSize}}", "updateState": "{{updateState}}" },
-    "delay": 300
-  },
-  { "action": "close", "target": "Settings", "delay": 500 }
-  
-],"terminal.open": [
+  "settings.font.changeSize": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_appearance", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_appearance", "delay": 1200 },
+    {
+      "action": "setValue",
+      "target": "font_size_slider",
+      "params": { "value": "{{fontSize}}" },
+      "delay": 300
+    },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.accessibility.toggleReduceMotion": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_accessibility", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_accessibility", "delay": 1200 },
+    { "action": "move", "target": "toggle_reduce_motion", "delay": 1500 },
+    { "action": "click", "target": "toggle_reduce_motion", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.accessibility.toggleReduceTransparency": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_accessibility", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_accessibility", "delay": 1200 },
+    { "action": "move", "target": "toggle_reduce_transparency", "delay": 1500 },
+    { "action": "click", "target": "toggle_reduce_transparency", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.accessibility.toggleIncreaseContrast": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_accessibility", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_accessibility", "delay": 1200 },
+    { "action": "move", "target": "toggle_increase_contrast", "delay": 1500 },
+    { "action": "click", "target": "toggle_increase_contrast", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.dock.setPosition": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "click", "target": "settings_sidebar_desktop", "delay": 1200 },
+    { "action": "click", "target": "dock_position_{{position}}", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.dock.setPositionBottom": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "click", "target": "settings_sidebar_desktop", "delay": 1200 },
+    { "action": "click", "target": "dock_position_bottom", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.dock.setPositionRight": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "click", "target": "settings_sidebar_desktop", "delay": 1200 },
+    { "action": "click", "target": "dock_position_right", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.dock.setSize": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "click", "target": "settings_sidebar_desktop", "delay": 1200 },
+    {
+      "action": "setValue",
+      "target": "dock_size_slider",
+      "params": { "value": "{{dockSize}}" },
+      "delay": 300
+    },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.dock.toggleMagnification": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_desktop", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_desktop", "delay": 1200 },
+    { "action": "move", "target": "toggle_dock_magnification", "delay": 1500 },
+    { "action": "click", "target": "toggle_dock_magnification", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.dock.toggleAutoHide": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_desktop", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_desktop", "delay": 1200 },
+    { "action": "move", "target": "toggle_auto_hide_dock", "delay": 1500 },
+    { "action": "click", "target": "toggle_auto_hide_dock", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.display.setBrightness": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_display", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_display", "delay": 1200 },
+    {
+      "action": "setValue",
+      "target": "brightness_slider",
+      "params": { "value": "{{brightness}}" },
+      "delay": 300
+    },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.display.toggleAutomaticBrightness": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_display", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_display", "delay": 1200 },
+    { "action": "move", "target": "toggle_automatic_brightness", "delay": 1500 },
+    { "action": "click", "target": "toggle_automatic_brightness", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.network.toggleWifi": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_network", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_network", "delay": 1200 },
+    { "action": "move", "target": "toggle_wifi", "delay": 1500 },
+    { "action": "click", "target": "toggle_wifi", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.network.toggleBluetooth": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_network", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_network", "delay": 1200 },
+    { "action": "move", "target": "toggle_bluetooth", "delay": 1500 },
+    { "action": "click", "target": "toggle_bluetooth", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.network.connectBluetooth": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_network", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_network", "delay": 1200 },
+    { "action": "move", "target": "bluetooth_connect_button", "delay": 1500 },
+    { "action": "click", "target": "bluetooth_connect_button", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.network.setSearchEngine": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_network", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_network", "delay": 1200 },
+    { "action": "move", "target": "search_engine_select", "delay": 1500 },
+    { "action": "click", "target": "search_engine_select", "delay": 1700 },
+    { "action": "move", "target": "search_engine_option_{{engine}}", "delay": 1900 },
+    { "action": "click", "target": "search_engine_option_{{engine}}", "delay": 2100 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.notifications.toggleAllow": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_notifications", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_notifications", "delay": 1200 },
+    { "action": "move", "target": "toggle_notifications", "delay": 1500 },
+    { "action": "click", "target": "toggle_notifications", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.notifications.setPreviewMode": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_notifications", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_notifications", "delay": 1200 },
+    { "action": "move", "target": "notification_preview_select", "delay": 1500 },
+    { "action": "click", "target": "notification_preview_select", "delay": 1700 },
+    { "action": "move", "target": "notification_preview_{{mode}}", "delay": 1900 },
+    { "action": "click", "target": "notification_preview_{{mode}}", "delay": 2100 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.sound.setVolume": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_sound", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_sound", "delay": 1200 },
+    {
+      "action": "setValue",
+      "target": "sound_volume_slider",
+      "params": { "value": "{{volume}}" },
+      "delay": 300
+    },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.sound.toggleMute": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_sound", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_sound", "delay": 1200 },
+    { "action": "move", "target": "toggle_mute", "delay": 1500 },
+    { "action": "click", "target": "toggle_mute", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.sound.toggleInterfaceSounds": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_sound", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_sound", "delay": 1200 },
+    { "action": "move", "target": "toggle_interface_sounds", "delay": 1500 },
+    { "action": "click", "target": "toggle_interface_sounds", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.focus.toggleFocusMode": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_focus", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_focus", "delay": 1200 },
+    { "action": "move", "target": "toggle_focus_mode", "delay": 1500 },
+    { "action": "click", "target": "toggle_focus_mode", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.battery.toggleShowPercentage": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_battery", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_battery", "delay": 1200 },
+    { "action": "move", "target": "toggle_battery_percentage", "delay": 1500 },
+    { "action": "click", "target": "toggle_battery_percentage", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.battery.toggleLowPowerMode": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_battery", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_battery", "delay": 1200 },
+    { "action": "move", "target": "toggle_low_power_mode", "delay": 1500 },
+    { "action": "click", "target": "toggle_low_power_mode", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.privacy.toggleLocationServices": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_privacy", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_privacy", "delay": 1200 },
+    { "action": "move", "target": "toggle_location_services", "delay": 1500 },
+    { "action": "click", "target": "toggle_location_services", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.privacy.toggleAnalyticsSharing": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_privacy", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_privacy", "delay": 1200 },
+    { "action": "move", "target": "toggle_analytics_sharing", "delay": 1500 },
+    { "action": "click", "target": "toggle_analytics_sharing", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.privacy.toggleAppLock": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_privacy", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_privacy", "delay": 1200 },
+    { "action": "move", "target": "toggle_app_lock", "delay": 1500 },
+    { "action": "click", "target": "toggle_app_lock", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.privacy.setAppLockPassword": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_privacy", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_privacy", "delay": 1200 },
+    { "action": "move", "target": "app_lock_password_input", "delay": 1500 },
+    { "action": "click", "target": "app_lock_password_input", "delay": 1700 },
+    {
+      "action": "type",
+      "target": "app_lock_password_input",
+      "params": { "text": "{{password}}" }
+    },
+    { "action": "move", "target": "app_lock_password_save", "delay": 1000 },
+    { "action": "click", "target": "app_lock_password_save", "delay": 1200 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.control.toggleWifiMenuBar": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_control", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_control", "delay": 1200 },
+    { "action": "move", "target": "toggle_wifi_menu_bar", "delay": 1500 },
+    { "action": "click", "target": "toggle_wifi_menu_bar", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.control.toggleBluetoothMenuBar": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_control", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_control", "delay": 1200 },
+    { "action": "move", "target": "toggle_bluetooth_menu_bar", "delay": 1500 },
+    { "action": "click", "target": "toggle_bluetooth_menu_bar", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.control.toggleBatteryMenuBar": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_control", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_control", "delay": 1200 },
+    { "action": "move", "target": "toggle_battery_menu_bar", "delay": 1500 },
+    { "action": "click", "target": "toggle_battery_menu_bar", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.reset": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_appearance", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_appearance", "delay": 1200 },
+    { "action": "move", "target": "reset_settings_button", "delay": 1500 },
+    { "action": "click", "target": "reset_settings_button", "delay": 1700 },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "settings.open": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 }
+  ],
+
+  "settings.close": [
+    { "action": "close", "target": "Settings", "delay": 300 }
+  ],
+
+  "settings.maximize": [
+    { "action": "maximize", "target": "Settings", "delay": 300 }
+  ],
+
+  "settings.minimize": [
+    { "action": "minimize", "target": "Settings", "delay": 300 }
+  ],
+
+  "settings.navigateTo": [
+    { "action": "open", "target": "Settings", "delay": 500 },
+    { "action": "maximize", "target": "Settings", "delay": 700 },
+    { "action": "move", "target": "settings_sidebar_search", "delay": 1000 },
+    { "action": "click", "target": "settings_sidebar_search", "delay": 1200 },
+    {
+      "action": "type",
+      "target": "settings_sidebar_search",
+      "params": { "text": "{{tab}}" }
+    },
+    { "action": "keypress", "target": "settings_sidebar_search", "params": { "key": "Enter" } },
+    { "action": "close", "target": "Settings", "delay": 500 }
+  ],
+
+  "terminal.open": [
     { "action": "open", "target": "Terminal", "delay": 500 }
   ],
-  
+
   "terminal.close": [
     { "action": "close", "target": "Terminal", "delay": 300 }
   ],
-  
+
   "terminal.maximize": [
     { "action": "maximize", "target": "Terminal", "delay": 300 }
   ],
-  
+
   "terminal.minimize": [
     { "action": "minimize", "target": "Terminal", "delay": 300 }
   ],
 
-  "openTerminal": [
+  "terminal.executeCommand": [
     { "action": "open", "target": "Terminal", "delay": 500 },
-
+    { "action": "maximize", "target": "Terminal", "delay": 700 },
     { "action": "move", "target": "terminal_input", "delay": 1000 },
     { "action": "click", "target": "terminal_input", "delay": 1200 },
- {
+    {
       "action": "type",
       "target": "terminal_input",
-      "params": {
-        "text": "{{prompt}}",
-        "options": { "delay": 70, "humanLike": true }
-      },
-      "delay": 300
-    }
-  
-  ]
+      "params": { "text": "{{command}}", "options": { "delay": 70, "humanLike": true } }
+    },
+    { "action": "keypress", "target": "terminal_input", "params": { "key": "Enter" } }
+  ],
 
+  "terminal.clear": [
+    { "action": "open", "target": "Terminal", "delay": 500 },
+    { "action": "maximize", "target": "Terminal", "delay": 700 },
+    { "action": "move", "target": "terminal_input", "delay": 1000 },
+    { "action": "click", "target": "terminal_input", "delay": 1200 },
+    { "action": "keypress", "params": { "key": "Control+C" } },
+    {
+      "action": "type",
+      "target": "terminal_input",
+      "params": { "text": "clear" }
+    },
+    { "action": "keypress", "target": "terminal_input", "params": { "key": "Enter" } }
+  ],
+
+  "dock.openApp": [
+    { "action": "move", "target": "dock_icon_{{appName}}", "delay": 500 },
+    { "action": "click", "target": "dock_icon_{{appName}}", "delay": 700 }
+  ],
+
+  "dock.show": [
+    { "action": "move", "target": "dock_container", "delay": 300 },
+    { "action": "hover", "target": "dock_container", "delay": 500 }
+  ],
+
+  "dock.hide": [
+    { "action": "move", "target": "desktop_area", "delay": 500 }
+  ],
+
+  "dock.reveal": [
+    { "action": "dispatch", "target": "window", "params": { "event": "smarty:dock-reveal" } }
+  ],
+
+  "dock.toggleGestureMode": [
+    { "action": "move", "target": "dock_gesture_toggle", "delay": 500 },
+    { "action": "click", "target": "dock_gesture_toggle", "delay": 700 }
+  ],
+
+  "window.open": [
+    { "action": "open", "target": "{{appName}}", "delay": 500 }
+  ],
+
+  "window.close": [
+    { "action": "close", "target": "{{appName}}", "delay": 300 }
+  ],
+
+  "window.maximize": [
+    { "action": "maximize", "target": "{{appName}}", "delay": 300 }
+  ],
+
+  "window.minimize": [
+    { "action": "minimize", "target": "{{appName}}", "delay": 300 }
+  ],
+
+  "window.focus": [
+    { "action": "focus", "target": "{{appName}}", "delay": 300 }
+  ],
+
+  "window.move": [
+    { "action": "drag", "target": "{{appName}}", "params": { "x": "{{x}}", "y": "{{y}}" } }
+  ],
+
+  "finder.open": [
+    { "action": "open", "target": "Finder", "delay": 500 },
+    { "action": "maximize", "target": "Finder", "delay": 700 }
+  ],
+
+  "finder.close": [
+    { "action": "close", "target": "Finder", "delay": 300 }
+  ],
+
+  "finder.navigateTo": [
+    { "action": "open", "target": "Finder", "delay": 500 },
+    { "action": "move", "target": "finder_sidebar_{{folder}}", "delay": 1000 },
+    { "action": "click", "target": "finder_sidebar_{{folder}}", "delay": 1200 }
+  ],
+
+  "browser.open": [
+    { "action": "open", "target": "{{browserName}}", "delay": 500 },
+    { "action": "maximize", "target": "{{browserName}}", "delay": 700 }
+  ],
+
+  "browser.navigate": [
+    { "action": "open", "target": "{{browserName}}", "delay": 500 },
+    { "action": "move", "target": "{{browserName}}_url_input", "delay": 1000 },
+    { "action": "click", "target": "{{browserName}}_url_input", "delay": 1200 },
+    {
+      "action": "type",
+      "target": "{{browserName}}_url_input",
+      "params": { "text": "{{url}}" }
+    },
+    { "action": "keypress", "params": { "key": "Enter" } }
+  ],
+
+  "browser.search": [
+    { "action": "open", "target": "{{browserName}}", "delay": 500 },
+    { "action": "move", "target": "{{browserName}}_search_input", "delay": 1000 },
+    { "action": "click", "target": "{{browserName}}_search_input", "delay": 1200 },
+    {
+      "action": "type",
+      "target": "{{browserName}}_search_input",
+      "params": { "text": "{{query}}", "options": { "delay": 50 } }
+    },
+    { "action": "keypress", "params": { "key": "Enter" } }
+  ],
+
+  "mail.open": [
+    { "action": "open", "target": "Mail", "delay": 500 },
+    { "action": "maximize", "target": "Mail", "delay": 700 }
+  ],
+
+  "mail.compose": [
+    { "action": "open", "target": "Mail", "delay": 500 },
+    { "action": "maximize", "target": "Mail", "delay": 700 },
+    { "action": "wait", "target": "Mail", "params": { "timeout": 2000, "condition": "exists" }, "delay": 500 },
+    { "action": "move", "target": "mail_compose_button", "delay": 1000 },
+    { "action": "click", "target": "mail_compose_button", "delay": 2000 },
+    { "action": "wait", "target": "mail_to_input", "params": { "timeout": 4000, "condition": "exists" }, "delay": 500 },
+    { "action": "setValue", "target": "mail_to_input", "params": { "value": "{{recipient}}" }, "delay": 500 },
+    {"action": "wait", "target": "mail_to_input", "params": { "timeout": 2000, "condition": "inputFilled" }, "delay": 300},
+    { "action": "setValue", "target": "mail_sender_name_input", "params": { "value": "{{senderName}}" }, "delay": 500 },
+    {"action": "wait", "target": "mail_sender_name_input", "params": { "timeout": 2000, "condition": "inputFilled" }, "delay": 300 },
+    { "action": "setValue", "target": "mail_subject_input", "params": { "value": "{{subject}}" }, "delay": 500 },
+    {"action": "wait", "target": "mail_subject_input", "params": { "timeout": 2000, "condition": "inputFilled" }, "delay": 300 },
+    { "action": "move", "target": "mail_tone_select", "delay": 500 },
+    { "action": "click", "target": "mail_tone_select", "delay": 700 },
+    {
+      "action": "select",
+      "target": "mail_tone_select",
+      "params": { "value": "{{tone}}" }
+    },
+    { "action": "move", "target": "mail_write_ai_button", "delay": 500 },
+    { "action": "click", "target": "mail_write_ai_button", "delay": 1000 },
+    { "action": "wait", "target": "mail_body_input", "params": { "timeout": 20000, "condition": "notEmpty" } },
+    { "action": "move", "target": "mail_send_button", "delay": 700 },
+    { "action": "click", "target": "mail_send_button", "delay": 1000 },
+    { "action": "wait", "params": { "timeout": 8000, "condition": "textContains:Sent successfully" } },
+    { "action": "wait", "params": { "timeout": 2000, "condition": "textContains:Sent successfully" } },
+    { "action": "close", "target": "Mail", "delay": 1000 }
+  ],
+
+  "mail.send": [
+    { "action": "move", "target": "mail_send_button", "delay": 500 },
+    { "action": "click", "target": "mail_send_button", "delay": 700 }
+  ],
+
+  
+  "calendar.navigateMonth": [
+    { "action": "open", "target": "Calendar", "delay": 500 },
+    { "action": "move", "target": "calendar_{{direction}}_button", "delay": 1000 },
+    { "action": "click", "target": "calendar_{{direction}}_button", "delay": 1200 }
+  ],
+
+  "notes.open": [
+    { "action": "open", "target": "Notes", "delay": 500 },
+    { "action": "maximize", "target": "Notes", "delay": 700 }
+  ],
+
+  "notes.create": [
+    { "action": "open", "target": "Notes", "delay": 500 },
+    { "action": "move", "target": "notes_new_button", "delay": 1000 },
+    { "action": "click", "target": "notes_new_button", "delay": 1200 },
+    { "action": "move", "target": "notes_editor", "delay": 1500 },
+    { "action": "click", "target": "notes_editor", "delay": 1700 },
+    {
+      "action": "type",
+      "target": "notes_editor",
+      "params": { "text": "{{content}}", "options": { "delay": 50 } }
+    }
+  ],
+
+  "photos.open": [
+    { "action": "open", "target": "Photos", "delay": 500 },
+    { "action": "maximize", "target": "Photos", "delay": 700 }
+  ],
+
+  "vscode.open": [
+    { "action": "open", "target": "vscode", "delay": 500 },
+    { "action": "maximize", "target": "vscode", "delay": 700 }
+  ],
+
+  "vscode.openFile": [
+    { "action": "open", "target": "vscode", "delay": 500 },
+    { "action": "move", "target": "vscode_file_menu", "delay": 1000 },
+    { "action": "click", "target": "vscode_file_menu", "delay": 1200 },
+    { "action": "move", "target": "vscode_open_file", "delay": 1500 },
+    { "action": "click", "target": "vscode_open_file", "delay": 1700 }
+  ],
+
+  "figma.open": [
+    { "action": "open", "target": "figma", "delay": 500 },
+    { "action": "maximize", "target": "figma", "delay": 700 }
+  ],
+
+  "spotify.open": [
+    { "action": "open", "target": "Spotify", "delay": 500 },
+    { "action": "maximize", "target": "Spotify", "delay": 700 }
+  ],
+
+  "spotify.play": [
+    { "action": "open", "target": "Spotify", "delay": 500 },
+    { "action": "move", "target": "spotify_play_button", "delay": 1000 },
+    { "action": "click", "target": "spotify_play_button", "delay": 1200 }
+  ],
+
+  "spotify.pause": [
+    { "action": "open", "target": "Spotify", "delay": 500 },
+    { "action": "move", "target": "spotify_pause_button", "delay": 1000 },
+    { "action": "click", "target": "spotify_pause_button", "delay": 1200 }
+  ],
+
+  "youtube.open": [
+    { "action": "open", "target": "Youtube", "delay": 500 },
+    { "action": "maximize", "target": "Youtube", "delay": 700 }
+  ],
+
+  "youtube.search": [
+    { "action": "open", "target": "Youtube", "delay": 500 },
+    { "action": "move", "target": "youtube_search_input", "delay": 1000 },
+    { "action": "click", "target": "youtube_search_input", "delay": 1200 },
+    {
+      "action": "type",
+      "target": "youtube_search_input",
+      "params": { "text": "{{query}}" }
+    },
+    { "action": "keypress", "params": { "key": "Enter" } }
+  ],
+
+  "desktop.screenshot": [
+    { "action": "dispatch", "target": "window", "params": { "event": "smarty:screenshot" } }
+  ],
+
+  "desktop.toggleFullscreen": [
+    { "action": "keypress", "params": { "key": "F11" } }
+  ],
+
+  "desktop.openContextMenu": [
+    { "action": "click", "target": "desktop_area", "params": { "button": "right" } }
+  ],
+
+  "gesture.pinchMinimize": [
+    { "action": "gesture", "params": { "gesture": "pinch_minimize" } }
+  ],
+
+  "gesture.pinchMaximize": [
+    { "action": "gesture", "params": { "gesture": "pinch_maximize" } }
+  ],
+
+  "gesture.swipeLeft": [
+    { "action": "gesture", "params": { "gesture": "swipe_left" } }
+  ],
+
+  "gesture.swipeRight": [
+    { "action": "gesture", "params": { "gesture": "swipe_right" } }
+  ],
+
+  "voice.speak": [
+    {
+      "action": "speak",
+      "params": { "text": "{{text}}", "options": { "rate": 0.9 } }
+    }
+  ],
+
+  "calendar.open": [
+    { "action": "open", "target": "Calendar", "delay": 500 },
+    { "action": "maximize", "target": "Calendar", "delay": 700 }
+  ],
+
+  "calendar.close": [
+    { "action": "close", "target": "Calendar", "delay": 300 }
+  ],
+
+  "calendar.add_event": [
+    { "action": "open", "target": "Calendar", "delay": 500 },
+    { "action": "maximize", "target": "Calendar", "delay": 700 },
+    { "action": "wait", "target": "calendar_toolbar", "params": { "timeout": 3000, "condition": "exists" }, "delay": 500 },
+    { "action": "click", "target": "calendar_add_event_button", "delay": 1000 },
+    { "action": "wait", "target": "calendar_event_form", "params": { "timeout": 2000, "condition": "exists" }, "delay": 500 },
+    { "action": "setValue", "target": "calendar_event_title_input", "params": { "value": "{{title}}" }, "delay": 300 },
+    { "action": "setValue", "target": "calendar_event_date_input", "params": { "value": "{{date}}" }, "delay": 300 },
+    { "action": "setValue", "target": "calendar_event_time_input", "params": { "value": "{{time}}" }, "delay": 300 },
+    { "action": "click", "target": "calendar_event_calendar_select", "delay": 300 },
+    { "action": "select", "target": "calendar_event_calendar_select", "params": { "value": "{{calendarId}}" }, "delay": 300 },
+    { "action": "setValue", "target": "calendar_event_notes_input", "params": { "value": "{{notes}}" }, "delay": 300 },
+    { "action": "click", "target": "calendar_event_save_button", "delay": 500 },
+    { "action": "wait", "params": { "timeout": 3000, "condition": "formClosed" }, "delay": 500 }
+  ],
+
+  "calendar.edit_event": [
+    { "action": "open", "target": "Calendar", "delay": 500 },
+    { "action": "maximize", "target": "Calendar", "delay": 700 },
+    { "action": "wait", "target": "{{eventId}}", "params": { "timeout": 3000, "condition": "exists" }, "delay": 500 },
+    { "action": "click", "target": "{{eventId}}", "delay": 1000 },
+    { "action": "wait", "target": "calendar_event_form", "params": { "timeout": 2000, "condition": "exists" }, "delay": 500 },
+    { "action": "setValue", "target": "calendar_event_title_input", "params": { "value": "{{title}}" }, "delay": 300 },
+    { "action": "setValue", "target": "calendar_event_date_input", "params": { "value": "{{date}}" }, "delay": 300 },
+    { "action": "click", "target": "calendar_event_save_button", "delay": 500 }
+  ],
+
+  "calendar.delete_event": [
+    { "action": "open", "target": "Calendar", "delay": 500 },
+    { "action": "maximize", "target": "Calendar", "delay": 700 },
+    { "action": "wait", "target": "{{eventId}}", "params": { "timeout": 3000, "condition": "exists" }, "delay": 500 },
+    { "action": "click", "target": "{{eventId}}", "delay": 1000 },
+    { "action": "wait", "target": "calendar_event_form", "params": { "timeout": 2000, "condition": "exists" }, "delay": 500 },
+    { "action": "click", "target": "calendar_event_delete_button", "delay": 500 },
+    { "action": "wait", "params": { "timeout": 2000, "condition": "formClosed" }, "delay": 300 }
+  ],
+
+  "calendar.switch_day": [
+    { "action": "open", "target": "Calendar", "delay": 500 },
+    { "action": "click", "target": "calendar_day_view", "delay": 500 }
+  ],
+
+  "calendar.switch_week": [
+    { "action": "open", "target": "Calendar", "delay": 500 },
+    { "action": "click", "target": "calendar_week_view", "delay": 500 }
+  ],
+
+  "calendar.switch_month": [
+    { "action": "open", "target": "Calendar", "delay": 500 },
+    { "action": "click", "target": "calendar_month_view", "delay": 500 }
+  ],
+
+  "calendar.switch_year": [
+    { "action": "open", "target": "Calendar", "delay": 500 },
+    { "action": "click", "target": "calendar_year_view", "delay": 500 }
+  ],
+
+  "calendar.switch_list": [
+    { "action": "open", "target": "Calendar", "delay": 500 },
+    { "action": "click", "target": "calendar_list_view", "delay": 500 }
+  ],
+
+  "calendar.navigate_previous": [
+    { "action": "click", "target": "calendar_previous_button", "delay": 500 }
+  ],
+
+  "calendar.navigate_next": [
+    { "action": "click", "target": "calendar_next_button", "delay": 500 }
+  ],
+
+  "calendar.go_today": [
+    { "action": "click", "target": "calendar_today_button", "delay": 500 }
+  ]
 }

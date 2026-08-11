@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAIService } from '@/lib/ai'
+import { getUserAIContextServer } from '@/lib/ai/userAIContext.server'
+import { generateDesktopAssistantPrompt } from '@/lib/ai/userAIContext'
 
 export async function POST(request: NextRequest) {
   try {
-    const { messages } = await request.json()
+    const { messages, userId } = await request.json()
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: 'Messages array is required' }, { status: 400 })
@@ -25,16 +27,28 @@ export async function POST(request: NextRequest) {
       ? mappedMessages 
       : [{ role: 'user' as const, content: 'Hello' }]
     
+    // Get user context for personalized assistant
+    let systemContent = 'You are a helpful terminal assistant.';
+    
+    // Try to get user context (from userId parameter or auth session)
+    try {
+      console.log('🎯 Loading user context for terminal AI (userId:', userId || 'from auth', ')');
+      const userContext = await getUserAIContextServer();
+      if (userContext) {
+        systemContent = generateDesktopAssistantPrompt(userContext) + '\n\nYou are responding in the Terminal app. Keep responses brief and technical. You know about the user\'s projects, skills, and experience.';
+        console.log('✅ User context loaded for:', userContext.displayName, '- Skills:', userContext.skills?.length || 0, '- Projects:', userContext.projects?.length || 0);
+      } else {
+        console.warn('⚠️ User context was null');
+      }
+    } catch (error) {
+      console.error('❌ Could not load user context:', error);
+    }
+    
     // Inject system prompt at the beginning
     const fullMessages = [
       {
         role: 'system',
-        content: `
-You are an assistant that acts on behalf of the user Vibhav Trivedi.
-Vibhav is a frontend developer with over 1 year of experience in React.js, Next.js, Tailwind CSS, GSAP, Framer Motion, and Node.js.
-He has built several real-world projects like subscription apps, doctor platforms, admin dashboards with PDF/Excel export, and AI-powered tools.
-Always respond as Vibhav himself, using his tone and experience.
-        `,
+        content: systemContent,
       },
       ...userMessages,
     ]

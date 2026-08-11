@@ -2,19 +2,29 @@ import OpenAI from 'openai'
 
 import type { AIConfig, AIResponse, AIService, ChatMessage, ChatOptions } from './aiService'
 
-/** OpenAI-compatible Bedrock Mantle integration for Bedrock OpenAI model IDs. */
+/** OpenAI-compatible Bedrock Mantle integration for Bedrock models. */
 export class BedrockMantleService implements AIService {
   private readonly client: OpenAI
   private readonly model: string
+  private readonly baseURL: string
 
   constructor(config: AIConfig) {
-    const apiKey = config.apiKey || process.env.AWS_BEARER_TOKEN_BEDROCK
-    const baseURL = config.baseUrl || process.env.BEDROCK_MANTLE_BASE_URL
-    if (!apiKey || !baseURL) {
-      throw new Error('Bedrock OpenAI models require AWS_BEARER_TOKEN_BEDROCK and BEDROCK_MANTLE_BASE_URL.')
+    // Support both old and new env var names
+    const apiKey = config.apiKey || process.env.BEDROCK_MANTLE_API_KEY || process.env.AWS_BEARER_TOKEN_BEDROCK
+    this.baseURL = config.baseUrl || process.env.BEDROCK_MANTLE_ENDPOINT || process.env.BEDROCK_MANTLE_BASE_URL
+    
+    if (!apiKey || !this.baseURL) {
+      throw new Error('Bedrock Mantle requires BEDROCK_MANTLE_API_KEY and BEDROCK_MANTLE_ENDPOINT.')
     }
-    this.model = config.model || 'openai.gpt-5.6-sol'
-    this.client = new OpenAI({ apiKey, baseURL })
+    
+    this.model = config.model || process.env.BEDROCK_MODEL || 'zai.glm-5'
+    this.client = new OpenAI({ 
+      apiKey, 
+      baseURL: this.baseURL,
+      dangerouslyAllowBrowser: true // Allow browser usage
+    })
+    
+    console.log('✅ Bedrock Mantle initialized:', { baseURL: this.baseURL, model: this.model })
   }
 
   async chat(messages: ChatMessage[], options?: ChatOptions): Promise<AIResponse> {

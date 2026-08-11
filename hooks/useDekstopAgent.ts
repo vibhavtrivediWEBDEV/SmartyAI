@@ -1,4 +1,4 @@
-// hooks/useDekstopAgent.ts (Updated to use smart voice pipeline with ElevenLabs)
+// hooks/useDekstopAgent.ts (Updated to use smart voice pipeline with ElevenLabs + User-Specific AI)
 
 import { useState, useEffect, useRef } from "react";
 import { vapi } from "@/lib/vapi.sdk";
@@ -9,6 +9,7 @@ import { extractAppActionFromResponse, extractCommandFromResponse } from "@/lib/
 import { getFormattedCommands, getFormattedCommandsWithExamples } from "@/lib/helper/commandRegistry";
 import { createAIService } from "@/lib/ai";
 import { useElevenTTS } from "./ElevenLabs";
+import { getUserAIContext, generateDesktopAssistantPrompt, type UserAIContext } from "@/lib/ai/userAIContext";
 
 export enum CallStatus {
     INACTIVE = "INACTIVE",
@@ -27,18 +28,21 @@ interface UseVoiceAutomationProps {
     openApplication: (appName: string, x?: number, y?: number, command?: string, arg?: any) => void;
     openWindows: any[];
     setOpenWindows: React.Dispatch<React.SetStateAction<any[]>>;
+    userContext?: UserAIContext | null; // Optional: Will be fetched if not provided
 }
 
 export function useVoiceAutomation({
     openApplication,
     openWindows,
-    setOpenWindows
+    setOpenWindows,
+    userContext: propUserContext
 }: UseVoiceAutomationProps) {
     const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE);
     const [lastTranscript, setLastTranscript] = useState<string>("");
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [executionLog, setExecutionLog] = useState<string[]>([]);
     const [useCustomPipeline, setUseCustomPipeline] = useState(false);
+    const [userContext, setUserContext] = useState<UserAIContext | null>(propUserContext || null);
     
     // 🎙️ ElevenLabs TTS hook for premium voice
     const { speak: speakWithElevenLabs } = useElevenTTS();
@@ -72,6 +76,24 @@ export function useVoiceAutomation({
         addLog(`🎤 Voice pipeline initialized: ${isBedrock ? 'Custom (Bedrock/GLM)' : 'Vapi'}`);
         addLog(`   USE_AI_PROVIDER=${provider}`);
     }, []);
+    
+    // 🔄 Load user context if not provided
+    useEffect(() => {
+        if (propUserContext) {
+            setUserContext(propUserContext);
+            addLog(`${propUserContext.aiName} initialized for ${propUserContext.displayName}`);
+        } else {
+            // Fetch user context on mount
+            getUserAIContext().then(ctx => {
+                setUserContext(ctx);
+                if (ctx) {
+                    addLog(`${ctx.aiName} initialized for ${ctx.displayName}`);
+                } else {
+                    addLog(`⚠️ No user context available`);
+                }
+            });
+        }
+    }, [propUserContext]);
 
     // 🔥 CUSTOM PIPELINE: Bedrock/GLM Voice Implementation
     const startCustomVoicePipeline = async () => {
@@ -121,30 +143,25 @@ export function useVoiceAutomation({
                     setLastTranscript(transcript);
                     lastUserText.current = transcript;
 
-                    // Get AI response using Bedrock/GLM
+                    // Get AI response using Bedrock/GLM with user-specific context
                     try {
+                        if (!userContext) {
+                            addLog(`❌ No user context available`);
+                            await speak("Please sign in to use voice commands.");
+                            isProcessing.current = false;
+                            return;
+                        }
+                        
                         const aiService = createAIService();
                         
                         const formattedCommands = getFormattedCommandsWithExamples();
-                        const systemPrompt = `
-You are VibhavOS Assistant - a friendly AI helping users navigate Vibhav's portfolio desktop.
-
-Your default behavior:
-- Keep responses brief and conversational (1-2 sentences max)
-- Speak in Hindi/Hinglish/English as natural
-- When user wants an action, respond in machine-readable format:
-  
-  For app actions: appName: <name> | action: <open/close/minimize/maximize>
-  For commands: COMMAND: <INDEX> | <VARIABLE>: <VALUE>
+                        
+                        // 🎯 User-specific system prompt
+                        const systemPrompt = generateDesktopAssistantPrompt(userContext) + `
 
 Available commands:
 ${formattedCommands}
-
-Supported apps: Terminal, Settings, Safari, Chrome, VS Code, Spotify, Calendar, Maps, YouTube, Excel, Mail, PDF, Finder, Photos
-
-If just chatting, respond naturally in 1 sentence.
-If unclear, ask ONE short question.
-                        `;
+`;
 
                         // Add user message to history
                         messagesHistory.current.push({ role: "user", content: transcript });
@@ -210,7 +227,7 @@ If unclear, ask ONE short question.
 
             recognitionRef.current.start();
             addLog(`✅ Voice pipeline active - speak now!`);
-            addLog(`💡 Tip: Speak within 8 seconds or it will timeout`);
+            addLog(`💡 Tip: You're chatting with ${userContext?.aiName || 'Assistant'}`);
 
         } catch (error: any) {
             addLog(`❌ Failed to start custom pipeline: ${error.message}`);
@@ -457,16 +474,59 @@ If unclear, ask ONE short question.
 
     const startCall = async () => {
         try {
+            // 🎯 Ensure we have user context
+            if (!userContext) {
+                addLog("⚠️ No user context, fetching...");
+                const ctx = await getUserAIContext();
+                if (ctx) {
+                    setUserContext(ctx);
+                    addLog(`✅ Loaded context for ${ctx.displayName}`);
+                } else {
+                    addLog("❌ Could not load user context");
+                    return;
+                }
+            }
+
             if (useCustomPipeline) {
                 // 🎯 Use custom Bedrock/GLM pipeline
                 await startCustomVoicePipeline();
             } else {
-                // 🎯 Use Vapi pipeline
+                // 🎯 Use Vapi pipeline with USER-SPECIFIC assistant
                 addLog("📞 Connecting to Vapi voice assistant...");
 
                 const formattedCommands = getFormattedCommandsWithExamples();
+                
+                // 🔥 Create user-specific assistant
+                const userSpecificAssistant = {
+                    name: `${userContext?.displayName || 'User'} AI`,
+                    firstMessage: `Hi! ${userContext?.displayName || 'User'} ka AI assistant hoon. Kya help chahiye?`,
+                    transcriber: {
+                        provider: "deepgram",
+                        model: "nova-2",
+                        language: "en",
+                    },
+                    voice: {
+                        provider: "11labs",
+                        voiceId: "EXAVITQu4vr4xnSDxMaL",
+                        model: "eleven_turbo_v2",
+                        stability: 0.7,
+                        similarityBoost: 0.8,
+                        speed: 1.1,
+                        useSpeakerBoost: true,
+                    },
+                    model: {
+                        provider: "openai",
+                        model: "gpt-4o-mini",
+                        messages: [
+                            {
+                                role: "system",
+                                content: generateDesktopAssistantPrompt(userContext!) + "\n\nAvailable commands:\n" + formattedCommands
+                            }
+                        ]
+                    }
+                };
 
-                await vapi.start(desktopAssistant, {
+                await vapi.start(userSpecificAssistant, {
                     variableValues: {
                         commands: formattedCommands,
                     },

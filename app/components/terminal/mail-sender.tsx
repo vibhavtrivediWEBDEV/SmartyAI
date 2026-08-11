@@ -62,7 +62,7 @@ export function MailSender() {
   const { settings } = useSettings()
   const [tab, setTab] = useState<Tab>("compose")
   const [to, setTo] = useState("")
-  const [senderName, setSenderName] = useState("Vibhav Trivedi")
+  const [senderName, setSenderName] = useState("")
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
   const [tone, setTone] = useState<Tone>("professional")
@@ -80,7 +80,7 @@ export function MailSender() {
       const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null")
       if (draft) {
         setTo(draft.to || "")
-        setSenderName(draft.senderName || "Vibhav Trivedi")
+        setSenderName(draft.senderName || "")
         setSubject(draft.subject || "")
         setBody(draft.body || "")
         setTone(draft.tone || "professional")
@@ -227,7 +227,7 @@ export function MailSender() {
     setStatus("idle")
     setMessage("")
     localStorage.removeItem(DRAFT_KEY)
-    subjectRef.current?.focus()
+    // Removed auto-focus - automation will focus fields as needed
   }
 
   return (
@@ -239,7 +239,7 @@ export function MailSender() {
           </div>
           <div><p className="text-sm font-bold">Smarty Mail</p><p className="text-[10px] text-slate-500">AI mail studio</p></div>
         </div>
-        <button onClick={newMessage} className="mb-4 flex items-center justify-center gap-2 rounded-xl bg-white px-3 py-2.5 text-xs font-bold text-slate-950 transition hover:bg-violet-100">
+        <button id="mail_compose_button" onClick={newMessage} className="mb-4 flex items-center justify-center gap-2 rounded-xl bg-white px-3 py-2.5 text-xs font-bold text-slate-950 transition hover:bg-violet-100">
           <PenLine className="h-3.5 w-3.5" /> New message
         </button>
         <nav className="space-y-1">
@@ -276,26 +276,26 @@ export function MailSender() {
         {tab === "compose" && (
           <div className="mx-auto max-w-4xl p-4">
             <div className="mb-3 grid gap-3 md:grid-cols-2">
-              <label className="block"><span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-slate-500">Send to</span><input type="email" value={to} onChange={(event) => setTo(event.target.value)} placeholder="recipient@example.com" className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-xs outline-none transition placeholder:text-slate-600 focus:border-violet-500/70 focus:bg-violet-500/5" /></label>
-              <label className="block"><span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-slate-500">Send as</span><input value={senderName} onChange={(event) => setSenderName(event.target.value)} placeholder="Your name" className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-xs outline-none transition placeholder:text-slate-600 focus:border-violet-500/70" /></label>
+              <label className="block"><span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-slate-500">Send to</span><input id="mail_to_input" type="email" value={to} onChange={(event) => setTo(event.target.value)} placeholder="recipient@example.com" className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-xs outline-none transition placeholder:text-slate-600 focus:border-violet-500/70 focus:bg-violet-500/5" />{to}</label>
+              <label className="block"><span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-slate-500">Send as</span><input id="mail_sender_name_input" value={senderName} onChange={(event) => setSenderName(event.target.value)} placeholder="Your name" className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-xs outline-none transition placeholder:text-slate-600 focus:border-violet-500/70" /></label>
             </div>
 
-            <label className="block"><span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-slate-500">Subject — tell AI what this email should achieve</span><div className="flex rounded-xl border border-white/10 bg-white/[0.04] focus-within:border-violet-500/70"><input ref={subjectRef} value={subject} onChange={(event) => setSubject(event.target.value)} onKeyDown={(event) => event.key === "Enter" && generate()} placeholder="e.g. Follow up after our product meeting" maxLength={200} className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-xs outline-none placeholder:text-slate-600" /><button onClick={() => generate()} disabled={status === "generating"} className="m-1 flex items-center gap-1.5 rounded-lg bg-violet-500 px-3 text-[11px] font-semibold transition hover:bg-violet-400 disabled:opacity-50">{status === "generating" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <WandSparkles className="h-3.5 w-3.5" />} Write with AI</button></div></label>
+            <label className="block"><span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-slate-500">Subject — tell AI what this email should achieve</span><div className="flex rounded-xl border border-white/10 bg-white/[0.04] focus-within:border-violet-500/70"><input id="mail_subject_input" ref={subjectRef} value={subject} onChange={(event) => setSubject(event.target.value)} onKeyDown={(event) => event.key === "Enter" && generate()} placeholder="e.g. Follow up after our product meeting" maxLength={200} className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-xs outline-none placeholder:text-slate-600" /><button id="mail_write_ai_button" onClick={() => generate()} disabled={status === "generating"} className="m-1 flex items-center gap-1.5 rounded-lg bg-violet-500 px-3 text-[11px] font-semibold transition hover:bg-violet-400 disabled:opacity-50">{status === "generating" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <WandSparkles className="h-3.5 w-3.5" />} Write with AI</button></div></label>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <select value={tone} onChange={(event) => setTone(event.target.value as Tone)} className="rounded-lg border border-white/10 bg-[#111722] px-2.5 py-2 text-[11px] outline-none focus:border-violet-500"><option value="professional">Professional</option><option value="friendly">Friendly</option><option value="concise">Concise</option><option value="persuasive">Persuasive</option><option value="warm">Warm</option></select>
+              <select id="mail_tone_select" value={tone} onChange={(event) => setTone(event.target.value as Tone)} className="rounded-lg border border-white/10 bg-[#111722] px-2.5 py-2 text-[11px] outline-none focus:border-violet-500"><option value="professional">Professional</option><option value="friendly">Friendly</option><option value="concise">Concise</option><option value="persuasive">Persuasive</option><option value="warm">Warm</option></select>
               <button onClick={() => setTab("templates")} className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-2 text-[11px] text-slate-300 hover:bg-white/5"><span className={`h-2 w-2 rounded-full bg-gradient-to-r ${selectedTemplate.accent}`} />{selectedTemplate.title}</button>
               {body && <div className="ml-auto flex gap-1">{(["improve", "shorten", "expand"] as GenerateAction[]).map((action) => <button key={action} onClick={() => generate(action)} disabled={status === "generating"} className="rounded-lg px-2 py-1.5 text-[10px] capitalize text-violet-300 hover:bg-violet-500/10 disabled:opacity-40">{action}</button>)}</div>}
             </div>
 
             <div className="mt-3 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] focus-within:border-violet-500/50">
               <div className="flex items-center justify-between border-b border-white/10 px-3 py-2"><div className="flex items-center gap-2 text-[10px] text-slate-500"><Sparkles className="h-3.5 w-3.5 text-violet-400" /> AI draft · fully editable</div><span className="text-[10px] text-slate-600">{words} words</span></div>
-              <textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="Add a subject and let AI write the complete email, or start typing here…" className="min-h-48 w-full resize-y bg-transparent p-4 text-sm leading-6 text-slate-200 outline-none placeholder:text-slate-600" />
+              <textarea id="mail_body_input" value={body} onChange={(event) => setBody(event.target.value)} placeholder="Add a subject and let AI write the complete email, or start typing here…" className="min-h-48 w-full resize-y bg-transparent p-4 text-sm leading-6 text-slate-200 outline-none placeholder:text-slate-600" />
             </div>
 
             {message && <div className={`mt-3 flex items-center gap-2 rounded-xl border px-3 py-2 text-[11px] ${status === "error" ? "border-rose-500/20 bg-rose-500/10 text-rose-300" : status === "sent" ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300" : "border-violet-500/20 bg-violet-500/10 text-violet-200"}`}>{status === "error" ? <XCircle className="h-3.5 w-3.5" /> : status === "sent" ? <CheckCircle2 className="h-3.5 w-3.5" /> : status === "generating" || status === "sending" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}{message}</div>}
 
-            <div className="mt-4 flex items-center justify-between gap-3"><button onClick={saveDraft} className="flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-xs text-slate-300 transition hover:bg-white/5"><Save className="h-3.5 w-3.5" /> Save draft</button><button onClick={sendMail} disabled={status === "sending" || status === "generating" || quota.remaining <= 0} className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-600 px-5 py-2.5 text-xs font-bold shadow-lg shadow-violet-600/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">{status === "sending" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send email <span className="rounded bg-black/20 px-1.5 py-0.5 text-[9px]">{quota.remaining} left</span></button></div>
+            <div className="mt-4 flex items-center justify-between gap-3"><button id="mail_save_draft_button" onClick={saveDraft} className="flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-xs text-slate-300 transition hover:bg-white/5"><Save className="h-3.5 w-3.5" /> Save draft</button><button id="mail_send_button" onClick={sendMail} disabled={status === "sending" || status === "generating" || quota.remaining <= 0} className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-600 px-5 py-2.5 text-xs font-bold shadow-lg shadow-violet-600/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">{status === "sending" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send email <span className="rounded bg-black/20 px-1.5 py-0.5 text-[9px]">{quota.remaining} left</span></button></div>
           </div>
         )}
 

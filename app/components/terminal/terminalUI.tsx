@@ -11,7 +11,7 @@ import { useTerminalAutocomplete } from "@/hooks/useTerminalAutoCompleteHook"
 import { useCommandHistory } from "@/hooks/useCommandHistory"
 
 interface HistoryEntry {
-  type: "input" | "output"
+  type: "input"
   value: string | JSX.Element
 }
 
@@ -27,6 +27,7 @@ export function TerminalUI({ automationAPI, autoRunCommand, autoRunCommandArgs, 
   const [currentInput, setCurrentInput] = useState("")
   const outputRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [userId, setUserId] = useState<string | null>(null)
 
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isMinimized, setIsMinimized] = useState(false)
@@ -51,6 +52,18 @@ export function TerminalUI({ automationAPI, autoRunCommand, autoRunCommandArgs, 
     resetSuggestions,
   } = useTerminalAutocomplete(commandHistory)
 
+  // Fetch current user ID
+  useEffect(() => {
+    fetch("/api/auth/session")
+      .then(res => res.json())
+      .then(data => {
+        if (data?.user?.id) {
+          setUserId(data.user.id)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
 
   // Scroll to bottom on new output
   useEffect(() => {
@@ -70,13 +83,15 @@ export function TerminalUI({ automationAPI, autoRunCommand, autoRunCommandArgs, 
         setHistory,
         setCurrentInput,
         parsedArgs: autoRunCommandArgs,
+        automationAPI, // Add automationAPI
+        userId: userId || undefined,
       });
       
       if (onCommandExecuted) {
         onCommandExecuted();
       }
     }
-  }, [autoRunCommand, autoRunCommandArgs, onCommandExecuted]);
+  }, [autoRunCommand, autoRunCommandArgs, onCommandExecuted, userId, automationAPI]);
 
 
   const handleCommandExecution = (cmd: string) => {
@@ -90,6 +105,8 @@ export function TerminalUI({ automationAPI, autoRunCommand, autoRunCommandArgs, 
       history,
       setHistory,
       setCurrentInput,
+      automationAPI, // Add automationAPI
+      userId: userId || undefined,
     })
   }
 
@@ -138,6 +155,7 @@ export function TerminalUI({ automationAPI, autoRunCommand, autoRunCommandArgs, 
                 history,
                 setHistory,
                 setCurrentInput,
+                userId: userId || undefined,
               })
             }
             currentInput={currentInput}

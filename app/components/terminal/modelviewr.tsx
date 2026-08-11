@@ -171,7 +171,7 @@ export default function PortfolioScene({ setdekstopView }: { setdekstopView: any
           onClick={() => window.dispatchEvent(new CustomEvent("playAnimation", { detail: "mixamo.com" }))}
           className="bg-white text-black px-4 py-2 rounded-md"
         >
-          Go to vibhav's Desktop
+          Go to My Desktop
         </button>
 
 

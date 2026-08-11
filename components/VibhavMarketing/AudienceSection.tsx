@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, BookOpen, Code2, GraduationCap } from "lucide-react";
+import { ArrowRight, BookOpen, Code2, GraduationCap, CheckCircle2 } from "lucide-react";
 
 const audiences = [
   {

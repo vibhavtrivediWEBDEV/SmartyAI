@@ -11,6 +11,7 @@ const publicRoutes = [
   "/robots.txt",
   "/sitemap.xml",
   "/manifest.webmanifest",
+  "/desktop", // For testing purposes
 ];
 
 // Routes that should redirect to desktop if already authenticated

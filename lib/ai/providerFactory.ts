@@ -7,7 +7,7 @@
  * 3. Fallback to OpenAI
  */
 
-export type AIProvider = 'openai' | 'bedrock' | 'gemini'
+export type AIProvider = 'openai' | 'bedrock' | 'bedrock-mantle' | 'gemini'
 
 export interface AIConfig {
   provider: AIProvider
@@ -34,9 +34,10 @@ export function getAIProvider(): AIProvider {
     process.env.NEXT_PUBLIC_USE_AI_PROVIDER
   ) as AIProvider
   
-  if (explicitProvider && ['openai', 'bedrock', 'gemini'].includes(explicitProvider)) {
+  const validProviders = ['openai', 'bedrock', 'bedrock-mantle', 'gemini']
+  if (explicitProvider && validProviders.includes(explicitProvider)) {
     console.log(`🎯 Provider detected: ${explicitProvider}`)
-    return explicitProvider
+    return explicitProvider as AIProvider
   }
 
   // 2. Auto-detect based on available credentials
@@ -45,8 +46,16 @@ export function getAIProvider(): AIProvider {
     return 'openai'
   }
 
-  if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-    console.log('🎯 Auto-detected: Bedrock (has AWS creds)')
+  // Check which Bedrock API type to use
+  const bedrockApiType = process.env.BEDROCK_API_TYPE || 'mantle'
+  
+  if (process.env.BEDROCK_MANTLE_API_KEY && bedrockApiType === 'mantle') {
+    console.log('🎯 Auto-detected: Bedrock Mantle (has Mantle API key)')
+    return 'bedrock-mantle'
+  }
+  
+  if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY && bedrockApiType === 'runtime') {
+    console.log('🎯 Auto-detected: Bedrock Runtime (has AWS creds)')
     return 'bedrock'
   }
 
@@ -72,12 +81,18 @@ export function getAIConfigForProvider(provider: AIProvider): AIConfig {
         apiKey: process.env.OPENAI_API_KEY
       }
 
+    case 'bedrock-mantle':
+      return {
+        provider: 'bedrock-mantle',
+        model: process.env.BEDROCK_MODEL || 'zai.glm-5',
+        baseUrl: process.env.BEDROCK_MANTLE_ENDPOINT,
+        apiKey: process.env.BEDROCK_MANTLE_API_KEY
+      }
+
     case 'bedrock':
       return {
         provider: 'bedrock',
         model: process.env.BEDROCK_MODEL || 'zai.glm-5',
-        baseUrl: process.env.BEDROCK_MANTLE_BASE_URL,
-        apiKey: process.env.AWS_BEARER_TOKEN_BEDROCK,
         region: process.env.AWS_REGION || 'ap-south-1',
         awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID,
         awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
@@ -113,6 +128,13 @@ export function getModelForUseCase(useCase: 'chat' | 'vision' | 'voice' | 'fast'
       fast: 'gpt-4o-mini',
       smart: 'gpt-4o'
     },
+    'bedrock-mantle': {
+      chat: process.env.BEDROCK_MODEL || 'zai.glm-5',
+      vision: process.env.BEDROCK_MODEL || 'zai.glm-5',
+      voice: process.env.BEDROCK_MODEL || 'zai.glm-5',
+      fast: process.env.BEDROCK_MODEL || 'zai.glm-5',
+      smart: process.env.BEDROCK_MODEL || 'zai.glm-5'
+    },
     bedrock: {
       chat: process.env.BEDROCK_MODEL || 'zai.glm-5',
       vision: process.env.BEDROCK_MODEL || 'zai.glm-5',
@@ -139,6 +161,8 @@ export function isProviderAvailable(provider: AIProvider): boolean {
   switch (provider) {
     case 'openai':
       return hasUsableOpenAICredential()
+    case 'bedrock-mantle':
+      return !!(process.env.BEDROCK_MANTLE_API_KEY && process.env.BEDROCK_MANTLE_ENDPOINT)
     case 'bedrock':
       return !!(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY)
     case 'gemini':

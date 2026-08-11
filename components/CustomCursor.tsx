@@ -146,9 +146,80 @@ const CustomCursor = () => {
       });
     };
 
+    // Automation cursor movement - listen to automation events
+    const handleAutomationMove = (e: any) => {
+      const { x, y } = e.detail;
+      console.log('🎯 Automation cursor move:', x, y);
+      
+      // Instant movement for main cursor
+      gsap.set(cursor, {
+        x: x,
+        y: y,
+      });
+      
+      // Quick follow for spotlight and orb
+      gsap.to([spotlight, orb], {
+        x: x,
+        y: y,
+        duration: 0.3,
+        ease: "power2.out"
+      });
+      
+      // Smooth follow for other elements
+      gsap.to([glow, particles, ripple], {
+        x: x,
+        y: y,
+        duration: 0.6,
+        ease: "power2.out"
+      });
+      
+      // Simulate click ripple effect
+      gsap.fromTo(ripple, 
+        { scale: 0.5, opacity: 0.8 },
+        { 
+          scale: 2, 
+          opacity: 0, 
+          duration: 0.8, 
+          ease: "power2.out" 
+        }
+      );
+    };
+
+    // Automation click ripple
+    const handleAutomationClick = (e: any) => {
+      const { x, y, type } = e.detail;
+      console.log('🎯 Automation click:', x, y, type);
+      
+      gsap.to(cursor, {
+        scale: 0.85,
+        duration: 0.15,
+        yoyo: true,
+        repeat: 1,
+        onComplete: () => {
+          gsap.to(cursor, {
+            scale: 1,
+            duration: 0.15
+          });
+        }
+      });
+      
+      // Ripple effect on click
+      gsap.fromTo(ripple,
+        { scale: 0.5, opacity: 0.8 },
+        { 
+          scale: 2.5, 
+          opacity: 0, 
+          duration: 0.6, 
+          ease: "power2.out" 
+        }
+      );
+    };
+
     window.addEventListener('mousemove', moveElements);
     window.addEventListener('mousedown', handleMouseDown);
     window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('cursor-automation-move', handleAutomationMove as any);
+    window.addEventListener('cursor-automation-click', handleAutomationClick as any);
 
     // Ensure cursor elements are always visible
     gsap.set([cursor, spotlight, glow, particles, orb, ripple], { 
@@ -176,6 +247,8 @@ const CustomCursor = () => {
       window.removeEventListener('mousemove', moveElements);
       window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('cursor-automation-move', handleAutomationMove as any);
+      window.removeEventListener('cursor-automation-click', handleAutomationClick as any);
       clearInterval(visibilityCheck);
       interactiveElements.forEach(element => {
         element.removeEventListener('mouseenter', handleLinkHover);

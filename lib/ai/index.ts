@@ -25,9 +25,13 @@ export function createAIService(): AIService {
       console.log('✅ Using OpenAI')
       return new OpenAIService(config)
     
+    case 'bedrock-mantle':
+      console.log('✅ Using AWS Bedrock Mantle API')
+      return new BedrockMantleService(config)
+    
     case 'bedrock':
-      console.log('✅ Using AWS Bedrock')
-      return config.model?.startsWith('openai.') ? new BedrockMantleService(config) : new BedrockService(config)
+      console.log('✅ Using AWS Bedrock Runtime SDK')
+      return new BedrockService(config)
     
     case 'gemini':
       console.log('✅ Using Google Gemini')
@@ -41,14 +45,16 @@ export function createAIService(): AIService {
 /**
  * Create AI service for specific provider (override)
  */
-export function createAIServiceForProvider(provider: 'openai' | 'bedrock' | 'gemini'): AIService {
+export function createAIServiceForProvider(provider: 'openai' | 'bedrock' | 'bedrock-mantle' | 'gemini'): AIService {
   const config = getAIConfigForProvider(provider)
 
   switch (provider) {
     case 'openai':
       return new OpenAIService(config)
+    case 'bedrock-mantle':
+      return new BedrockMantleService(config)
     case 'bedrock':
-      return config.model?.startsWith('openai.') ? new BedrockMantleService(config) : new BedrockService(config)
+      return new BedrockService(config)
     case 'gemini':
       return new GeminiService(config)
     default:

@@ -62,6 +62,7 @@ import { getDesktopApp } from "@/lib/desktopApps"
 import SmartyInterview from "@/app/components/terminal/smartyInterview"
 import SmartyTeacherWrapper from "@/app/components/terminal/smartyTeacher"
 import { DynamicAgGridConfigurator } from "./dataTableViewer"
+import { getUserAIContext, type UserAIContext } from "@/lib/ai/userAIContext"
 
 interface WindowState {
   id: string
@@ -107,6 +108,7 @@ export function Desktop() {
   const [resumeProfileLoading, setResumeProfileLoading] = useState(true)
   const [batteryLevel, setBatteryLevel] = useState<number | null>(null)
   const unlockedAppsRef = useRef(new Set<string>())
+  const [userContext, setUserContext] = useState<UserAIContext | null>(null)
 
 
 
@@ -207,6 +209,16 @@ export function Desktop() {
       );
     }
     console.log("ssa", getFormattedCommandsWithExamples())
+  }, []);
+  
+  // 🔄 Load user context on mount
+  useEffect(() => {
+    getUserAIContext().then(ctx => {
+      setUserContext(ctx);
+      console.log('✅ User context loaded:', ctx?.displayName);
+    }).catch(error => {
+      console.error('Failed to load user context:', error);
+    });
   }, []);
 
   useEffect(() => {
@@ -1263,7 +1275,7 @@ export function Desktop() {
             >
               {/* Left Section - Menu Items */}
               <div className="flex space-x-2 md:space-x-4">
-                <span className="font-bold text-white text-xs md:text-sm">VIBHAV'S MAC</span>
+                <span className="font-bold text-white text-xs md:text-sm">{userContext?.macName || 'My Mac'}</span>
 
                 {/* Hide menu items on small mobile, show on tablet+ */}
                 <div className="hidden sm:flex space-x-2 md:space-x-4">
@@ -1314,6 +1326,7 @@ export function Desktop() {
                     openApplication={openApplication}
                     openWindows={openWindows}
                     setOpenWindows={setOpenWindows}
+                    userContext={userContext}
                   />
                 </span>
 

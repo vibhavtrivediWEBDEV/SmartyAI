@@ -1,7 +1,9 @@
 "use client"
 
 import type React from "react"
-import { useRef, useEffect, forwardRef, useImperativeHandle, useState } from "react"
+import { useRef, useEffect, forwardRef, useImperativeHandle, useState, useContext } from "react"
+import { UserAIContext } from "@/lib/ai/userAIContext"
+
 
 interface TerminalInputProps {
   onCommand: (command: string) => void
@@ -17,6 +19,21 @@ export const TerminalInput = forwardRef<HTMLInputElement, TerminalInputProps>(
     const internalInputRef = useRef<HTMLInputElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
     const [showSuggestions, setShowSuggestions] = useState(false)
+    const [username, setUsername] = useState("guest")
+    
+    // Get username from API
+    useEffect(() => {
+      fetch("/api/user/settings")
+        .then(res => res.json())
+        .then(data => {
+          if (data?.terminalUsername) {
+            setUsername(data.terminalUsername.toString())
+          }
+        })
+        .catch(() => {
+          setUsername("guest")
+        })
+    }, [])
 
     useImperativeHandle(ref, () => internalInputRef.current!)
 
@@ -142,7 +159,7 @@ export const TerminalInput = forwardRef<HTMLInputElement, TerminalInputProps>(
         {/* Input field */}
         <div className="flex items-center text-green-400 font-mono min-h-[48px] touch-manipulation">
           <span className="whitespace-nowrap text-xs sm:text-sm md:text-base">
-            vibhav@MacBook-Pro ~ %
+            {username}@MacBook-Pro ~ %
           </span>
           <input
             ref={internalInputRef}
