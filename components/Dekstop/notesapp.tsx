@@ -573,9 +573,9 @@ export default function PremiumNotes() {
                 </div>
             )}
 
-            {/* ── NEW NOTE MODAL */}
+            {/* ── NEW NOTE MODAL - z-index below cursor (2147483647) */}
             {showNewModal && (
-                <div ref={modalOverlayRef} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }}
+                <div ref={modalOverlayRef} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2147483630 }}
                     onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
                     <div ref={modalRef} style={{ width: 480, ...css.glassCard, padding: "28px 28px 24px", boxShadow: `0 40px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08), 0 0 60px ${accent.glow}` }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22 }}>

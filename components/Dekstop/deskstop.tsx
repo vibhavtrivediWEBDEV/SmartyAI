@@ -1,6 +1,7 @@
 "use client"
 
 import { useRef, useEffect, useState, useCallback } from "react"
+import dynamic from "next/dynamic"
 import { Window } from "./window"
 import { TerminalUI } from "@/app/components/terminal/terminalUI"
 import { ScienceBook } from "@/app/components/terminal/ai-book"
@@ -11,7 +12,6 @@ import { PdfViewer } from "@/app/components/terminal/pdfviwer"
 import { DesktopIcon } from "./dekstopIcon"
 import { StickyNote } from "./stickyNote"
 import { ProjectExplorerWindow, type ProjectFile } from "./ProjectExpWindow"
-import { PhotosApp } from "./photosApp"
 import { gsap } from "gsap"
 import { FolderIcon, Trash2Icon, CameraIcon, TerminalIcon, BookIcon, SearchIcon, TableIcon, MailIcon, ListTodoIcon, FileTextIcon } from 'lucide-react' // Import Lucide icons
 import { Dock } from "./dock"
@@ -24,6 +24,7 @@ import { KeyboardProvider } from "@/app/context/keyBoardContext"
 import { toast } from "sonner"
 import CircularGallery from "./Gallery"
 import MotionGallary from "./motionGalary"
+import MacGallery from "./MacGallery"
 import DomeGallery from "../animationComponents/gallery"
 import InfiniteMenu from "../animationComponents/newsGallery"
 import TextType from "./textAnimation"
@@ -35,11 +36,11 @@ import DotGrid from "../animationComponents/dotGrid"
 import Vscode from "./VsCode"
 import { BrowserContent } from "./Browser"
 import Spotify from "./spotify"
-import Maps from "./Maps"
+import MapsNew from "./MapsNew"
 import Youtube from "./yt"
 import SettingsPanel from "./Settings"
 import { useSettings } from "@/app/context/settingContext"
-import Calender from "./Calender"
+import EnhancedCalendar from "../Desktop/EnhancedCalendar"
 import { useCursorAutomation } from "@/hooks/useCursorAutomation"
 import { AutomationControlPanel } from "./AutomationControlPannel"
 import { FakeCursor } from "./FakeCursor"
@@ -48,6 +49,7 @@ import { resolveSequence } from "@/lib/helper/helper"
 import { VoiceControlButton } from "./VoiceControlButton"
 import { getFormattedCommandsWithExamples } from "@/lib/helper/commandRegistry"
 import LoveCounter from "./macFeedback"
+import AppleTopBar from "../Desktop/APpleTopBar"
 import FileIcon from "./fileicon"
 import LiquidGlassVideo from "./glassvediowallpaper"
 import Figma from "./figma"
@@ -59,10 +61,32 @@ import { EasterEggWindow } from "./EasterEggWindow"
 import { ResumeProfilePanel, type ResumeProfile } from "./ResumeProfilePanel"
 import { ATSResumeBuilder } from "./ATSResumeBuilder"
 import { getDesktopApp } from "@/lib/desktopApps"
+import FaceTimeApp from "./FaceTimeApp"
+import AppStoreApp from "./AppStoreApp"
 import SmartyInterview from "@/app/components/terminal/smartyInterview"
 import SmartyTeacherWrapper from "@/app/components/terminal/smartyTeacher"
 import { DynamicAgGridConfigurator } from "./dataTableViewer"
 import { getUserAIContext, type UserAIContext } from "@/lib/ai/userAIContext"
+import WidgetGallery from "../Desktop/widgets/WidgetGallery"
+import CalendarWidget from "../Desktop/widgets/CalendarWidget"
+import WeatherWidget from "../Desktop/widgets/WeatherWidget"
+import PhotoWidget from "../Desktop/widgets/PhotoWidget"
+import ClockWidget from "../Desktop/widgets/ClockWidget"
+import GlassClockWidget from "../Desktop/widgets/GlassClockWidget"
+import GlassCalendarWidget from "../Desktop/widgets/GlassCalendarWidget"
+import GlassWeatherWidget from "../Desktop/widgets/GlassWeatherWidget"
+import GlassRemindersWidget from "../Desktop/widgets/GlassRemindersWidget"
+import GlassDayWidget from "../Desktop/widgets/GlassDayWidget"
+import GlassMiniCalendarWidget from "../Desktop/widgets/GlassMiniCalendarWidget"
+import GlassWorldClockWidget from "../Desktop/widgets/GlassWorldClockWidget"
+import GlassSmallWorldClockWidget from "../Desktop/widgets/GlassSmallWorldClockWidget"
+import GlassWideRemindersWidget from "../Desktop/widgets/GlassWideRemindersWidget"
+import GlassSFWeatherWidget from "../Desktop/widgets/GlassSFWeatherWidget"
+import DraggableWidget from "../Desktop/widgets/DraggableWidget"
+import WebWidget from "../Desktop/widgets/WebWidget"
+import SnapshotWidget from "../Desktop/widgets/SnapshotWidget"
+import WidgetCreationModal from "../Desktop/WidgetCreationModal"
+import { WidgetStore, type Widget, type WebWidget as WebWidgetType, type SnapshotWidget as SnapshotWidgetType } from "@/lib/store/widgetStore"
 
 interface WindowState {
   id: string
@@ -166,6 +190,27 @@ export function Desktop() {
     //   { id: 6, name: "Nirantara", icon: <FolderIcon />, x: 1200, y: 400 },
     //   { id: 7, name: "Don't Look", icon: <Trash2Icon />, x: 1300, y: 500 }
   ]);
+
+  // 🆕 Desktop Widgets State
+  const [widgets, setWidgets] = useState<Array<{
+    id: string;
+    type: string;
+    x: number;
+    y: number;
+  }>>(() => {
+    if (typeof window === 'undefined') return [];
+    const stored = localStorage.getItem("os_desktop_widgets");
+    return stored ? JSON.parse(stored) : [];
+  });
+  
+  const [showWidgetGallery, setShowWidgetGallery] = useState(false);
+  
+  // 🌐 Widget Creation Modal State
+  const [showWidgetCreationModal, setShowWidgetCreationModal] = useState(false);
+  const [widgetCreationData, setWidgetCreationData] = useState<{ url: string; title: string }>({
+    url: '',
+    title: ''
+  });
 
   const [UserIcon, setuserIcons] = useState<IconItem[]>([])
   // news items
@@ -557,18 +602,18 @@ export function Desktop() {
           break;
 
         case "Calendar":
-          component = <Calender />;
+          component = <EnhancedCalendar />;
           title = "Calendar";
           iconPath = "/icons/ai.png";
-          defaultWidth = 640;
-          defaultHeight = 500;
+          defaultWidth = 1200;
+          defaultHeight = 800;
           break;
         case "Maps":
-          component = <Maps />;
-          title = "Google Map ";
-          iconPath = "/icons/ai.png";
-          defaultWidth = 1000;
-          defaultHeight = 700;
+          component = <MapsNew />;
+          title = "Maps";
+          iconPath = "https://framerusercontent.com/images/YtLyrfz2kFN2QhkzBWG6TrATw.png";
+          defaultWidth = 1100;
+          defaultHeight = 750;
           break;
         case "Youtube":
           component = <Youtube />;
@@ -687,9 +732,7 @@ export function Desktop() {
           defaultHeight = 400;
           break;
         case "Photos":
-          component = <div style={{ width: '100vw', height: '100vh' }}>
-            <DomeGallery grayscale={false} />
-          </div>;
+          component = <MacGallery />;
           title = "Photos";
           iconPath = "/icons/camera.png";
           defaultWidth = 900;
@@ -701,6 +744,14 @@ export function Desktop() {
           </div>;
           title = "news";
           iconPath = "/icons/camera.png";
+          defaultWidth = 900;
+          defaultHeight = 650;
+          break;
+        case "Music":
+          const MusicApp = dynamic(() => import("./MusicApp").then(mod => ({ default: mod.default })), { ssr: false });
+          component = <MusicApp />;
+          title = "Music";
+          iconPath = "/music.svg";
           defaultWidth = 900;
           defaultHeight = 650;
           break;
@@ -716,6 +767,40 @@ export function Desktop() {
           iconPath = "/icons/play.png";
           defaultWidth = 800;
           defaultHeight = 600;
+          break;
+        case "Phone":
+          const PhoneAppComponent = dynamic(() => import("./PhoneApp").then(mod => ({ default: mod.default })), { ssr: false });
+          component = <PhoneAppComponent />;
+          title = "Phone";
+          iconPath = "/icons/phone.svg";
+          defaultWidth = 800;
+          defaultHeight = 650;
+          break;
+        case "FaceTime":
+          component = <FaceTimeApp />;
+          title = "FaceTime";
+          iconPath = "/icons/facetime.svg";
+          defaultWidth = 900;
+          defaultHeight = 650;
+          break;
+        case "Contacts":
+          const ContactsApp = dynamic(() => import("./Contacts").then(mod => ({ default: mod.default })), { ssr: false });
+          component = <ContactsApp userId={userContext?.userId} />;
+          title = "Contacts";
+          iconPath = "/icons/contacts.svg";
+          defaultWidth = 950;
+          defaultHeight = 650;
+          break;
+        case "App Store":
+          component = <AppStoreApp />;
+          title = "App Store";
+          iconPath = "/icons/todo.png";
+          defaultWidth = desktopRef.current
+            ? desktopRef.current.offsetWidth
+            : window.innerWidth;
+          defaultHeight = desktopRef.current
+            ? desktopRef.current.offsetHeight
+            : window.innerHeight;
           break;
         default:
           console.warn(`Application "${appName}" not found.`);
@@ -1199,6 +1284,181 @@ export function Desktop() {
     toast.success("Icons auto-arranged!");
   };
 
+  // 🆕 Widget handlers
+  const handleAddWidget = useCallback((type: string) => {
+    const newWidget: Widget = {
+      id: `widget_${Date.now()}`,
+      category: "native",
+      type: type as any,
+      x: 100,
+      y: 100,
+      width: 160,
+      height: 160
+    };
+    const next = WidgetStore.addWidget(newWidget);
+    setWidgets(next);
+    setShowWidgetGallery(false);
+    toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} widget added!`);
+  }, []);
+
+  // 🌐 Handle browser "Add to Desktop" event
+  useEffect(() => {
+    const handleBrowserAddWidget = (e: CustomEvent) => {
+      const { url, title } = e.detail;
+      setWidgetCreationData({ url, title });
+      setShowWidgetCreationModal(true);
+    };
+
+    window.addEventListener('browser:add-widget', handleBrowserAddWidget as EventListener);
+    return () => window.removeEventListener('browser:add-widget', handleBrowserAddWidget as EventListener);
+  }, []);
+
+  // 🌐 Create live web widget
+  const handleCreateWebWidget = useCallback((url: string, title: string) => {
+    const newWidget = WidgetStore.createWebWidget({ url, title, isLive: true });
+    const next = WidgetStore.addWidget(newWidget);
+    setWidgets(next);
+    toast.success('Live Web Widget created!');
+  }, []);
+
+  // 📸 Create snapshot widget
+  const handleCreateSnapshotWidget = useCallback((url: string, title: string) => {
+    // For now, create a placeholder snapshot
+    // In production, would capture screenshot
+    const placeholderImage = 'data:image/svg+xml;base64,' + btoa(`
+      <svg width="400" height="300" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100%" height="100%" fill="#1a1a1a"/>
+        <text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="#666" font-family="system-ui" font-size="14">
+          Snapshot: ${title}
+        </text>
+      </svg>
+    `);
+    
+    const newWidget = WidgetStore.createSnapshotWidget({
+      url,
+      title,
+      isLive: false,
+      imageData: placeholderImage
+    });
+    const next = WidgetStore.addWidget(newWidget);
+    setWidgets(next);
+    toast.success('Snapshot Widget created!');
+  }, []);
+
+  const handleRemoveWidget = useCallback((id: string) => {
+    const next = WidgetStore.removeWidget(id);
+    setWidgets(next);
+    toast.success('Widget removed');
+  }, []);
+
+  const handleWidgetDrag = useCallback((id: string, offsetX: number, offsetY: number) => {
+    const widget = widgets.find(w => w.id === id);
+    if (widget) {
+      const next = WidgetStore.updatePosition(id, widget.x + offsetX, widget.y + offsetY);
+      setWidgets(next);
+    }
+  }, [widgets]);
+
+  // Render widget by type with theme support
+  // 🔄 Use darkMode boolean from settings (synced with Control Center)
+  const isDarkMode = settings?.darkMode ?? true;
+  
+  const renderWidget = (widget: Widget) => {
+    // Handle web widgets
+    if (widget.category === 'web') {
+      const webWidget = widget as WebWidgetType;
+      return (
+        <WebWidget
+          url={webWidget.url}
+          title={webWidget.title}
+          favicon={webWidget.favicon}
+          width={webWidget.width}
+          height={webWidget.height}
+          isDarkMode={isDarkMode}
+          onRemove={() => handleRemoveWidget(widget.id)}
+          onRefresh={() => {
+            // Force iframe reload by updating a timestamp
+            const next = WidgetStore.updateSize(widget.id, webWidget.width, webWidget.height);
+            setWidgets(next);
+          }}
+          onOpenInBrowser={() => {
+            openApplication('Chrome');
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('browser:navigate', {
+                detail: { url: webWidget.url }
+              }));
+            }, 500);
+          }}
+          onResize={(width, height) => {
+            const next = WidgetStore.updateSize(widget.id, width, height);
+            setWidgets(next);
+          }}
+          canEmbed={webWidget.canEmbed}
+        />
+      );
+    }
+
+    // Handle snapshot widgets
+    if (widget.category === 'snapshot') {
+      const snapshotWidget = widget as SnapshotWidgetType;
+      return (
+        <SnapshotWidget
+          image={snapshotWidget.image}
+          title={snapshotWidget.title}
+          sourceUrl={snapshotWidget.sourceUrl}
+          width={snapshotWidget.width}
+          height={snapshotWidget.height}
+          isDarkMode={isDarkMode}
+          onRemove={() => handleRemoveWidget(widget.id)}
+          onOpenInBrowser={() => {
+            if (snapshotWidget.sourceUrl) {
+              openApplication('Chrome');
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('browser:navigate', {
+                  detail: { url: snapshotWidget.sourceUrl }
+                }));
+              }, 500);
+            }
+          }}
+        />
+      );
+    }
+
+    // Handle native widgets
+    switch (widget.type) {
+      case 'calendar':
+        return <CalendarWidget />;
+      case 'weather':
+        return <WeatherWidget />;
+      case 'photo':
+        return <PhotoWidget />;
+      case 'clock':
+        return <ClockWidget />;
+      case 'glass-clock':
+        return <GlassClockWidget isDarkMode={isDarkMode} />;
+      case 'glass-calendar':
+        return <GlassCalendarWidget isDarkMode={isDarkMode} />;
+      case 'glass-weather':
+        return <GlassWeatherWidget isDarkMode={isDarkMode} />;
+      case 'glass-reminders':
+        return <GlassRemindersWidget isDarkMode={isDarkMode} />;
+      case 'glass-day':
+        return <GlassDayWidget isDarkMode={isDarkMode} />;
+      case 'glass-mini-calendar':
+        return <GlassMiniCalendarWidget isDarkMode={isDarkMode} />;
+      case 'glass-world-clock':
+        return <GlassWorldClockWidget isDarkMode={isDarkMode} />;
+      case 'glass-small-world-clock':
+        return <GlassSmallWorldClockWidget isDarkMode={isDarkMode} />;
+      case 'glass-wide-reminders':
+        return <GlassWideRemindersWidget isDarkMode={isDarkMode} />;
+      case 'glass-sf-weather':
+        return <GlassSFWeatherWidget isDarkMode={isDarkMode} />;
+      default:
+        return null;
+    }
+  };
+
 
 
   return (
@@ -1267,107 +1527,131 @@ export function Desktop() {
         desktopRef={desktopRef}
       /> */}
 
-            {/* Top Bar */}
-            {/* Top Bar - Responsive */}
-            <div
-              className="absolute top-0 left-0 right-0 bg-opacity-50 backdrop-blur-sm flex items-center px-2 md:px-4 text-gray-300 text-xs md:text-sm z-50 h-7 md:h-8"
-              style={{ background: "rgba(255, 255, 255, 0.15)" }}
-            >
-              {/* Left Section - Menu Items */}
-              <div className="flex space-x-2 md:space-x-4">
-                <span className="font-bold text-white text-xs md:text-sm">{userContext?.macName || 'My Mac'}</span>
-
-                {/* Hide menu items on small mobile, show on tablet+ */}
-                <div className="hidden sm:flex space-x-2 md:space-x-4">
-
-                  <p className="hover:text-white cursor-pointer transition-colors" onClick={() => openApplication('Terminal', 20, 400, 'contact')}>  Contact </p>
-
-                  <p
-                    className="hover:text-white cursor-pointer transition-colors"
+            {/* Top Bar - Apple macOS Style */}
+            <AppleTopBar
+              appTitle={openWindows.length > 0 ? openWindows[openWindows.length - 1].title : userContext?.macName || 'Finder'}
+              userContext={userContext}
+              settings={settings}
+              updateSettings={updateSettings}
+              batteryLevel={batteryLevel}
+              autoArrange={autoArrange}
+              openApplication={openApplication}
+              existingMenuItems={
+                <>
+                  {/* PRESERVED: Contact Menu Item */}
+                  <span
+                    className="cursor-pointer hover:bg-white/10 hover:backdrop-blur-xl rounded px-1.5 py-0.5 transition-all duration-150"
+                    onClick={() => openApplication('Terminal', 20, 400, 'contact')}
+                  >
+                    Contact
+                  </span>
+                  
+                  {/* PRESERVED: Game Menu Item */}
+                  <span
+                    className="cursor-pointer hover:bg-white/10 hover:backdrop-blur-xl rounded px-1.5 py-0.5 transition-all duration-150"
                     onClick={() => openApplication('game')}
                   >
                     Game
-                  </p>
-                  {/* <p onClick={changeWallpaper}>wallpaper</p> */}
-                </div>
-
-                {/* Mobile menu icon (hamburger) - show only on mobile */}
-                <button
-                  className="sm:hidden hover:text-white transition-colors"
-                  onClick={() => {/* toggle mobile menu */ }}
-                >
-                  ☰
-                </button>
-              </div>
-
-              {/* Right Section - System Icons */}
-              <div className="ml-auto flex items-center cursor-pointer space-x-2 md:space-x-4">
-                {/* Show fewer icons on mobile */}
-                <span
-                  className="text-gray-400 hover:text-white transition-colors text-base md:text-sm"
-                  onClick={() => openApplication('website')}
-                >
-                  🌐
-                </span>
-
-                {/* Hide on small screens */}
-                <span className="text-gray-400 hidden xs:inline"><AutomationControlPanel
-                  automationAPI={automationAPI}
-                  openWindows={openWindows}
-                /></span>
-                <span className="text-gray-400 ">
-                  <AutomationControlPanel
-                    automationAPI={automationAPI}
-                    openWindows={openWindows}
-                  />
-                </span>
-                <span className="text-gray-400 ">
-                  <VoiceControlButton
-                    openApplication={openApplication}
-                    openWindows={openWindows}
-                    setOpenWindows={setOpenWindows}
-                    userContext={userContext}
-                  />
-                </span>
-
-                <span className="text-gray-400 hidden xs:inline" onClick={() => updateSettings({ gestureControl: !settings.gestureControl })}
-                >🖐️</span>
-                <span className="text-gray-400 hidden xs:inline" onClick={() => updateSettings({ muted: !settings.muted })} title={settings.muted ? 'Unmute' : `Volume ${settings.soundVolume}%`}>{settings.muted ? '🔇' : '🔊'}</span>
-                <span className="text-gray-400 hidden sm:inline" onClick={() => updateSettings({ wifiEnabled: !settings.wifiEnabled })}>{settings.wifiEnabled ? 'Wi-Fi' : 'Wi-Fi Off'}</span>
-                <span className="text-gray-400 hidden md:inline" onClick={() => updateSettings({ bluetoothEnabled: !settings.bluetoothEnabled })}>{settings.bluetoothEnabled ? 'ᛒ' : 'ᛒ̸'}</span>
-                <span className="text-gray-400 hidden sm:inline" title={batteryLevel === null ? 'Battery API unavailable in this browser' : `Battery ${batteryLevel}%`}>🔋{settings.showBatteryPercentage && batteryLevel !== null ? `${batteryLevel}%` : ''}</span>
-
-                <span
-                  className="text-gray-400 hover:text-white transition-colors"
-                  onClick={autoArrange}
-                >
-                  A
-                </span>
-
-                <span
-                  className="text-gray-400 hover:text-white transition-colors"
-                  onClick={() => updateSettings({ gestureControl: !settings.gestureControl })}
-                  title={settings.gestureControl ? "Turn off Gesture Mode" : "Turn on Gesture Mode"}
-                >
-                  {settings.gestureControl ? "⌘●" : "⌘"}
-                </span>
-
-                {/* Always show time */}
-                <span
-                  className="text-gray-400 text-xs md:text-sm whitespace-nowrap"
-                  suppressHydrationWarning
-                >
-                  {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
-            </div>
-            <CustomCursor />
-
-            {/* <FakeCursor
-              visible={showCursor}
+                  </span>
+                </>
+              }
+              existingRightIcons={
+                <>
+                  {/* 🆕 Widgets Button - Opens Widget Gallery */}
+                  <span
+                    className="text-gray-400 hover:text-white transition-colors cursor-pointer"
+                    onClick={() => setShowWidgetGallery(!showWidgetGallery)}
+                    title="Add Desktop Widgets"
+                  >
+                    ⚙️
+                  </span>
+                  
+                  {/* PRESERVED: Website Icon */}
+                  <span
+                    className="text-gray-400 hover:text-white transition-colors text-base md:text-sm"
+                    onClick={() => openApplication('website')}
+                  >
+                    🌐
+                  </span>
+                  
+                  {/* PRESERVED: Automation Control Panel */}
+                  <span className="text-gray-400">
+                    <AutomationControlPanel
+                      automationAPI={automationAPI}
+                      openWindows={openWindows}
+                    />
+                  </span>
+                  
+                  {/* PRESERVED: Voice Control Button */}
+                  <span className="text-gray-400">
+                    <VoiceControlButton
+                      openApplication={openApplication}
+                      openWindows={openWindows}
+                      setOpenWindows={setOpenWindows}
+                      userContext={userContext}
+                    />
+                  </span>
+                  
+                  {/* PRESERVED: Gesture Control Toggle */}
+                  <span
+                    className="text-gray-400 hover:text-white transition-colors"
+                    onClick={() => updateSettings({ gestureControl: !settings.gestureControl })}
+                  >
+                    🖐️
+                  </span>
+                  
+                  {/* PRESERVED: Volume Control */}
+                  <span
+                    className="text-gray-400 hover:text-white transition-colors"
+                    onClick={() => updateSettings({ muted: !settings.muted })}
+                    title={settings.muted ? 'Unmute' : `Volume ${settings.soundVolume}%`}
+                  >
+                    {settings.muted ? '🔇' : '🔊'}
+                  </span>
+                  
+                  {/* PRESERVED: WiFi Toggle */}
+                  <span
+                    className="text-gray-400 hover:text-white transition-colors"
+                    onClick={() => updateSettings({ wifiEnabled: !settings.wifiEnabled })}
+                  >
+                    {settings.wifiEnabled ? 'Wi-Fi' : 'Wi-Fi Off'}
+                  </span>
+                  
+                  {/* PRESERVED: Bluetooth Toggle */}
+                  <span
+                    className="text-gray-400 hover:text-white transition-colors"
+                    onClick={() => updateSettings({ bluetoothEnabled: !settings.bluetoothEnabled })}
+                  >
+                    {settings.bluetoothEnabled ? 'ᛒ' : 'ᛒ̸'}
+                  </span>
+                  
+                  {/* PRESERVED: Auto-Arrange Button */}
+                  <span
+                    className="text-gray-400 hover:text-white transition-colors"
+                    onClick={autoArrange}
+                  >
+                    A
+                  </span>
+                  
+                  {/* PRESERVED: Gesture Mode Toggle */}
+                  <span
+                    className="text-gray-400 hover:text-white transition-colors"
+                    onClick={() => updateSettings({ gestureControl: !settings.gestureControl })}
+                    title={settings.gestureControl ? "Turn off Gesture Mode" : "Turn on Gesture Mode"}
+                  >
+                    {settings.gestureControl ? "⌘●" : "⌘"}
+                  </span>
+                </>
+              }
+            />
+            {/* CustomCursor has low z-index and hardcoded colors - using FakeCursor instead */}
+            {/* <CustomCursor /> */}
+            
+            <FakeCursor
+              visible={true}
               color={settings.folderColor}
-              handControl={handControlCursor}
-            /> */}
+              handControl={false}
+            />
 
             {<GestureDock
               automationAPI={automationAPI}
@@ -1478,10 +1762,43 @@ export function Desktop() {
 
 
 
-
-
             {/* Sticky Note */}
             {/* <StickyNote initialX={1000} initialY={30} desktopRef={desktopRef} /> */}
+
+            {/* 🆕 Desktop Widgets - Smooth Dragging like DesktopIcon */}
+            {widgets.map((widget) => (
+              <DraggableWidget
+                key={widget.id}
+                widget={widget}
+                desktopRef={desktopRef}
+                onPositionChange={(id, x, y) => {
+                  const next = WidgetStore.updatePosition(id, x, y);
+                  setWidgets(next);
+                }}
+                onRemove={handleRemoveWidget}
+              >
+                {renderWidget(widget)}
+              </DraggableWidget>
+            ))}
+
+            {/* 🆕 Widget Gallery */}
+            <WidgetGallery
+              isOpen={showWidgetGallery}
+              onClose={() => setShowWidgetGallery(false)}
+              onAddWidget={handleAddWidget}
+              isDarkMode={isDarkMode}
+            />
+
+            {/* 🆕 Widget Creation Modal (for web/snapshot widgets) */}
+            <WidgetCreationModal
+              isOpen={showWidgetCreationModal}
+              onClose={() => setShowWidgetCreationModal(false)}
+              url={widgetCreationData.url}
+              title={widgetCreationData.title}
+              onCreateLive={handleCreateWebWidget}
+              onCreateSnapshot={handleCreateSnapshotWidget}
+              isDarkMode={isDarkMode}
+            />
 
             {/* Render open windows */}
             {openWindows.map((win) => (

@@ -15,8 +15,13 @@ export interface CalendarEventDocument {
   calendarId: string;
   title: string;
   date: string; // YYYY-MM-DD
-  time?: string; // "10:00 AM"
-  notes?: string;
+  startTime?: string; // "09:00"
+  endTime?: string; // "10:00"
+  allDay?: boolean;
+  description?: string;
+  location?: string;
+  reminder?: number; // minutes before event
+  source?: "user" | "holiday" | "ai" | "automation";
   createdAt: Date;
   updatedAt: Date;
 }
@@ -131,7 +136,8 @@ export async function searchEvents(userId: string, query: string): Promise<WithI
       userId,
       $or: [
         { title: { $regex: query, $options: "i" } },
-        { notes: { $regex: query, $options: "i" } },
+        { description: { $regex: query, $options: "i" } },
+        { location: { $regex: query, $options: "i" } },
       ],
     })
     .toArray();

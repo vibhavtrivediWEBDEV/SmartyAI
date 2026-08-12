@@ -6,6 +6,7 @@ import StockCandlestick from "@/app/components/terminal/stocks";
 import { ScienceBook } from "@/app/components/terminal/ai-book";
 import Agent from "@/components/Agent"
 import SmartyTeacherWrapper from "@/app/components/terminal/smartyTeacher";
+import MapsNew from "@/components/Dekstop/MapsNew";
 import type { JSX } from "react/jsx-runtime";
 
 // Example extra imports (adjust as needed)
@@ -177,6 +178,9 @@ export async function handleCommand({
     case "stocks":
       output = <StockCandlestick />;
       break;
+    case "maps":
+      output = <MapsNew windowId="maps-terminal" />;
+      break;
     case "pdf":
       output = <PdfViewer pdfUrl={pdfUrl} />;
       break;
@@ -343,6 +347,7 @@ export async function handleCommand({
             <li><span className="font-bold">excel</span>: Opens Excel editor.</li>
             <li><span className="font-bold">mail</span>: Opens mail sender interface.</li>
             <li><span className="font-bold">stocks</span>: Displays stock candlestick chart.</li>
+            <li><span className="font-bold">maps</span>: Opens interactive Maps with location search.</li>
             <li><span className="font-bold">pdf [url]</span>: Opens PDF viewer with specified URL.</li>
             <li><span className="font-bold">skills</span>: Lists my technical skills.</li>
             <li><span className="font-bold">smarty</span>: Opens Smarty Teacher interface.</li>
@@ -545,6 +550,8 @@ export async function handleCommand({
               'vscode': 'vscode',
               'chrome': 'chrome',
               'browser': 'chrome',
+              'music': 'Music',
+              'phone': 'Phone',
               'spotify': 'Spotify',
               'calendar': 'Calendar',
               'maps': 'Maps',

@@ -453,6 +453,39 @@ export function FakeCursor({
         return () => { window.removeEventListener("cursor-automation-move" as any, move); window.removeEventListener("cursor-automation-click" as any, click); };
     }, []);
 
+    // Visibility enforcement - ensure cursor is always visible
+    useEffect(() => {
+        if (!visible) return;
+        
+        const enforceVisibility = () => {
+            const cursorElements = document.querySelectorAll('[style*="z-index: 214748364"]');
+            cursorElements.forEach((el) => {
+                const htmlEl = el as HTMLElement;
+                if (htmlEl.style.zIndex !== '2147483647') {
+                    htmlEl.style.zIndex = '2147483647';
+                }
+                if (htmlEl.style.visibility !== 'visible') {
+                    htmlEl.style.visibility = 'visible';
+                }
+                if (htmlEl.style.opacity === '0') {
+                    htmlEl.style.opacity = '1';
+                }
+            });
+        };
+
+        // Run visibility check every 500ms
+        const visibilityInterval = setInterval(enforceVisibility, 500);
+        
+        // Also run on DOM mutations (when modals might appear)
+        const observer = new MutationObserver(enforceVisibility);
+        observer.observe(document.body, { childList: true, subtree: true });
+        
+        return () => {
+            clearInterval(visibilityInterval);
+            observer.disconnect();
+        };
+    }, [visible]);
+
     if (!visible) return null;
 
     const isCalibrating = status === "calibrating" || status === "loading";
@@ -463,12 +496,16 @@ export function FakeCursor({
     return (
         <>
             {/* ── Cursor ──────────────────────────────────────────────────────── */}
-            <div className="fixed pointer-events-none" style={{
-                left: pos.x, top: pos.y, zIndex: 2147483647,
-                transform: `translate(-2px,-2px) scale(${clicking ? 0.65 : scrolling ? 0.9 : 1})`,
-                transition: "transform 0.08s cubic-bezier(0.34,1.56,0.64,1)",
-                willChange: "transform",
-            }}>
+            <div 
+                data-cursor="fake-cursor"
+                className="fixed pointer-events-none fake-cursor" 
+                style={{
+                    left: pos.x, top: pos.y, zIndex: 2147483647,
+                    transform: `translate(-2px,-2px) scale(${clicking ? 0.65 : scrolling ? 0.9 : 1})`,
+                    transition: "transform 0.08s cubic-bezier(0.34,1.56,0.64,1)",
+                    willChange: "transform",
+                }}
+            >
                 <svg width="28" height="28" viewBox="0 0 28 28" fill="none"
                     style={{ filter: `drop-shadow(0 1px 8px rgba(0,0,0,0.6)) drop-shadow(0 0 4px ${scrolling ? "#FF9F0A" : color}88)` }}>
                     <path d="M4 2L4 23L9.5 17.5L13 27L17 25.5L13.5 16L23 16L4 2Z"

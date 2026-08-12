@@ -1,0 +1,35 @@
+<svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="excelGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#43A047"/>
+      <stop offset="50%" style="stop-color:#388E3C"/>
+      <stop offset="100%" style="stop-color:#2E7D32"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="48" fill="url(#excelGrad)" opacity="0.95"/>
+  
+  <!-- Excel grid -->
+  <g transform="translate(22, 22)">
+    <!-- Border -->
+    <rect x="0" y="0" width="56" height="56" rx="4" fill="white" opacity="0.15"/>
+    
+    <!-- Grid lines -->
+    <rect x="0" y="14" width="56" height="2" fill="white" opacity="0.9"/>
+    <rect x="0" y="28" width="56" height="2" fill="white" opacity="0.9"/>
+    <rect x="0" y="42" width="56" height="2" fill="white" opacity="0.9"/>
+    <rect x="14" y="0" width="2" height="56" fill="white" opacity="0.9"/>
+    <rect x="28" y="0" width="2" height="56" fill="white" opacity="0.9"/>
+    <rect x="42" y="0" width="2" height="56" fill="white" opacity="0.9"/>
+    
+    <!-- Some cell highlights -->
+    <rect x="2" y="2" width="10" height="10" fill="white" opacity="0.3"/>
+    <rect x="16" y="16" width="10" height="10" fill="white" opacity="0.3"/>
+    <rect x="30" y="30" width="10" height="10" fill="white" opacity="0.3"/>
+    <rect x="44" y="44" width="10" height="10" fill="white" opacity="0.3"/>
+  </g>
+  
+  <!-- Shine effect -->
+  <ellipse cx="38" cy="35" rx="15" ry="10" fill="white" opacity="0.25" transform="rotate(-30 38 35)"/>
+</svg>

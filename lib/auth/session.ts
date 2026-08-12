@@ -49,3 +49,22 @@ export async function getSessionUserId(): Promise<string | null> {
     return null;
   }
 }
+
+export async function getCurrentUser() {
+  const userId = await getSessionUserId()
+  if (!userId) return null
+  
+  // Import dynamically to avoid circular dependency
+  const { findUserById } = await import('@/modules/users/user.repository')
+  const user = await findUserById(userId)
+  
+  if (!user || user.status !== 'active') return null
+  
+  return {
+    id: user._id.toHexString(),
+    name: user.name,
+    email: user.email,
+    plan: user.plan,
+    subscriptionStatus: user.subscriptionStatus ?? 'active'
+  }
+}

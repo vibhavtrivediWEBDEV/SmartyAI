@@ -1,7 +1,7 @@
-import AuthForm from "@/components/AuthForm";
+import MacAuthFlow from "@/components/Auth/MacAuthFlow";
 
 const Page = () => {
-  return <AuthForm type="sign-in" />;
+  return <MacAuthFlow />;
 };
 
 export default Page;

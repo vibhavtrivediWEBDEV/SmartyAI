@@ -97,6 +97,25 @@
   /* cursor: none !important; */
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   FAKE CURSOR - ALWAYS VISIBLE
+   ═══════════════════════════════════════════════════════════════════════════ */
+/* Ensure FakeCursor is always visible above all elements */
+[data-cursor="fake-cursor"],
+.fake-cursor {
+  z-index: 2147483647 !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: none !important;
+}
+
+/* Prevent any modal/overlay from hiding cursor */
+.modal-overlay,
+[role="dialog"],
+[aria-modal="true"] {
+  z-index: max(z-index, 2147483640) !important;
+}
+
 .dark {
   --background: oklch(99.336% 0.00316 15.246);
   --foreground: oklch(0.985 0 0);

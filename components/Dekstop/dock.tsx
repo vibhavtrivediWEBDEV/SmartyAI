@@ -35,6 +35,7 @@ const lucideIconMap: Record<string, string> = {
   Safari: "https://framerusercontent.com/images/qQISGOSSnz748TdrZn91l44R5u0.png",
   Mail: "https://framerusercontent.com/images/fm90fwzWoBMCvK5C0MOyKdo94.png",
   Messages: "https://framerusercontent.com/images/CwKoPLck9kD8CifRkrpug3socM.png",
+  Phone: "https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/phone.svg",
   Maps: "https://framerusercontent.com/images/YtLyrfz2kFN2QhkzBWG6TrATw.png",
   Photos: "https://framerusercontent.com/images/ogWIDEJmWxA8SVRZpEe7gk35FcM.png",
   chrome: "https://tse2.mm.bing.net/th/id/OIP.psOZ1V2b8TrCOZ-Mp42IHAHa?pid=Api&P=0&h=180",
@@ -47,6 +48,11 @@ const lucideIconMap: Record<string, string> = {
   vscode: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/vscode/vscode-original.svg",
   figma: "https://hexadecimal.work/icons/apps/figma.png",
   Spotify: "https://m.media-amazon.com/images/I/51rttY7a+9L.png",
+  Music: "/icons/music.svg",
+  FaceTime: "/icons/facetime.svg",
+  Phone: "/icons/phone.svg",
+  Messages: "/icons/messages.svg",
+  Contacts: "/icons/contacts.svg",
   Terminal: "https://cdn2.iconfinder.com/data/icons/web-application-icons-part-i/100/Artboard_18-512.png",
   Trash: "https://framerusercontent.com/images/XYN0Nl9HILu4c0bzhEPmjha0Cg.png",
 }
@@ -515,7 +521,7 @@ export function Dock({
           border: "1px solid rgba(255,255,255,0.3)",
           backdropFilter: "blur(36px) saturate(210%) brightness(1.08)",
           WebkitBackdropFilter: "blur(36px) saturate(210%) brightness(1.08)",
-          zIndex: 9999999,
+          zIndex: 2147483635, // Below cursor (2147483647) but above windows
           // When gesture mode is on: add a subtle accent shadow to the dock itself
           boxShadow: gestureActive
             ? "0 0 0 1px rgba(10,132,255,0.25), 0 8px 32px rgba(0,0,0,0.5), 0 0 60px rgba(10,132,255,0.12)"

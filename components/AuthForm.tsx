@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 import { signIn, signUp } from "@/lib/actions/auth.action";
+import MacOSLoadingScreen from "./MacOSLoadingScreen";
 
 const authFormSchema = (type: FormType) => {
   return z.object({
@@ -28,6 +29,7 @@ const AuthForm = ({ type }: { type: FormType }) => {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showMacOSLoading, setShowMacOSLoading] = useState(false);
   const [resume, setResume] = useState<File | null>(null);
 
   const formSchema = authFormSchema(type);
@@ -46,9 +48,14 @@ const AuthForm = ({ type }: { type: FormType }) => {
       if (type === "sign-up") {
         if (!resume) {
           toast.error("Please upload your resume as a PDF.");
+          setIsLoading(false);
           return;
         }
-        const { name, email, password } = data;
+
+        // Show macOS loading screen immediately when form is submitted
+        setShowMacOSLoading(true);
+        
+        const {name, email, password} = data;
         const result = await signUp({
           name: name!,
           email,
@@ -58,38 +65,45 @@ const AuthForm = ({ type }: { type: FormType }) => {
         if (!result.success) {
           toast.error(result.message);
           setIsLoading(false);
+          setShowMacOSLoading(false);
           return;
         }
 
+        // Process resume while loading screen is showing
         const resumeForm = new FormData();
         resumeForm.append("resume", resume);
         const resumeResponse = await fetch("/api/profile/resume", {
           method: "POST",
           body: resumeForm,
         });
+        
         if (!resumeResponse.ok) {
           const body = await resumeResponse.json().catch(() => null);
           toast.error(body?.error ?? "Account created, but the resume could not be processed.");
-          router.push("/desktop");
-          router.refresh();
-          return;
+        } else {
+          toast.success("Account created and resume profile generated!");
         }
-
-        toast.success("Account created and resume profile generated!");
+        
+        // Keep loading screen AND redirect to desktop (not marketing page)
         router.push("/desktop");
         router.refresh();
       } else {
+        // Show macOS loading screen for sign-in too
+        setShowMacOSLoading(true);
+        
         const { email, password } = data;
-
         const result = await signIn({ email, password });
+        
         if (!result.success) {
           toast.error(result.message);
+          setIsLoading(false);
+          setShowMacOSLoading(false);
           return;
         }
 
         toast.success("Signed in successfully.");
         
-        // Check if there's a redirect URL
+        // Check if there's a redirect URL, otherwise go to desktop
         const redirectUrl = new URLSearchParams(window.location.search).get("redirect");
         router.push(redirectUrl || "/desktop");
         router.refresh();
@@ -97,8 +111,10 @@ const AuthForm = ({ type }: { type: FormType }) => {
     } catch (error) {
       console.log(error);
       toast.error(`There was an error: ${error}`);
+      setShowMacOSLoading(false);
     } finally {
       setIsLoading(false);
+      // Loading screen remains visible and will disappear when new page loads
     }
   };
 
@@ -111,6 +127,12 @@ const AuthForm = ({ type }: { type: FormType }) => {
   ];
 
   return (
+    <>
+      {/* macOS Loading Screen Overlay */}
+      <MacOSLoadingScreen 
+        isLoading={showMacOSLoading} 
+        message="Setting up your workspace..."
+      />
     <div className="min-h-screen bg-black flex items-center justify-center relative overflow-x-hidden overflow-y-auto py-8">
       {/* Background Effects */}
       <div className="absolute inset-0">
@@ -391,6 +413,7 @@ const AuthForm = ({ type }: { type: FormType }) => {
         </motion.div>
       </div>
     </div>
+    </>
   );
 };
 

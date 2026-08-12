@@ -15,10 +15,10 @@ import SettingsPanel from '@/components/Dekstop/Settings'
 import { AISearch } from '@/app/components/terminal/AiSearch'
 import Vscode from '@/components/Dekstop/VsCode'
 import Browser from '@/components/Dekstop/chrome'
-import Spotify from '@/components/Dekstop/spotify'
+import MusicApp from '@/components/Dekstop/MusicApp'
 import Maps from '@/components/Dekstop/Maps'
 import Youtube from '@/components/Dekstop/yt'
-import Calender from '@/components/Dekstop/Calender'
+import EnhancedCalendar from '@/components/Desktop/EnhancedCalendar'
 import { ExcelEditor } from '@/app/components/terminal/ExcelEditor'
 import { MailSender } from '@/app/components/terminal/mail-sender'
 import { PdfViewer } from '@/app/components/terminal/pdfviwer'
@@ -27,6 +27,7 @@ import { ProjectExplorerWindow } from '@/components/Dekstop/ProjectExpWindow'
 import { ProjectsFolder } from '@/components/Dekstop/ProjectsFolder'
 import { EasterEggWindow } from '@/components/Dekstop/EasterEggWindow'
 import DomeGallery from '@/components/animationComponents/gallery'
+import MacGallery from '@/components/Dekstop/MacGallery'
 import InfiniteMenu from '@/components/animationComponents/newsGallery'
 import GamePage from '@/components/Dekstop/Game'
 import Webpage from '@/components/Dekstop/webpage'
@@ -34,6 +35,9 @@ import Figma from '@/components/Dekstop/figma'
 import PremiumNotes from '@/components/Dekstop/notesapp'
 import { AutomationControlPanel } from '@/components/Dekstop/AutomationControlPannel'
 import { ATSResumeBuilder } from '@/components/Dekstop/ATSResumeBuilder'
+import ContactsApp from '@/components/Dekstop/Contacts'
+import MessagesApp from '@/components/Dekstop/MessagesApp'
+import PhoneApp from '@/components/Dekstop/PhoneApp'
 
 /**
  * App Configuration Interface
@@ -255,9 +259,9 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
     name: 'Calendar',
     displayName: 'Calendar',
     icon: '/icons/calendar.png',
-    component: Calender,
-    defaultWidth: 640,
-    defaultHeight: 500,
+    component: EnhancedCalendar,
+    defaultWidth: 1200,
+    defaultHeight: 800,
     automatable: true,
     category: 'productivity'
   },
@@ -305,14 +309,15 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
   // MEDIA APPS
   // ═══════════════════════════════════════════════════════════════
 
-  Spotify: {
-    name: 'Spotify',
-    displayName: 'Spotify',
-    icon: '/icons/spotify.png',
-    component: Spotify,
-    defaultWidth: 400,
-    defaultHeight: 500,
-    minWidth: 300,
+  Music: {
+    name: 'Music',
+    displayName: 'Music',
+    icon: '/icons/music.svg',
+    component: MusicApp,
+    defaultWidth: 900,
+    defaultHeight: 650,
+    minWidth: 700,
+    minHeight: 500,
     automatable: true,
     category: 'media'
   },
@@ -332,7 +337,7 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
     name: 'Photos',
     displayName: 'Photos',
     icon: '/icons/camera.png',
-    component: DomeGallery,
+    component: MacGallery,
     defaultWidth: 900,
     defaultHeight: 650,
     automatable: true,
@@ -362,6 +367,36 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
     defaultHeight: 700,
     automatable: true,
     category: 'media'
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // COMMUNICATION APPS
+  // ═══════════════════════════════════════════════════════════════
+
+  Messages: {
+    name: 'Messages',
+    displayName: 'Messages',
+    icon: '/icons/messages.svg',
+    component: MessagesApp,
+    defaultWidth: 900,
+    defaultHeight: 650,
+    minWidth: 700,
+    minHeight: 500,
+    automatable: true,
+    category: 'productivity'
+  },
+
+  Phone: {
+    name: 'Phone',
+    displayName: 'Phone',
+    icon: '/icons/phone.svg',
+    component: PhoneApp,
+    defaultWidth: 800,
+    defaultHeight: 650,
+    minWidth: 600,
+    minHeight: 500,
+    automatable: true,
+    category: 'productivity'
   },
 
   // ═══════════════════════════════════════════════════════════════
@@ -467,6 +502,17 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
     icon: '/icons/book.png',
     component: React.lazy(() => import('@/app/components/terminal/ai-book').then(m => ({ default: m.ScienceBook }))),
     defaultWidth: 700,
+    defaultHeight: 600,
+    automatable: true,
+    category: 'productivity'
+  },
+
+  Contacts: {
+    name: 'Contacts',
+    displayName: 'Contacts',
+    icon: '/icons/contacts.png',
+    component: ContactsApp,
+    defaultWidth: 800,
     defaultHeight: 600,
     automatable: true,
     category: 'productivity'

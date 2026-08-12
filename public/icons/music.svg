@@ -1,0 +1,24 @@
+<svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="musicGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF6B6B"/>
+      <stop offset="50%" style="stop-color:#EE5A6F"/>
+      <stop offset="100%" style="stop-color:#C44569"/>
+    </linearGradient>
+    <linearGradient id="musicGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFA07A"/>
+      <stop offset="100%" style="stop-color:#FF6347"/>
+    </linearGradient>
+  </defs>
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="48" fill="url(#musicGrad)" opacity="0.95"/>
+  
+  <!-- Music note -->
+  <g transform="translate(25, 25) scale(0.5)">
+    <path d="M75 52.5V15C75 13.62 74.49 12.28 73.53 11.15C72.57 10.02 71.22 9.19 69.69 8.82L34.69 0.82C33.46 0.53 32.16 0.5 30.91 0.74C29.67 0.98 28.52 1.48 27.56 2.19C26.6 2.9 25.86 3.8 25.39 4.81C24.93 5.82 24.76 6.91 24.9 8L24.9 44.85C23.28 44.25 21.51 43.95 19.71 43.98C14.87 43.98 11 46.68 11 50C11 53.32 14.87 56.02 19.71 56.02C24.55 56.02 28.42 53.32 28.42 50C28.42 49.87 28.42 49.74 28.4 49.61L28.4 15.5L68.87 24.21V47.35C67.25 46.75 65.48 46.45 63.68 46.48C58.84 46.48 54.97 49.18 54.97 52.5C54.97 55.82 58.84 58.52 63.68 58.52C68.52 58.52 72.39 55.82 72.39 52.5C72.39 52.37 72.39 52.24 72.37 52.11L75 52.5Z" 
+          fill="white" opacity="0.95"/>
+  </g>
+  
+  <!-- Shine effect -->
+  <ellipse cx="38" cy="35" rx="15" ry="10" fill="white" opacity="0.3" transform="rotate(-30 38 35)"/>
+</svg>

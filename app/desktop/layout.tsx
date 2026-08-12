@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import { redirect } from "next/navigation";
+import DesktopClientLayout from "./LockScreenClient";
 
 import { isAuthenticated } from "@/lib/actions/auth.action";
 
@@ -19,5 +20,9 @@ export default async function DesktopLayout({
     redirect("/sign-in?redirect=/desktop");
   }
 
-  return children;
+  return (
+    <DesktopClientLayout>
+      {children}
+    </DesktopClientLayout>
+  );
 }

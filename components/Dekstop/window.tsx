@@ -53,6 +53,8 @@ export function Window({
   children,
 }: WindowProps) {
 
+  // 🎯 TOP BAR HEIGHT - Must stay above all windows
+  const TOP_BAR_HEIGHT = 28; // h-7 = 28px (TopBar z-index: 999998)
 
   const { settings } = useSettings()
   const [x, setX] = useState(initialX)
@@ -398,9 +400,9 @@ export function Window({
       const desktopRect = desktopRef.current.getBoundingClientRect()
       setPrevBounds({ x, y, width, height })
       setX(0)
-      setY(0)
+      setY(TOP_BAR_HEIGHT) // Start below TopBar
       setWidth(desktopRect.width)
-      setHeight(desktopRect.height)
+      setHeight(desktopRect.height - TOP_BAR_HEIGHT) // Account for TopBar height
     }
   }, [initialIsMaximized, desktopRef])
 
@@ -413,7 +415,7 @@ export function Window({
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     const target = isMaximized && prevBounds && !isMobile
       ? prevBounds
-      : { x: 0, y: 0, width: desktopRect.width, height: desktopRect.height }
+      : { x: 0, y: TOP_BAR_HEIGHT, width: desktopRect.width, height: desktopRect.height - TOP_BAR_HEIGHT } // Account for TopBar
 
     const commitBounds = () => {
       if (isMaximized) {
@@ -427,9 +429,9 @@ export function Window({
       } else {
         setPrevBounds({ x, y, width, height })
         setX(0)
-        setY(0)
+        setY(TOP_BAR_HEIGHT) // Start below TopBar
         setWidth(desktopRect.width)
-        setHeight(desktopRect.height)
+        setHeight(desktopRect.height - TOP_BAR_HEIGHT) // Account for TopBar
         setIsMaximized(true)
       }
       isTransitioningRef.current = false
@@ -530,71 +532,92 @@ export function Window({
       onMouseDown={() => onFocus(id)}
       onTouchStart={() => onFocus(id)}
     >
-      {/* Title Bar - Responsive */}
+      {/* 🎨 Modern macOS Traffic Light Buttons - Left Side */}
       <div
         // 🎯 AUTOMATION: Title bar ID
         id={`${id}-titlebar`}
         data-automation="titlebar"
-        className={`flex items-center justify-between px-3 cursor-grab active:cursor-grabbing select-none flex-shrink-0 backdrop-blur-xl ${isMobile ? "py-3 h-14" : "py-2 h-10"
-          }`}
+        className={`absolute left-4 flex items-center gap-2 group z-10 ${isMobile ? "top-4" : "top-3"}`}
+      >
+        {/* Close Button */}
+        <div
+          onClick={handleClose}
+          // 🎯 AUTOMATION: Close button ID
+          id={`${id}-close`}
+          data-automation="close-button"
+          data-window-id={id}
+          className={`window-control-button w-3 h-3 bg-[#ff5f57] rounded-full cursor-pointer flex items-center justify-center hover:bg-[#ff4136] transition-all duration-150 shadow-sm ${isMobile ? "w-5 h-5" : "w-3 h-3"}`}
+          title="Close"
+        >
+          <svg className={`text-[#820005] opacity-0 group-hover:opacity-100 transition-opacity ${isMobile ? "w-2.5 h-2.5" : "w-1.5 h-1.5"}`} viewBox="0 0 10 10">
+            <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+        </div>
+        
+        {/* Minimize Button */}
+        <div
+          onClick={handleMinimize}
+          // 🎯 AUTOMATION: Minimize button ID
+          id={`${id}-minimize`}
+          data-automation="minimize-button"
+          data-window-id={id}
+          className={`window-control-button w-3 h-3 bg-[#febc2e] rounded-full cursor-pointer flex items-center justify-center hover:bg-[#ff9500] transition-all duration-150 shadow-sm ${isMobile ? "w-5 h-5" : "w-3 h-3"}`}
+          title="Minimize"
+        >
+          <svg className={`text-[#9a6400] opacity-0 group-hover:opacity-100 transition-opacity ${isMobile ? "w-2.5 h-2.5" : "w-1.5 h-1.5"}`} viewBox="0 0 10 10">
+            <path d="M1 5H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+        </div>
+        
+        {/* Maximize Button */}
+        <div
+          onClick={handleMaximize}
+          // 🎯 AUTOMATION: Maximize button ID
+          id={`${id}-maximize`}
+          data-automation="maximize-button"
+          data-window-id={id}
+          className={`window-control-button w-3 h-3 bg-[#28c840] rounded-full cursor-pointer flex items-center justify-center hover:bg-[#1aab29] transition-all duration-150 shadow-sm ${isMobile ? "w-5 h-5" : "w-3 h-3"}`}
+          title={isMaximized ? "Restore" : "Maximize"}
+        >
+          {isMaximized ? (
+            <svg className={`text-[#006400] opacity-0 group-hover:opacity-100 transition-opacity ${isMobile ? "w-2.5 h-2.5" : "w-1.5 h-1.5"}`} viewBox="0 0 10 10">
+              <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          ) : (
+            <svg className={`text-[#006400] opacity-0 group-hover:opacity-100 transition-opacity ${isMobile ? "w-2.5 h-2.5" : "w-1.5 h-1.5"}`} viewBox="0 0 10 10">
+              <path d="M2 2L8 2M2 2L2 8M2 2L8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+          )}
+        </div>
+      </div>
+      
+      {/* Window Title - Center */}
+      <div
+        className={`flex items-center justify-center cursor-grab active:cursor-grabbing select-none flex-shrink-0 backdrop-blur-xl ${
+          isMobile ? "py-3 h-14" : "py-2.5 h-11"
+        }`}
         style={{
-          background: "rgba(255, 255, 255, 0.1)",
-          borderBottom: "1px solid rgba(255, 255, 255, 0.15)",
+          background: "rgba(255, 255, 255, 0.05)",
+          borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
         }}
         onMouseDown={handleMouseDown}
         onTouchStart={handleMouseDown}
       >
-        <div className="flex items-center space-x-2 flex-shrink-0">
-          <button
-            onClick={handleClose}
-            // 🎯 AUTOMATION: Close button ID
-            id={`${id}-close`}
-            data-automation="close-button"
-            data-window-id={id}
-            className={`window-control-button cursor-pointer rounded-full bg-red-500/90 hover:bg-red-600 flex-shrink-0 transition-colors backdrop-blur-sm ${isMobile ? "w-5 h-5" : "w-3 h-3"
-              }`}
-            aria-label="Close window"
-          />
-          <button
-            onClick={handleMinimize}
-            // 🎯 AUTOMATION: Minimize button ID
-            id={`${id}-minimize`}
-            data-automation="minimize-button"
-            data-window-id={id}
-            className={`window-control-button cursor-pointer rounded-full bg-yellow-500/90 hover:bg-yellow-600 flex-shrink-0 transition-colors backdrop-blur-sm ${isMobile ? "w-5 h-5" : "w-3 h-3"
-              }`}
-            aria-label="Minimize window"
-          />
-          <button
-            onClick={handleMaximize}
-            // 🎯 AUTOMATION: Maximize button ID
-            id={`${id}-maximize`}
-            data-automation="maximize-button"
-            data-window-id={id}
-            className={`window-control-button cursor-pointer rounded-full bg-green-500/90 hover:bg-green-600 flex-shrink-0 transition-colors backdrop-blur-sm ${isMobile ? "w-5 h-5" : "w-3 h-3"
-              }`}
-            aria-label="Maximize window"
-          />
-        </div>
-
-        <div className="flex items-center space-x-2 absolute left-1/2 -translate-x-1/2 pointer-events-none flex-shrink-0">
+        <div className="flex items-center space-x-2 pointer-events-none">
           {icon && (
             <SearchIcon
-              size={isMobile ? 16 : 12}
-              className="text-white/90"
+              size={isMobile ? 16 : 14}
+              className="text-white/80"
             />
           )}
           <span
-            className={`font-semibold text-white/90 truncate drop-shadow-sm ${isMobile ? "text-base" : "text-sm"
-              }`}
+            className={`font-semibold text-white/90 truncate drop-shadow-sm ${
+              isMobile ? "text-base" : "text-sm"
+            }`}
           >
             {title}
-            {/* [{zIndex}] */}
-            {/* [ID: {id}] */}
           </span>
         </div>
-
-        <div className="w-16 flex-shrink-0" />
       </div>
 
       {/* Window Content - Responsive */}
