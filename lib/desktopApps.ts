@@ -53,6 +53,7 @@ export const DESKTOP_APPS: DesktopAppDefinition[] = [
 export const DEFAULT_DOCK_APPS = [
   'Finder',
   'Safari',
+  'Maps',
   'FaceTime',
   'Messages',
   'Mail',

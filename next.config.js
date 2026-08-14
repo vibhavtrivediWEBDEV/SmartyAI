@@ -1,5 +1,4 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+/** @type {import('next').NextConfig} */const nextConfig = {
    eslint: {
     ignoreDuringBuilds: true,
   },
@@ -10,6 +9,17 @@ const nextConfig = {
 
   images: {
     domains: ['i.pinimg.com','oaidalleapiprodscus.blob.core.windows.net','framerusercontent.com','images.unsplash.com','media.licdn.com'],
+  },
+
+  webpack: (config, { isServer }) => {
+    // Handle maplibre-gl module resolution
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+      };
+    }
+    return config;
   },
 }
 

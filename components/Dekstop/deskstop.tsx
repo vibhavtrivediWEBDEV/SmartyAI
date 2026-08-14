@@ -48,6 +48,8 @@ import { useElevenTTS } from "@/hooks/ElevenLabs"
 import { resolveSequence } from "@/lib/helper/helper"
 import { VoiceControlButton } from "./VoiceControlButton"
 import { getFormattedCommandsWithExamples } from "@/lib/helper/commandRegistry"
+import { useWindowLayout } from "@/hooks/useWindowLayout"
+import { SnapPreview } from "./SnapPreview"
 import LoveCounter from "./macFeedback"
 import AppleTopBar from "../Desktop/APpleTopBar"
 import FileIcon from "./fileicon"
@@ -67,6 +69,7 @@ import SmartyInterview from "@/app/components/terminal/smartyInterview"
 import SmartyTeacherWrapper from "@/app/components/terminal/smartyTeacher"
 import { DynamicAgGridConfigurator } from "./dataTableViewer"
 import { getUserAIContext, type UserAIContext } from "@/lib/ai/userAIContext"
+import { useSocketIO } from "@/hooks/useSocketIO"
 import WidgetGallery from "../Desktop/widgets/WidgetGallery"
 import CalendarWidget from "../Desktop/widgets/CalendarWidget"
 import WeatherWidget from "../Desktop/widgets/WeatherWidget"
@@ -85,8 +88,10 @@ import GlassSFWeatherWidget from "../Desktop/widgets/GlassSFWeatherWidget"
 import DraggableWidget from "../Desktop/widgets/DraggableWidget"
 import WebWidget from "../Desktop/widgets/WebWidget"
 import SnapshotWidget from "../Desktop/widgets/SnapshotWidget"
+import WebCaptureWidget from "../Desktop/widgets/WebCaptureWidget"
 import WidgetCreationModal from "../Desktop/WidgetCreationModal"
-import { WidgetStore, type Widget, type WebWidget as WebWidgetType, type SnapshotWidget as SnapshotWidgetType } from "@/lib/store/widgetStore"
+import WebpageCropper from "../Desktop/WebpageCropper"
+import { WidgetStore, type Widget, type WebWidget as WebWidgetType, type SnapshotWidget as SnapshotWidgetType, type WebCaptureWidget as WebCaptureWidgetType } from "@/lib/store/widgetStore"
 
 interface WindowState {
   id: string
@@ -101,7 +106,8 @@ interface WindowState {
   isMinimized: boolean
   isMaximized: boolean
   zIndex: number
-  isPanel?: boolean // 🆕 Window snapped to panel (right side 30%)
+  previousBounds?: { x: number; y: number; width: number; height: number } // For restore after maximize
+  snapPosition?: 'left-50' | 'right-50' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'maximized' | null
 }
 
 interface IconItem {
@@ -134,6 +140,138 @@ export function Desktop() {
   const unlockedAppsRef = useRef(new Set<string>())
   const [userContext, setUserContext] = useState<UserAIContext | null>(null)
 
+  // 🤖 Socket.io for Telegram integration (defined here but will be connected after automationAPI is available)
+  const sendResultRef = useRef<((commandId: string, success: boolean, message?: string, requestId?: string) => void) | null>(null)
+  const automationAPIRef = useRef<any>(null) // Store automationAPI in ref
+  
+  const handleTelegramCommand = useCallback(async (data: { requestId?: string; commandId: string; command?: string; sequence?: any[] }) => {
+    console.log('\n' + '📩'.repeat(80))
+    console.log('[Desktop] 📨 AUTOMATION-COMMAND EVENT RECEIVED')
+    console.log(`   Request ID: ${data.requestId || 'N/A'}`)
+    console.log(`   Command ID: ${data.commandId}`)
+    console.log(`   Command: ${data.command || 'N/A'}`)
+    console.log(`   Sequence: ${JSON.stringify(data.sequence, null, 2) || 'N/A'}`)
+    console.log(`   Timestamp: ${new Date().toISOString()}`)
+    console.log('[Desktop] 🔍 Checking automationAPI availability...')
+    console.log(`   automationAPIRef.current: ${automationAPIRef.current ? 'AVAILABLE ✅' : 'NULL ❌'}`)
+    console.log('📩'.repeat(80) + '\n')
+    
+    // Execute immediately if automationAPI is available
+    if (automationAPIRef.current) {
+      try {
+        let success = false
+        
+        // NEW: Handle automation sequence (from AI processed command)
+        if (data.sequence && Array.isArray(data.sequence)) {
+          console.log('\n' + '🚀'.repeat(80))
+          console.log('[Desktop] 🚀 EXECUTING AUTOMATION SEQUENCE')
+          console.log(`   Request ID: ${data.requestId || 'N/A'}`)
+          console.log(`   Command ID: ${data.commandId}`)
+          console.log(`   Sequence:`, JSON.stringify(data.sequence, null, 2))
+          console.log('[Desktop] ⚡ Calling automationAPIRef.current.executeSequence()...')
+          console.log('🚀'.repeat(80) + '\n')
+          
+          success = await automationAPIRef.current.executeSequence(data.sequence)
+          
+          console.log('\n' + '📥'.repeat(80))
+          console.log('[Desktop] 📥 AUTOMATION EXECUTION COMPLETE')
+          console.log(`   Success: ${success}`)
+          console.log(`   Request ID: ${data.requestId || 'N/A'}`)
+          console.log('📥'.repeat(80) + '\n')
+          
+          if (success) {
+            toast.success(`✅ Telegram automation executed`)
+          } else {
+            toast.error(`❌ Telegram automation failed`)
+          }
+        } 
+        // OLD: Handle raw command (backward compatibility)
+        else if (data.command) {
+          console.log('[Desktop] 🤖 Step 1: Executing Telegram command:', data.command)
+          console.log(`[Desktop]    Request ID: ${data.requestId || 'N/A'}`)
+          
+          success = await automationAPIRef.current.executeTextCommand(data.command)
+          
+          console.log('[Desktop] 📥 Step 2: Command execution result:', success)
+          
+          if (success) {
+            toast.success(`✅ Telegram: ${data.command}`)
+          } else {
+            toast.error(`❌ Telegram failed: ${data.command}`)
+          }
+        }
+        
+        // Send result back to server (for Telegram webhook to receive)
+        if (sendResultRef.current) {
+          console.log('\n' + '📤'.repeat(80))
+          console.log('[Desktop] 📤 Step 3: Sending result back to server')
+          console.log(`   Request ID: ${data.requestId || 'N/A'}`)
+          console.log(`   Command ID: ${data.commandId}`)
+          console.log(`   Success: ${success}`)
+          console.log(`   Message: ${success ? 'Command executed successfully' : 'Command execution failed'}`)
+          console.log('📤'.repeat(80) + '\n')
+          
+          sendResultRef.current(
+            data.commandId,
+            success,
+            success ? 'Command executed successfully' : 'Command execution failed',
+            data.requestId
+          )
+          
+          console.log('[Desktop] ✅ Result sent via Socket.io')
+        }
+      } catch (error) {
+        console.log('\n' + '❌'.repeat(80))
+        console.log('[Desktop] 💥 AUTOMATION ERROR')
+        console.log(`   Error: ${error}`)
+        console.log(`   Stack: ${error instanceof Error ? error.stack : 'N/A'}`)
+        console.log('❌'.repeat(80) + '\n')
+        
+        if (sendResultRef.current) {
+          sendResultRef.current(data.commandId, false, error instanceof Error ? error.message : 'Unknown error', data.requestId)
+        }
+        
+        toast.error(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      }
+    } else {
+      // Store command for later execution if automationAPI not ready yet
+      console.log('[Desktop] ⏳ WARNING: automationAPI not ready, storing command for later')
+      pendingTelegramCommandRef.current = data
+    }
+  }, [])
+
+  const { socket: socketIO, isConnected: isSocketConnected } = useSocketIO({
+    userId: userContext?.userId,
+    enabled: !!userContext?.userId,
+    onCommand: handleTelegramCommand
+  })
+
+  // Store sendResult function in ref
+  useEffect(() => {
+    if (socketIO) {
+      sendResultRef.current = (commandId: string, success: boolean, message?: string, requestId?: string) => {
+        console.log('[Desktop] 📤 Sending result via Socket.io:', { 
+          requestId: requestId || 'N/A',
+          commandId, 
+          success, 
+          connected: socketIO.connected 
+        });
+        
+        // Always emit, even if not connected - Socket.io will queue it
+        socketIO.emit('automation-result', {
+          requestId,
+          commandId,
+          userId: userContext?.userId,  // ← Add userId for room broadcast
+          success,
+          message,
+          timestamp: Date.now()
+        })
+      }
+    }
+  }, [socketIO, userContext?.userId])
+
+  const pendingTelegramCommandRef = useRef<{ commandId: string; command: string } | null>(null)
+
 
 
   const { speak } = useElevenTTS()
@@ -158,13 +296,99 @@ export function Desktop() {
     return topZIndexRef.current
   }, [])
   
-  // NEW: Panel system - right side 30% area for panel windows
-  const [panelWindows, setPanelWindows] = useState<WindowState[]>([])
-  const PANEL_WIDTH_PERCENT = 0.30 // 30% of viewport
-  
-  // NEW: Browser search state
+  // Browser search state (no more panel system)
   const [browserSearchQuery, setBrowserSearchQuery] = useState<string | null>(null)
   const [browserDirectUrl, setBrowserDirectUrl] = useState<string | null>(null)
+  
+  // 🆕 Intelligent Window Layout Manager
+  const { 
+    handleWindowDrag: handleDrag, 
+    handleWindowDragEnd: handleDragEnd, 
+    snapPreview, 
+    activeSnapZone 
+  } = useWindowLayout({
+    windows: openWindowsRef.current,
+    onWindowUpdate: (windowId, updates) => {
+      setOpenWindows(prev => prev.map(w => w.id === windowId ? { ...w, ...updates } : w))
+    }
+  })
+  
+  // Wrap drag handler to track dragging window ID
+  const [draggingWindowId, setDraggingWindowId] = useState<string | null>(null)
+  
+  const handleWindowDrag = useCallback((windowId: string, bounds: any) => {
+    setDraggingWindowId(windowId)
+    
+    // Check if window was previously snapped and is now being moved
+    // If moving away from snap zone, restore previous size
+    const win = openWindows.find(w => w.id === windowId)
+    if (win?.previousBounds && win?.snapPosition) {
+      // Window was snapped, check if we're moving away from snap
+      const isMovingToSnapZone = activeSnapZone !== null
+      if (!isMovingToSnapZone) {
+        // Restore previous bounds (custom size)
+        setOpenWindows(prev => prev.map(w => {
+          if (w.id === windowId && w.previousBounds) {
+            return {
+              ...w,
+              x: bounds.x,
+              y: bounds.y,
+              width: w.previousBounds.width,
+              height: w.previousBounds.height,
+              snapPosition: null // Clear snap
+            }
+          }
+          return w
+        }))
+      }
+    }
+    
+    handleDrag(windowId, bounds)
+  }, [handleDrag, openWindows, activeSnapZone])
+  
+  const handleWindowDragEnd = useCallback((windowId: string) => {
+    const snappedBounds = handleDragEnd(windowId)
+    
+    // Animate window to snapped position
+    if (snappedBounds && activeSnapZone) {
+      setOpenWindows(prev => prev.map(w => {
+        if (w.id === windowId) {
+          // Save current bounds before snapping (for restore)
+          const shouldSavePrevious = w.snapPosition === null // Only save if not already snapped
+          
+          return {
+            ...w,
+            x: snappedBounds.x,
+            y: snappedBounds.y,
+            width: snappedBounds.width,
+            height: snappedBounds.height,
+            snapPosition: activeSnapZone.position,
+            // Save previous custom size for restoration
+            previousBounds: shouldSavePrevious ? {
+              x: w.x,
+              y: w.y,
+              width: w.width,
+              height: w.height
+            } : w.previousBounds
+          }
+        }
+        return w
+      }))
+    } else {
+      // No snap zone - clear snap position if it was set
+      setOpenWindows(prev => prev.map(w => {
+        if (w.id === windowId && w.snapPosition) {
+          return {
+            ...w,
+            snapPosition: null
+          }
+        }
+        return w
+      }))
+    }
+    
+    setDraggingWindowId(null)
+  }, [handleDragEnd, activeSnapZone])
   
   // 🆕 Track persistent window instances (by appName)
   const persistentWindowRefs = useRef<Map<string, WindowState>>(new Map())
@@ -197,11 +421,21 @@ export function Desktop() {
     type: string;
     x: number;
     y: number;
-  }>>(() => {
-    if (typeof window === 'undefined') return [];
-    const stored = localStorage.getItem("os_desktop_widgets");
-    return stored ? JSON.parse(stored) : [];
-  });
+  }>>([]);
+
+  // Load widgets from localStorage on client-side only
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const widgets = WidgetStore.loadWidgets();
+        setWidgets(widgets);
+      } catch (error) {
+        console.error('Failed to load widgets:', error);
+        // Clear corrupted data
+        localStorage.removeItem("os_desktop_widgets");
+      }
+    }
+  }, []);
   
   const [showWidgetGallery, setShowWidgetGallery] = useState(false);
   
@@ -211,6 +445,9 @@ export function Desktop() {
     url: '',
     title: ''
   });
+  
+  // 🎥 Webpage Cropper State (for Puppeteer capture)
+  const [showWebpageCropper, setShowWebpageCropper] = useState(false);
 
   const [UserIcon, setuserIcons] = useState<IconItem[]>([])
   // news items
@@ -260,7 +497,8 @@ export function Desktop() {
   useEffect(() => {
     getUserAIContext().then(ctx => {
       setUserContext(ctx);
-      console.log('✅ User context loaded:', ctx?.displayName);
+      console.log('✅ User context loaded:', ctx?.displayName, 'UserId:', ctx?.userId);
+      console.log('🔌 WebSocket will connect with userId:', ctx?.userId);
     }).catch(error => {
       console.error('Failed to load user context:', error);
     });
@@ -884,24 +1122,32 @@ export function Desktop() {
 
       const isAlwaysMax = ['vscode', 'game', 'App Store'].includes(appName)
       
-      // 🆕 Panel apps - Chrome opens in right panel (30% width, full height)
-      const isPanelApp = ['chrome', 'Chrome'].includes(appName)
+      // Calculate smart position using cascade pattern (no more hardcoded 30% panel)
       const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
       const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 1080;
       
-      let windowX = initialX !== undefined ? initialX : Math.random() * 100 + 50;
-      let windowY = initialY !== undefined ? initialY : Math.random() * 50 + 50;
-      let windowWidth = defaultWidth;
-      let windowHeight = defaultHeight;
-      let isPanel = false;
-
-      if (isPanelApp) {
-        // Panel positioning: right side 30%, full height
-        isPanel = true;
-        windowWidth = Math.floor(viewportWidth * PANEL_WIDTH_PERCENT);
-        windowHeight = viewportHeight;
-        windowX = viewportWidth - windowWidth; // Right edge
-        windowY = 0; // Top
+      // Smart positioning: Center with cascade offset
+      let windowX: number;
+      let windowY: number;
+      
+      if (initialX !== undefined && initialY !== undefined) {
+        // Use provided position
+        windowX = initialX;
+        windowY = initialY;
+      } else {
+        // Calculate cascade position based on existing windows
+        const existingWindows = openWindowsRef.current.filter(w => !w.isMinimized);
+        const cascadeOffset = existingWindows.length * 30;
+        
+        // Center-based cascade
+        windowX = Math.max(50, Math.min(
+          (viewportWidth - defaultWidth) / 2 + cascadeOffset,
+          viewportWidth - defaultWidth - 50
+        ));
+        windowY = Math.max(28 + 50, Math.min( // 28 = TopBar height
+          (viewportHeight - defaultHeight) / 2 + cascadeOffset,
+          viewportHeight - defaultHeight - 80 // 80 = Dock height
+        ));
       }
 
       const z = claimTopZIndex();
@@ -913,12 +1159,11 @@ export function Desktop() {
         component, // Store component in window state
         x: windowX,
         y: windowY,
-        width: windowWidth,
-        height: windowHeight,
+        width: defaultWidth,
+        height: defaultHeight,
         isMinimized: false,
         isMaximized: isAlwaysMax,
         zIndex: z,
-        isPanel,
       };
 
       // Update the ref immediately so rapid clicks cannot launch duplicates
@@ -985,6 +1230,55 @@ export function Desktop() {
     speak
   );
 
+  // 🤖 Update automationAPIRef when automationAPI changes
+  useEffect(() => {
+    if (automationAPI) {
+      automationAPIRef.current = automationAPI
+      console.log('[Desktop] 🤖 automationAPI initialized')
+    }
+  }, [automationAPI])
+
+  // 🤖 Execute pending Telegram commands when automationAPI is ready
+  useEffect(() => {
+    if (automationAPI && pendingTelegramCommandRef.current) {
+      const command = pendingTelegramCommandRef.current
+      
+      const executeCommand = async () => {
+        try {
+          console.log('[Desktop] 🤖 Executing Telegram command:', command.command)
+          
+          const success = await automationAPI.executeTextCommand(command.command)
+          
+          if (sendResultRef.current) {
+            sendResultRef.current(
+              command.commandId,
+              success,
+              success ? 'Command executed successfully' : 'Command execution failed'
+            )
+          }
+          
+          if (success) {
+            toast.success(`✅ Telegram: ${command.command}`)
+          } else {
+            toast.error(`❌ Telegram failed: ${command.command}`)
+          }
+        } catch (error) {
+          console.error('[Desktop] Automation error:', error)
+          
+          if (sendResultRef.current) {
+            sendResultRef.current(command.commandId, false, error instanceof Error ? error.message : 'Unknown error')
+          }
+          
+          toast.error(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        } finally {
+          pendingTelegramCommandRef.current = null
+        }
+      }
+      
+      executeCommand()
+    }
+  }, [automationAPI])
+
   useEffect(() => {
     const handleAppStoreLaunch = (event: Event) => {
       const appName = (event as CustomEvent<{ name?: string }>).detail?.name
@@ -995,6 +1289,28 @@ export function Desktop() {
     return () => window.removeEventListener("smarty:open-app", handleAppStoreLaunch)
   }, [openApplication])
 
+  // 🤖 Handle Telegram automation commands
+  useEffect(() => {
+    const handleTelegramAutomation = async (event: Event) => {
+      const detail = (event as CustomEvent<{ command?: string }>).detail
+      const command = detail?.command
+      
+      if (command && automationAPI) {
+        console.log('[Telegram Automation] Executing:', command)
+        
+        const success = await automationAPI.executeTextCommand(command)
+        
+        if (success) {
+          console.log('[Telegram Automation] ✅ Success')
+        } else {
+          console.error('[Telegram Automation] ❌ Failed')
+        }
+      }
+    }
+
+    window.addEventListener('telegram:automation', handleTelegramAutomation as EventListener)
+    return () => window.removeEventListener('telegram:automation', handleTelegramAutomation as EventListener)
+  }, [automationAPI])
 
   useEffect(() => {
     (window as any).automationAPI = automationAPI;
@@ -1009,9 +1325,7 @@ export function Desktop() {
       testCommand: (cmd: string) => automationAPI.executeTextCommand(cmd)
     };
 
-    console.log('🎮 Automation API ready!');
-    console.log('Try: window.debugAutomation.testCommand("open terminal")');
-    console.log('Or:  window.automationAPI.openWindow("Terminal")');
+    console.log('[Desktop] ✅ Automation API initialized');
   }, [automationAPI]);
 
   //git hub vs code 
@@ -1313,6 +1627,18 @@ export function Desktop() {
     return () => window.removeEventListener('browser:add-widget', handleBrowserAddWidget as EventListener);
   }, []);
 
+  // 🎥 Handle browser "Capture Region" event (Puppeteer)
+  useEffect(() => {
+    const handleBrowserCaptureRegion = (e: CustomEvent) => {
+      const { url, title } = e.detail;
+      setWidgetCreationData({ url, title });
+      setShowWebpageCropper(true);
+    };
+
+    window.addEventListener('browser:capture-region', handleBrowserCaptureRegion as EventListener);
+    return () => window.removeEventListener('browser:capture-region', handleBrowserCaptureRegion as EventListener);
+  }, []);
+
   // 🌐 Create live web widget
   const handleCreateWebWidget = useCallback((url: string, title: string) => {
     const newWidget = WidgetStore.createWebWidget({ url, title, isLive: true });
@@ -1321,28 +1647,67 @@ export function Desktop() {
     toast.success('Live Web Widget created!');
   }, []);
 
-  // 📸 Create snapshot widget
-  const handleCreateSnapshotWidget = useCallback((url: string, title: string) => {
-    // For now, create a placeholder snapshot
-    // In production, would capture screenshot
-    const placeholderImage = 'data:image/svg+xml;base64,' + btoa(`
-      <svg width="400" height="300" xmlns="http://www.w3.org/2000/svg">
-        <rect width="100%" height="100%" fill="#1a1a1a"/>
-        <text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="#666" font-family="system-ui" font-size="14">
-          Snapshot: ${title}
-        </text>
-      </svg>
-    `);
-    
+  // 📸 Create snapshot widget with cropped image
+  const handleCreateSnapshotWidget = useCallback((url: string, title: string, croppedImage: string) => {
     const newWidget = WidgetStore.createSnapshotWidget({
       url,
       title,
       isLive: false,
-      imageData: placeholderImage
+      imageData: croppedImage
     });
     const next = WidgetStore.addWidget(newWidget);
     setWidgets(next);
-    toast.success('Snapshot Widget created!');
+    toast.success('Web Widget created!');
+  }, []);
+
+  // 🎥 Create web capture widget with Puppeteer screenshot
+  const handleCreateWebCaptureWidget = useCallback(async (captureData: {
+    image: string;
+    title: string;
+    url: string;
+    rect: { x: number; y: number; width: number; height: number };
+    viewport: { width: number; height: number; scrollX: number; scrollY: number };
+    capturedAt: string;
+  }) => {
+    try {
+      toast.info('Capturing web region...');
+      
+      // Call Puppeteer backend
+      const response = await fetch('/api/web-capture', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: captureData.url,
+          rect: captureData.rect,
+          viewport: captureData.viewport,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Capture failed');
+      }
+
+      // Create widget with captured image
+      const newWidget = WidgetStore.createWebCaptureWidget({
+        url: captureData.url,
+        title: captureData.title,
+        image: result.image,
+        rect: captureData.rect,
+        viewport: captureData.viewport,
+        capturedAt: result.capturedAt,
+        refreshInterval: 0, // Will add UI to configure this later
+      });
+
+      const next = WidgetStore.addWidget(newWidget);
+      setWidgets(next);
+      toast.success('Web Capture Widget created!');
+      
+    } catch (error) {
+      console.error('Web capture failed:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to capture web region');
+    }
   }, []);
 
   const handleRemoveWidget = useCallback((id: string) => {
@@ -1419,6 +1784,45 @@ export function Desktop() {
                 }));
               }, 500);
             }
+          }}
+        />
+      );
+    }
+
+    // Handle web capture widgets (Puppeteer)
+    if (widget.category === 'web-capture') {
+      const webCaptureWidget = widget as WebCaptureWidgetType;
+      return (
+        <WebCaptureWidget
+          image={webCaptureWidget.image}
+          title={webCaptureWidget.title}
+          sourceUrl={webCaptureWidget.sourceUrl}
+          sourceRect={webCaptureWidget.sourceRect}
+          viewport={webCaptureWidget.viewport}
+          capturedAt={webCaptureWidget.capturedAt}
+          refreshInterval={webCaptureWidget.refreshInterval}
+          width={webCaptureWidget.width}
+          height={webCaptureWidget.height}
+          isDarkMode={isDarkMode}
+          onRemove={() => handleRemoveWidget(widget.id)}
+          onRefresh={() => {
+            // Re-capture from same URL/region
+            handleCreateWebCaptureWidget({
+              image: '',
+              title: webCaptureWidget.title,
+              url: webCaptureWidget.sourceUrl,
+              rect: webCaptureWidget.sourceRect,
+              viewport: webCaptureWidget.viewport,
+              capturedAt: new Date().toISOString(),
+            });
+          }}
+          onOpenInBrowser={() => {
+            openApplication('Chrome');
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('browser:navigate', {
+                detail: { url: webCaptureWidget.sourceUrl }
+              }));
+            }, 500);
           }}
         />
       );
@@ -1776,6 +2180,10 @@ export function Desktop() {
                   setWidgets(next);
                 }}
                 onRemove={handleRemoveWidget}
+                onResize={(id, width, height) => {
+                  const next = WidgetStore.updateSize(id, width, height);
+                  setWidgets(next);
+                }}
               >
                 {renderWidget(widget)}
               </DraggableWidget>
@@ -1800,6 +2208,23 @@ export function Desktop() {
               isDarkMode={isDarkMode}
             />
 
+            {/* 🎥 Webpage Cropper (for Puppeteer capture) */}
+            <WebpageCropper
+              isOpen={showWebpageCropper}
+              onClose={() => setShowWebpageCropper(false)}
+              url={widgetCreationData.url}
+              title={widgetCreationData.title}
+              onCropComplete={(image, title, url) => {
+                // Fallback to snapshot if Puppeteer fails
+                handleCreateSnapshotWidget(url, title, image);
+              }}
+              onWebCaptureComplete={(captureData) => {
+                handleCreateWebCaptureWidget(captureData);
+              }}
+              isDarkMode={isDarkMode}
+              enableWebCapture={true}
+            />
+
             {/* Render open windows */}
             {openWindows.map((win) => (
               <Window
@@ -1814,17 +2239,21 @@ export function Desktop() {
                 initialHeight={win.height}
                 isMinimized={win.isMinimized}
                 isMaximized={win.isMaximized}
-                isPanel={win.isPanel}
                 zIndex={50 + win.zIndex}
                 onClose={closeWindow}
                 onMinimize={minimizeWindow}
                 onFocus={bringToFront}
                 desktopRef={desktopRef}
                 themeColor={themeColor}
+                onDrag={handleWindowDrag}
+                onDragEnd={handleWindowDragEnd}
               >
                 {win.component}
               </Window>
             ))}
+            
+            {/* Snap Preview Overlay */}
+            <SnapPreview style={snapPreview} visible={!!activeSnapZone} />
 
 
             {/* // automation api  */}

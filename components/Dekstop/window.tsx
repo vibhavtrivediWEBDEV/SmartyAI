@@ -22,7 +22,6 @@ interface WindowProps {
   initialHeight: number
   isMinimized: boolean
   isMaximized?: boolean
-  isPanel?: boolean
   zIndex: number
   onClose: (id: string) => void
   onMinimize: (id: string) => void
@@ -30,6 +29,8 @@ interface WindowProps {
   desktopRef: React.RefObject<HTMLDivElement | null>
   themeColor: string
   children: React.ReactNode
+  onDrag?: (windowId: string, bounds: { x: number; y: number; width: number; height: number }) => void
+  onDragEnd?: (windowId: string) => void
 }
 
 export function Window({
@@ -43,7 +44,6 @@ export function Window({
   initialHeight,
   isMinimized,
   isMaximized: initialIsMaximized = false,
-  isPanel = false,
   zIndex,
   onClose,
   onMinimize,
@@ -51,6 +51,8 @@ export function Window({
   desktopRef,
   themeColor,
   children,
+  onDrag,
+  onDragEnd,
 }: WindowProps) {
 
   // 🎯 TOP BAR HEIGHT - Must stay above all windows
@@ -78,6 +80,16 @@ export function Window({
     width: number
     height: number
   } | null>(null)
+  
+  // Sync window position/size when parent updates (e.g., after snap)
+  useEffect(() => {
+    if (!isDragging && !isResizing) {
+      if (initialX !== x) setX(initialX)
+      if (initialY !== y) setY(initialY)
+      if (initialWidth !== width) setWidth(initialWidth)
+      if (initialHeight !== height) setHeight(initialHeight)
+    }
+  }, [initialX, initialY, initialWidth, initialHeight, isDragging, isResizing])
 
   // Detect mobile viewport
   useEffect(() => {
@@ -325,6 +337,11 @@ export function Window({
         newY = Math.max(0, Math.min(newY, desktopRect.height - height))
         setX(newX)
         setY(newY)
+        
+        // Notify parent about drag for snap detection
+        if (onDrag) {
+          onDrag(id, { x: newX, y: newY, width, height })
+        }
       } else if (isResizing && !isMobile) {
         let newWidth =
           resizeStart.current.width + (clientX - resizeStart.current.x)
@@ -352,25 +369,13 @@ export function Window({
   )
 
   const handleMouseUp = useCallback(() => {
-    // 🆕 Check if window was dragged to right edge (panel snap)
-    if (isDragging && !isMobile) {
-      const viewportWidth = window.innerWidth;
-      const PANEL_THRESHOLD = viewportWidth * 0.15; // If within 15% of right edge
-      
-      if (x > viewportWidth - width - PANEL_THRESHOLD) {
-        // Snap to panel mode
-        const panelWidth = Math.floor(viewportWidth * 0.30);
-        setX(viewportWidth - panelWidth);
-        setWidth(panelWidth);
-        setY(0);
-        setHeight(window.innerHeight);
-        // Note: We don't have setIsPanel here, would need to pass through props
-        // For now, the visual snap is enough
-      }
+    // Notify parent about drag end (for snap detection)
+    if (isDragging && onDragEnd) {
+      onDragEnd(id)
     }
     setIsDragging(false)
     setIsResizing(false)
-  }, [isDragging, isMobile, x, width])
+  }, [isDragging, onDragEnd, id])
 
   // --- Resize Mouse Down (disabled on mobile) ---
   const handleResizeMouseDown = useCallback(
@@ -493,9 +498,7 @@ export function Window({
       className={`shadow-2xl flex flex-col overflow-hidden backdrop-blur-2xl ${
         isMobile 
           ? "fixed inset-0 rounded-none" 
-          : isPanel 
-            ? "fixed right-0 top-0 rounded-l-xl rounded-r-none" // Panel style
-            : "absolute rounded-xl"
+          : "absolute rounded-xl"
       }`}
       style={{
         ...(isMobile
@@ -507,19 +510,13 @@ export function Window({
             width: "100vw",
             height: "100vh",
           }
-          : isPanel
-            ? {
-              right: 0,
-              top: 0,
-              width,
-              height: "100vh",
-            }
-            : {
-              left: x,
-              top: y,
-              width,
-              height,
-            }),
+          : {
+            left: x,
+            top: y,
+            width,
+            height,
+            transition: isDragging || isResizing ? 'none' : 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1), top 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1), height 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          }),
         zIndex,
         transformOrigin: "center center",
         userSelect: isDragging || isResizing ? "none" : "auto",

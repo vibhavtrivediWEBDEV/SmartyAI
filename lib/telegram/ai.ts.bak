@@ -1,0 +1,307 @@
+/**
+ * Telegram AI Integration
+ * Connects Telegram to SmartyAI's existing AI agent system
+ */
+
+import { getTelegramBot } from './bot'
+import { logToTelegram } from './logger'
+import type { TelegramMessage } from './types'
+
+// ============================================
+// AI SERVICE INTEGRATION
+// ============================================
+
+/**
+ * Process message through SmartyAI
+ */
+export async function processMessageThroughAI(
+  message: string,
+  userId: string,
+  chatId: number,
+  context?: any
+): Promise<string> {
+  const bot = getTelegramBot()
+  const startTime = Date.now()
+
+  try {
+    // Step 1: Log received message
+    await logToTelegram.immediate(`💬 *Message Received*\n\`${message.substring(0, 100)}${message.length > 100 ? '...' : ''}\``)
+    
+    logToTelegram.info('Starting AI processing...', 'AI', userId)
+
+    // Send typing indicator
+    await bot.sendChatAction(chatId, 'typing')
+    await logToTelegram.immediate('⌨️ Typing...')
+
+    // Import AI services dynamically to avoid circular dependencies
+    const { createAIService } = await import('@/lib/ai')
+    const { getUserAIContextByUserId } = await import('@/lib/ai/userAIContext.byUserId')
+    const { generateDesktopAssistantPrompt } = await import('@/lib/ai/userAIContext')
+    
+    // Step 2: Load user context from database (NOT from session)
+    await logToTelegram.immediate('👤 Loading your profile context...')
+    
+    const userContext = await getUserAIContextByUserId(userId)
+    
+    if (!userContext) {
+      await logToTelegram.error('Profile context not found', 'AI', userId)
+      return `⚠️ Unable to load your profile context. Please ensure you're logged in to SmartyAI.`
+    }
+    
+    await logToTelegram.immediate(`✅ Profile loaded: ${userContext.displayName}\n📧 ${userContext.email}\n💼 ${userContext.role}\n🛠️ ${userContext.skills?.length || 0} skills\n🚀 ${userContext.projects?.length || 0} projects`)
+    await logToTelegram.success('User context loaded', 'AI', userId)
+
+    // Step 3: Initialize AI
+    await logToTelegram.immediate('🤖 Initializing AI engine...')
+    const ai = createAIService()
+    await logToTelegram.immediate(`🧠 Model: ${process.env.USE_AI_PROVIDER || 'bedrock-mantle'}`)
+
+    // Step 4: Generate response
+    await logToTelegram.immediate('💭 Generating AI response...')
+    logToTelegram.info('Calling AI service...', 'AI', userId)
+    
+    // Use same prompt as Terminal AI
+    const systemPrompt = generateDesktopAssistantPrompt(userContext) + '\n\nYou are responding in Telegram. Keep responses friendly and concise. You know about the user\'s projects, skills, and experience.'
+
+    // Use chat method like terminal AI does
+    const response = await ai.chat([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: message }
+    ], {
+      temperature: 0.7,
+      maxTokens: 500
+    })
+
+    return response.content
+    
+    const processingTime = Date.now() - startTime
+    
+    // Step 5: Log response
+    await logToTelegram.immediate(`✅ *Response Generated*\n${response.substring(0, 200)}${response.length > 200 ? '...' : ''}`)
+    await logToTelegram.success('AI response sent', 'AI', userId, { 
+      responseLength: response.length,
+      user: displayName,
+      processingTimeMs: processingTime,
+    })
+
+    // Log to database
+    try {
+      const { logOutgoingMessage } = await import('./repository-enhanced')
+      // Note: We don't have the response message ID yet, will need to update after sending
+      console.log('[Telegram AI] Response logged to database, processing time:', processingTime, 'ms')
+    } catch (dbError) {
+      console.error('[Telegram AI] Failed to log to database:', dbError)
+    }
+
+    return response
+    
+  } catch (error) {
+    await logToTelegram.error('AI processing failed', 'AI', userId, error)
+    await logToTelegram.immediate(`❌ *AI Error*\n\`${error instanceof Error ? error.message : 'Unknown error'}\``)
+    
+    console.error('[Telegram AI] Error:', error)
+    
+    return `❌ Sorry, I encountered an error processing your request. Please try again or check the SmartyAI desktop app.`
+  }
+}
+
+/**
+ * Process file through ATS
+ */
+export async function processFileThroughATS(
+  fileId: string,
+  fileName: string,
+  userId: string,
+  chatId: number,
+  jobDescription?: string
+): Promise<string> {
+  const bot = getTelegramBot()
+
+  try {
+    await logToTelegram.immediate(`📄 *File Processing Started*\nFile: \`${fileName}\``)
+    logToTelegram.info(`Processing file: ${fileName}`, 'ATS', userId)
+
+    // Step 1: Download
+    await logToTelegram.immediate('⬇️ Downloading file from Telegram...')
+    await bot.sendChatAction(chatId, 'upload_document')
+    
+    const fileBuffer = await bot.downloadFile(fileId)
+    await logToTelegram.immediate(`✅ Downloaded: ${(fileBuffer.size / 1024).toFixed(2)} KB`)
+    
+    logToTelegram.info('File downloaded', 'ATS', userId, { size: fileBuffer.size })
+
+    // Step 2: Analyze
+    await logToTelegram.immediate('🔍 Analyzing resume content...')
+    await logToTelegram.immediate('📊 Checking ATS compatibility...')
+    await logToTelegram.immediate('🎯 Matching keywords...')
+    
+    // Import ATS scoring
+    // const { scoreResume } = await import('@/lib/ats/scoring')
+    
+    // TODO: Implement actual ATS scoring
+    // const result = await scoreResume(fileBuffer, jobDescription)
+
+    // Simulate processing for now
+    await new Promise(resolve => setTimeout(resolve, 2000))
+
+    await logToTelegram.immediate('✅ Analysis complete!')
+    await logToTelegram.success('ATS analysis complete', 'ATS', userId)
+
+    return `📊 *ATS Score: 85/100*
+
+✅ *Strengths:*
+• Good use of action verbs
+• Clear structure
+• Relevant keywords present
+
+⚠️ *Suggestions:*
+• Add more quantifiable achievements
+• Include specific tools/technologies
+• Improve keyword density for ATS
+
+📄 *File:* ${fileName}
+🔍 *Matched:* 45/60 keywords`
+    
+  } catch (error) {
+    await logToTelegram.error('ATS processing failed', 'ATS', userId, error)
+    await logToTelegram.immediate(`❌ *ATS Error*\n\`${error instanceof Error ? error.message : 'Unknown error'}\``)
+    
+    console.error('[Telegram ATS] Error:', error)
+    
+    return `❌ Failed to analyze resume. Please try again.`
+  }
+}
+
+/**
+ * Process automation command
+ */
+export async function processAutomationCommand(
+  command: string,
+  userId: string,
+  chatId: number
+): Promise<string> {
+  const bot = getTelegramBot()
+
+  try {
+    await logToTelegram.immediate(`🤖 *Automation Command*\n\`${command}\``)
+    logToTelegram.info(`Automation command: ${command}`, 'Automation', userId)
+
+    // Step 1: Check permission
+    await logToTelegram.immediate('🔐 Checking permissions...')
+    const { validateActionPermission } = await import('./auth')
+    const hasPermission = await validateActionPermission(userId, 'macAutomation')
+    
+    if (!hasPermission) {
+      await logToTelegram.warn('Mac automation not enabled', 'Automation', userId)
+      await logToTelegram.immediate('❌ Mac automation disabled in settings')
+      return `🔒 Mac automation is not enabled for your account.
+
+To enable:
+1️⃣ Open SmartyAI desktop app
+2️⃣ Go to Settings → Telegram
+3️⃣ Enable "Mac Automation Control"
+4️⃣ Try again`
+    }
+    
+    await logToTelegram.immediate('✅ Permission granted')
+
+    // Step 2: Execute
+    await logToTelegram.immediate('⚡ Executing automation...')
+    await bot.sendChatAction(chatId, 'typing')
+    
+    // Import Mac automation
+    // This would connect to your existing automation system
+    // const { automationAPI } = await import('@/components/Dekstop/deskstop')
+    
+    // TODO: Implement actual automation
+    // const result = await automationAPI.executeTextCommand(command)
+
+    await logToTelegram.success(`Executing: ${command}`, 'Automation', userId)
+    await logToTelegram.immediate('✅ Command sent to Mac desktop')
+
+    // Simulate execution
+    await new Promise(resolve => setTimeout(resolve, 1000))
+
+    await logToTelegram.immediate(`✅ *Automation Complete*\nCommand: \`${command}\``)
+
+    return `✅ Command executed: "${command}"
+
+🤖 Status: Complete
+📱 Check your SmartyAI desktop for results`
+    
+  } catch (error) {
+    await logToTelegram.error('Automation failed', 'Automation', userId, error)
+    await logToTelegram.immediate(`❌ *Automation Error*\n\`${error instanceof Error ? error.message : 'Unknown error'}\``)
+    
+    console.error('[Telegram Automation] Error:', error)
+    
+    return `❌ Automation command failed. Is your SmartyAI desktop app running?`
+  }
+}
+
+/**
+ * Analyze message intent
+ */
+export function analyzeMessageIntent(message: string): {
+  type: 'ai_query' | 'ats_check' | 'automation' | 'file_upload' | 'unknown'
+  confidence: number
+  params?: any
+} {
+  const lowerMessage = message.toLowerCase()
+
+  // ATS check intents
+  if (lowerMessage.includes('ats') || 
+      lowerMessage.includes('resume score') || 
+      lowerMessage.includes('check my resume')) {
+    return {
+      type: 'ats_check',
+      confidence: 0.9,
+      params: { action: 'ats_check' }
+    }
+  }
+
+  // Automation intents
+  if (lowerMessage.startsWith('open ') ||
+      lowerMessage.startsWith('close ') ||
+      lowerMessage.startsWith('search ') ||
+      lowerMessage.includes('on my mac')) {
+    return {
+      type: 'automation',
+      confidence: 0.85,
+      params: { command: message }
+    }
+  }
+
+  // Default to AI query
+  return {
+    type: 'ai_query',
+    confidence: 0.7,
+  }
+}
+
+/**
+ * Send chat action (typing, uploading, etc)
+ */
+export async function sendTypingIndicator(chatId: number): Promise<void> {
+  const bot = getTelegramBot()
+  await bot.sendChatAction(chatId, 'typing')
+}
+
+/**
+ * Send progress update
+ */
+export async function sendProgressUpdate(
+  chatId: number,
+  progress: number,
+  message: string
+): Promise<void> {
+  const bot = getTelegramBot()
+  
+  const progressBar = '█'.repeat(Math.floor(progress / 10)) + '░'.repeat(10 - Math.floor(progress / 10))
+  
+  await bot.sendMessage(
+    chatId,
+    `⏳ *${message}*\n${progressBar} ${progress}%`,
+    { parse_mode: 'Markdown' }
+  )
+}

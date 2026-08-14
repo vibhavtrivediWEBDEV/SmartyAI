@@ -7,6 +7,8 @@ interface Widget {
   type: string;
   x: number;
   y: number;
+  width?: number;
+  height?: number;
 }
 
 interface DraggableWidgetProps {
@@ -14,6 +16,7 @@ interface DraggableWidgetProps {
   desktopRef: React.RefObject<HTMLDivElement | null>;
   onPositionChange: (id: string, x: number, y: number) => void;
   onRemove: (id: string) => void;
+  onResize?: (id: string, width: number, height: number) => void;
   children: React.ReactNode;
 }
 
@@ -21,14 +24,25 @@ export default function DraggableWidget({
   widget, 
   desktopRef, 
   onPositionChange, 
-  onRemove, 
+  onRemove,
+  onResize,
   children 
 }: DraggableWidgetProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [size, setSize] = useState({ 
+    width: widget.width || 160, 
+    height: widget.height || 160 
+  });
   const widgetRef = useRef<HTMLDivElement>(null);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // Don't drag if clicking on resize handle
+    if ((e.target as HTMLElement).classList.contains('resize-handle')) {
+      return;
+    }
+    
     e.stopPropagation();
     if (widgetRef.current) {
       const rect = widgetRef.current.getBoundingClientRect();
@@ -38,6 +52,12 @@ export default function DraggableWidget({
       });
       setIsDragging(true);
     }
+  }, []);
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsResizing(true);
   }, []);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
@@ -55,14 +75,39 @@ export default function DraggableWidget({
 
       onPositionChange(widget.id, newX, newY);
     }
-  }, [isDragging, desktopRef, dragOffset, widget.id, onPositionChange]);
+
+    if (isResizing && desktopRef.current) {
+      const desktopRect = desktopRef.current.getBoundingClientRect();
+      const widgetRect = widgetRef.current?.getBoundingClientRect();
+      
+      if (widgetRect) {
+        let newWidth = e.clientX - widgetRect.left;
+        let newHeight = e.clientY - widgetRect.top;
+        
+        // Minimum size
+        newWidth = Math.max(150, newWidth);
+        newHeight = Math.max(150, newHeight);
+        
+        // Maximum size (stay within desktop)
+        newWidth = Math.min(newWidth, desktopRect.width - widget.x);
+        newHeight = Math.min(newHeight, desktopRect.height - widget.y - 80);
+        
+        setSize({ width: newWidth, height: newHeight });
+        
+        if (onResize) {
+          onResize(widget.id, newWidth, newHeight);
+        }
+      }
+    }
+  }, [isDragging, isResizing, desktopRef, dragOffset, widget.id, onPositionChange, onResize, widget.x, widget.y]);
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
+    setIsResizing(false);
   }, []);
 
   useEffect(() => {
-    if (isDragging) {
+    if (isDragging || isResizing) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     } else {
@@ -73,7 +118,14 @@ export default function DraggableWidget({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, handleMouseMove, handleMouseUp]);
+  }, [isDragging, isResizing, handleMouseMove, handleMouseUp]);
+
+  // Update size when widget props change
+  useEffect(() => {
+    if (widget.width && widget.height) {
+      setSize({ width: widget.width, height: widget.height });
+    }
+  }, [widget.width, widget.height]);
 
   return (
     <div
@@ -82,11 +134,16 @@ export default function DraggableWidget({
       style={{ 
         left: widget.x, 
         top: widget.y,
-        userSelect: isDragging ? 'none' : 'auto',
+        width: size.width,
+        height: size.height,
+        userSelect: isDragging || isResizing ? 'none' : 'auto',
       }}
       onMouseDown={handleMouseDown}
     >
-      {children}
+      <div className="w-full h-full overflow-hidden">
+        {children}
+      </div>
+      
       {/* Remove button */}
       <button
         onClick={(e) => {
@@ -97,6 +154,19 @@ export default function DraggableWidget({
       >
         ×
       </button>
+      
+      {/* Resize handle - bottom right corner */}
+      <div
+        onMouseDown={handleResizeMouseDown}
+        className="resize-handle absolute -bottom-1 -right-1 w-4 h-4 bg-purple-600 hover:bg-purple-700 rounded-br-lg cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity z-50 flex items-center justify-center"
+        style={{
+          background: 'linear-gradient(135deg, transparent 50%, rgba(147, 51, 234, 0.8) 50%)'
+        }}
+      >
+        <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" className="opacity-70">
+          <path d="M21 15l-6 6M21 9l-12 12" />
+        </svg>
+      </div>
     </div>
   );
 }

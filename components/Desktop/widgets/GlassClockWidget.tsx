@@ -18,6 +18,17 @@ export default function GlassClockWidget({ isDarkMode = true }: GlassClockWidget
     return () => clearInterval(timer);
   }, []);
 
+  // Don't render until mounted on client to prevent null errors
+  if (!mounted || !time) {
+    return (
+      <div className="w-40 h-40 bg-gray-800/50 backdrop-blur-md rounded-3xl p-3 flex flex-col shadow-md select-none shrink-0 animate-pulse">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="w-24 h-24 rounded-full bg-gray-700/50"></div>
+        </div>
+      </div>
+    );
+  }
+
   const rawHours = time.getHours();
   // 12-hour format for the classic clock widget look
   const displayHours = (rawHours % 12 || 12).toString();

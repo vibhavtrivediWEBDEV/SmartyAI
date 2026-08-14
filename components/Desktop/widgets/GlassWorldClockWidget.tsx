@@ -28,6 +28,11 @@ function AnalogClock({ timezone, cityCode, isDarkMode }: { timezone: string; cit
     }
   };
 
+  // Don't render until mounted
+  if (!mounted || !time) {
+    return null;
+  }
+
   const localTime = getLocalTime(timezone);
   const hours = localTime.getHours();
   const minutes = localTime.getMinutes();

@@ -7,7 +7,7 @@
  * - Snapshot widgets (static image)
  */
 
-export type WidgetType = "native" | "web" | "snapshot";
+export type WidgetType = "native" | "web" | "snapshot" | "web-capture";
 
 export interface BaseWidget {
   id: string;
@@ -48,7 +48,31 @@ export interface SnapshotWidget extends BaseWidget {
   height: number;
 }
 
-export type Widget = NativeWidget | WebWidget | SnapshotWidget;
+export interface WebCaptureWidget extends BaseWidget {
+  category: "web-capture";
+  type: "web-capture-widget";
+  image: string; // Base64 PNG screenshot from Puppeteer
+  title: string;
+  sourceUrl: string; // Original URL
+  sourceRect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  viewport: {
+    width: number;
+    height: number;
+    scrollX: number;
+    scrollY: number;
+  };
+  capturedAt: string; // ISO timestamp
+  refreshInterval?: number; // Seconds (0 = no refresh)
+  width: number;
+  height: number;
+}
+
+export type Widget = NativeWidget | WebWidget | SnapshotWidget | WebCaptureWidget;
 
 export interface WidgetCreationOptions {
   url: string;
@@ -56,6 +80,26 @@ export interface WidgetCreationOptions {
   favicon?: string;
   isLive: boolean;
   imageData?: string;
+}
+
+export interface WebCaptureCreationOptions {
+  url: string;
+  title: string;
+  image: string;
+  rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  viewport: {
+    width: number;
+    height: number;
+    scrollX: number;
+    scrollY: number;
+  };
+  capturedAt: string;
+  refreshInterval?: number;
 }
 
 /**
@@ -186,6 +230,28 @@ export class WidgetStore {
       y: 100,
       width: 400,
       height: 300
+    };
+  }
+
+  /**
+   * Create a web capture widget (Puppeteer-powered)
+   */
+  static createWebCaptureWidget(options: WebCaptureCreationOptions): WebCaptureWidget {
+    return {
+      id: `web-capture-${Date.now()}`,
+      category: "web-capture",
+      type: "web-capture-widget",
+      image: options.image,
+      title: options.title,
+      sourceUrl: options.url,
+      sourceRect: options.rect,
+      viewport: options.viewport,
+      capturedAt: options.capturedAt,
+      refreshInterval: options.refreshInterval || 0,
+      x: 100,
+      y: 100,
+      width: options.rect.width,
+      height: options.rect.height
     };
   }
 }

@@ -18,6 +18,17 @@ export default function GlassMiniCalendarWidget({ isDarkMode = true }: GlassMini
     return () => clearInterval(timer);
   }, []);
 
+  // Don't render until mounted on client to prevent null errors
+  if (!mounted || !date) {
+    return (
+      <div className="w-72 h-64 bg-gray-800/50 backdrop-blur-md rounded-3xl p-4 flex flex-col shadow-md select-none shrink-0 animate-pulse">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="w-32 h-32 rounded-lg bg-gray-700/50"></div>
+        </div>
+      </div>
+    );
+  }
+
   const monthName = date.toLocaleDateString('en-US', { month: 'long' }).toUpperCase();
   
   // Get days for the calendar

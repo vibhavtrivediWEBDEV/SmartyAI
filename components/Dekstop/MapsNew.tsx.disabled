@@ -1,0 +1,445 @@
+'use client'
+
+import React, { useState, useEffect, useRef } from "react";
+import { useAppStore } from "@/lib/store/macGalleryStore";
+import {
+  Search, MapPin, Navigation, Star, Landmark, Route, Clock,
+  Plus, Minus, Compass, Tent, Car, Bike, Footprints, AlertCircle, X, ArrowUp
+} from "lucide-react";
+
+import type { Coordinate, Route as RouteType, TravelMode } from '@/types/maps';
+import { geocode, calculateRoute, locationService, formatDistance, formatDuration } from '@/lib/maps';
+
+// Traffic lights component (preserved from original)
+const TrafficLights = ({ windowId }: { windowId: string }) => {
+  const close = useAppStore((s) => s.closeApp);
+  const minimize = useAppStore((s) => s.minimizeApp);
+  const toggleMaximize = useAppStore((s) => s.toggleMaximize);
+  const windows = useAppStore((s) => s.windows);
+  const win = windows.find(w => w.id === windowId);
+  const maximized = win ? win.maximized : false;
+
+  return (
+    <div className="flex items-center gap-2 group shrink-0">
+      <div className="w-3 h-3 bg-[#ff5f57] rounded-full cursor-pointer flex items-center justify-center hover:bg-[#ff4136] transition-all shadow-sm"
+        onClick={() => close(windowId)} title="Close">
+        <svg className="w-1.5 h-1.5 text-[#820005] opacity-0 group-hover:opacity-100" viewBox="0 0 10 10">
+          <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+      </div>
+      <div className="w-3 h-3 bg-[#febc2e] rounded-full cursor-pointer flex items-center justify-center hover:bg-[#ff9500] transition-all shadow-sm"
+        onClick={() => minimize(windowId)} title="Minimize">
+        <svg className="w-1.5 h-1.5 text-[#9a6400] opacity-0 group-hover:opacity-100" viewBox="0 0 10 10">
+          <path d="M1 5H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+      </div>
+      <div className="w-3 h-3 bg-[#28c840] rounded-full cursor-pointer flex items-center justify-center hover:bg-[#1aab29] transition-all shadow-sm"
+        onClick={() => toggleMaximize(windowId)} title={maximized ? "Restore" : "Maximize"}>
+        <svg className="w-1.5 h-1.5 text-[#006500] opacity-0 group-hover:opacity-100" viewBox="0 0 10 10">
+          {maximized ? (
+            <>
+              <rect x="1.5" y="3.5" width="5" height="5" fill="none" stroke="currentColor" strokeWidth="1.2"/>
+              <path d="M3.5 3.5V1.5H8.5V6.5H6.5" fill="none" stroke="currentColor" strokeWidth="1.2"/>
+            </>
+          ) : (
+            <>
+              <path d="M1 1L4 4M1 1V3.5M1 1H3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+              <path d="M9 9L6 6M9 9V6.5M9 9H6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+            </>
+          )}
+        </svg>
+      </div>
+    </div>
+  );
+};
+
+interface LocationData {
+  id: string;
+  name: string;
+  category: string;
+  address: string;
+  lat: number;
+  lon: number;
+  icon: JSX.Element;
+}
+
+export default function MapsNew({ windowId }: { windowId?: string }) {
+  const isDarkMode = useAppStore((s) => s.isDarkMode);
+  
+  // Map state
+  const mapContainer = useRef<HTMLDivElement>(null);
+  const map = useRef<any>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const [maplibregl, setMaplibregl] = useState(null as any);
+  
+  // UI state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<LocationData[]>([]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  
+  // Navigation state
+  const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
+  const [origin, setOrigin] = useState<Coordinate | null>(null);
+  const [destination, setDestination] = useState<Coordinate | null>(null);
+  const [travelMode, setTravelMode] = useState<TravelMode>('driving');
+  const [routes, setRoutes] = useState<RouteType[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [is3D, setIs3D] = useState(false);
+
+  // Preset locations
+  const presets: LocationData[] = [
+    { id: "eiffel", name: "Eiffel Tower", category: "Tourist Attraction", address: "Paris, France", lat: 48.8584, lon: 2.2945, icon: <Star size={14} className="text-white fill-white" /> },
+    { id: "goldengate", name: "Golden Gate Bridge", category: "Landmark", address: "San Francisco, CA", lat: 37.8199, lon: -122.4783, icon: <Landmark size={14} className="text-white fill-white" /> }
+  ];
+
+  const allLocations = [...presets, ...searchResults];
+
+  // Load maplibre-gl dynamically from CDN
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Load CSS
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css';
+      document.head.appendChild(link);
+
+      // Load JS from CDN
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js';
+      script.onload = () => {
+        // @ts-expect-error - maplibregl is loaded globally
+        if (window.maplibregl) {
+          // @ts-expect-error - maplibregl is loaded globally
+          setMaplibregl(window.maplibregl);
+        }
+      };
+      document.head.appendChild(script);
+    }
+  }, []);
+
+  // Initialize map
+  useEffect(() => {
+    if (typeof window === 'undefined' || !mapContainer.current || map.current) return;
+    
+    // Wait for maplibregl to be available
+    // @ts-expect-error - maplibregl is loaded globally
+    const mlgl = window.maplibregl;
+    if (!mlgl || !mlgl.Map) return;
+
+    try {
+      const mapInstance = new mlgl.Map({
+        container: mapContainer.current,
+        style: 'https://demotiles.maplibre.org/style.json',
+        center: [2.2945, 48.8584],
+        zoom: 12,
+      });
+
+      mapInstance.on('load', () => {
+        setMapLoaded(true);
+        mapInstance.addControl(new mlgl.NavigationControl(), 'top-right');
+        mapInstance.addControl(new mlgl.GeolocateControl({ positionOptions: { enableHighAccuracy: true } }), 'top-right');
+      });
+
+      map.current = mapInstance;
+    } catch (err) {
+      console.error('Map initialization error:', err);
+    }
+
+    return () => {
+      map.current?.remove();
+      map.current = null;
+    };
+  }, [maplibregl]);
+
+  // Render routes
+  useEffect(() => {
+    if (!mapLoaded || !map.current || !routes) return;
+    
+    // @ts-expect-error - maplibregl is loaded globally
+    const mlgl = window.maplibregl;
+    if (!mlgl) return;
+
+    const mapInstance = map.current;
+
+    // Clear existing layers
+    ['route-0', 'route-1', 'route-2', 'route-3'].forEach(id => {
+      if (mapInstance.getLayer(id)) mapInstance.removeLayer(id);
+    });
+    if (mapInstance.getSource('route-source')) mapInstance.removeSource('route-source');
+
+    // Add route source
+    mapInstance.addSource('route-source', {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: routes.map((route, idx) => ({
+          type: 'Feature',
+          properties: { index: idx },
+          geometry: { type: 'LineString', coordinates: route.geometry.map(c => [c.lon, c.lat]) },
+        })),
+      },
+    });
+
+    // Add route layers
+    routes.forEach((_, idx) => {
+      mapInstance.addLayer({
+        id: `route-${idx}`,
+        type: 'line',
+        source: 'route-source',
+        filter: ['==', 'index', idx],
+        paint: {
+          'line-color': idx === 0 ? '#007AFF' : '#8E8E93',
+          'line-width': idx === 0 ? 5 : 3,
+          'line-opacity': idx === 0 ? 1 : 0.6,
+        },
+      });
+    });
+
+    // Fit bounds
+    if (routes[0]) {
+      const bounds = new mlgl.LngLatBounds();
+      routes[0].geometry.forEach(c => bounds.extend([c.lon, c.lat]));
+      mapInstance.fitBounds(bounds, { padding: 80, duration: 1000 });
+    }
+
+    // Add markers
+    if (origin) {
+      new mlgl.Marker({ color: '#34C759' }).setLngLat([origin.lon, origin.lat]).addTo(mapInstance);
+    }
+    if (destination) {
+      new mlgl.Marker({ color: '#FF3B30' }).setLngLat([destination.lon, destination.lat]).addTo(mapInstance);
+    }
+  }, [routes, mapLoaded, origin, destination]);
+
+  // Get current location
+  const getCurrentLocation = async () => {
+    setLoading(true);
+    try {
+      const position = await locationService.getCurrentPosition();
+      if (position) {
+        setOrigin(position.currentLocation);
+        map.current?.flyTo({ center: [position.currentLocation.lon, position.currentLocation.lat], zoom: 15, duration: 1500 });
+      } else {
+        setError('Unable to get location');
+      }
+    } catch (err) {
+      setError('Location permission denied');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Search
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+
+    setLoading(true);
+    try {
+      const result = await geocode(searchQuery);
+      if (result.success && result.locations.length > 0) {
+        const locations = result.locations.map((loc, idx) => ({
+          id: `search-${Date.now()}-${idx}`,
+          name: loc.name,
+          category: loc.type || 'Location',
+          address: loc.address,
+          lat: loc.coordinates.lat,
+          lon: loc.coordinates.lon,
+          icon: <MapPin size={14} className="text-white fill-white" />,
+        }));
+        setSearchResults(prev => [...locations, ...prev]);
+        setSelectedLocation(locations[0]);
+        setDestination({ lat: locations[0].lat, lon: locations[0].lon });
+        map.current?.flyTo({ center: [locations[0].lon, locations[0].lat], zoom: 15, duration: 1500 });
+      } else {
+        setError('No results found');
+      }
+    } catch (err) {
+      setError('Search failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Calculate route
+  const handleGetDirections = async () => {
+    if (!origin || !destination) {
+      setError('Set origin and destination');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const calculatedRoutes = await calculateRoute(origin, destination, travelMode, true);
+      if (calculatedRoutes && calculatedRoutes.length > 0) {
+        setRoutes(calculatedRoutes);
+      } else {
+        setError('No route found');
+      }
+    } catch (err) {
+      setError('Routing failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Toggle 3D view
+  const toggle3D = () => {
+    if (!map.current) return;
+    const new3D = !is3D;
+    setIs3D(new3D);
+    map.current.easeTo({ pitch: new3D ? 60 : 0, duration: 1000 });
+  };
+
+  return (
+    <div className={`w-full h-full select-none text-[13px] rounded-xl overflow-hidden font-sans relative ${isDarkMode ? "bg-[#1E1E1E] text-white" : "bg-white text-gray-800"}`}>
+      {/* Map Container */}
+      <div ref={mapContainer} className="absolute inset-0" />
+
+      {/* Sidebar */}
+      {isSidebarOpen && (
+        <aside className={`absolute left-5 top-5 bottom-5 w-[260px] z-10 flex flex-col rounded-3xl border shadow-[0_12px_40px_rgba(0,0,0,0.18)] ${
+          isDarkMode ? "border-white/10 bg-[#1E201E]/80 backdrop-blur-xl text-white" : "border-black/5 bg-[#f4f7f4]/80 backdrop-blur-xl text-gray-900"
+        }`}>
+          
+          {/* Header */}
+          <div className="p-4 pb-2 shrink-0 flex items-center justify-between">
+            {windowId && <TrafficLights windowId={windowId} />}
+            <button onClick={() => setIsSidebarOpen(false)} className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                <rect x="1.5" y="1.5" width="13" height="13" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+                <line x1="5.5" y1="1.5" x2="5.5" y2="14.5" stroke="currentColor" strokeWidth="1.2"/>
+              </svg>
+            </button>
+          </div>
+
+          {/* Search */}
+          <div className="px-4 pb-3 shrink-0">
+            <form onSubmit={handleSearch}>
+              <div className={`flex items-center rounded-xl px-3 py-2 border ${
+                isDarkMode ? "bg-black/25 border-white/5 text-gray-300" : "bg-black/[0.04] border-black/5"
+              }`}>
+                <Search size={14} className="text-gray-400 mr-2" />
+                <input type="text" placeholder="Search Maps" value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-transparent text-xs outline-none placeholder-gray-400" />
+              </div>
+            </form>
+          </div>
+
+          {/* Location Button */}
+          <button onClick={getCurrentLocation} className="mx-4 mb-2 flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium hover:bg-black/5 dark:hover:bg-white/5">
+            <Navigation size={15} className="text-[#007AFF]" />
+            {origin ? 'Update Location' : 'Get My Location'}
+          </button>
+
+          {/* Route Setup */}
+          {origin && destination && (
+            <div className="mx-4 mb-3 p-3 rounded-xl bg-black/5 dark:bg-white/5">
+              <div className="text-xs font-medium mb-2">Route</div>
+              
+              <div className="flex gap-2 mb-2">
+                {(['driving', 'walking', 'cycling'] as const).map(mode => {
+                  const icons = { driving: <Car size={12} />, walking: <Footprints size={12} />, cycling: <Bike size={12} /> };
+                  return (
+                    <button key={mode} onClick={() => setTravelMode(mode)}
+                      className={`flex-1 flex items-center justify-center gap-1 p-1.5 rounded-lg text-[11px] transition ${
+                        travelMode === mode ? 'bg-[#007AFF] text-white' : 'bg-black/10 dark:bg-white/10'
+                      }`}>
+                      {icons[mode]}
+                      <span className="capitalize">{mode}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button onClick={handleGetDirections} disabled={loading}
+                className="w-full py-2 bg-[#007AFF] text-white rounded-xl text-xs font-medium hover:bg-blue-600 disabled:opacity-50">
+                {loading ? 'Calculating...' : 'Get Directions'}
+              </button>
+            </div>
+          )}
+
+          {/* Route Info */}
+          {routes && routes[0] && (
+            <div className="mx-4 mb-3 p-3 rounded-xl bg-[#007AFF]/10 border border-[#007AFF]/20">
+              <div className="flex justify-between items-center mb-1">
+                <div className="text-lg font-bold">{formatDuration(routes[0].summary.duration)}</div>
+                <div className="text-sm text-gray-500">{formatDistance(routes[0].summary.distance)}</div>
+              </div>
+              <div className="text-xs text-gray-400">via {routes[0].summary.distance > 1000 ? 'Main Route' : 'Destination'}</div>
+              
+              {routes.length > 1 && (
+                <div className="mt-2 text-[10px] text-gray-400">{routes.length - 1} alternative routes available</div>
+              )}
+            </div>
+          )}
+
+          {/* Recents */}
+          <div className="flex-1 overflow-y-auto px-3">
+            <div className="text-[11px] font-semibold text-gray-400 mb-1">Recent</div>
+            {allLocations.slice(0, 5).map(loc => (
+              <button key={loc.id} onClick={() => {
+                setSelectedLocation(loc);
+                setDestination({ lat: loc.lat, lon: loc.lon });
+                map.current?.flyTo({ center: [loc.lon, loc.lat], zoom: 15, duration: 1500 });
+              }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 mb-1">
+                <div className="w-5 h-5 rounded-full flex items-center justify-center bg-[#007AFF] text-white shrink-0">{loc.icon}</div>
+                <div className="flex-1 min-w-0 text-left">
+                  <div className="text-xs font-medium truncate">{loc.name}</div>
+                  <div className="text-[10px] text-gray-400 truncate">{loc.address.split(',')[0]}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </aside>
+      )}
+
+      {/* Show Sidebar Button */}
+      {!isSidebarOpen && (
+        <button onClick={() => setIsSidebarOpen(true)}
+          className={`absolute left-5 top-5 w-8 h-8 rounded-full z-20 flex items-center justify-center border shadow-md ${
+            isDarkMode ? "bg-[#1E1E1E] border-white/10 text-white" : "bg-white border-black/5 text-gray-800"
+          }`}>
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+            <rect x="1.5" y="1.5" width="13" height="13" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+            <line x1="5.5" y1="1.5" x2="5.5" y2="14.5" stroke="currentColor" strokeWidth="1.2"/>
+          </svg>
+        </button>
+      )}
+
+      {/* Controls */}
+      <div className="absolute top-5 right-5 flex flex-col gap-2 z-10">
+        <button onClick={toggle3D}
+          className={`w-8 h-8 rounded-full flex items-center justify-center shadow-md transition ${
+            is3D ? "bg-blue-500 text-white" : isDarkMode ? "bg-[#2C2C2E] text-gray-300" : "bg-white text-gray-700"
+          }`}>
+          <ArrowUp size={14} className={is3D ? "rotate-45" : ""} />
+        </button>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500 text-white text-xs">
+          <AlertCircle size={14} /> {error}
+          <button onClick={() => setError(null)}><X size={12} /></button>
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/30">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-white border-t-transparent" />
+        </div>
+      )}
+
+      {/* Attribution */}
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10">
+        <div className={`text-[10px] px-2 py-1 rounded backdrop-blur-sm ${isDarkMode ? "bg-black/50 text-white" : "bg-white/75 text-gray-700"}`}>
+          © OpenStreetMap
+        </div>
+      </div>
+    </div>
+  );
+}

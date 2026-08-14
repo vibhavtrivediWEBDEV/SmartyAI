@@ -16,7 +16,7 @@ import { AISearch } from '@/app/components/terminal/AiSearch'
 import Vscode from '@/components/Dekstop/VsCode'
 import Browser from '@/components/Dekstop/chrome'
 import MusicApp from '@/components/Dekstop/MusicApp'
-import Maps from '@/components/Dekstop/Maps'
+import MapsNew from '@/components/Dekstop/MapsNew'
 import Youtube from '@/components/Dekstop/yt'
 import EnhancedCalendar from '@/components/Desktop/EnhancedCalendar'
 import { ExcelEditor } from '@/app/components/terminal/ExcelEditor'
@@ -362,7 +362,7 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
     name: 'Maps',
     displayName: 'Maps',
     icon: '/icons/maps.png',
-    component: Maps,
+    component: MapsNew,
     defaultWidth: 1000,
     defaultHeight: 700,
     automatable: true,

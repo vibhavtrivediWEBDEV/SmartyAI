@@ -43,6 +43,9 @@ export function BrowserContent({
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   
+  // Track the actual URL inside the iframe (including navigation)
+  const iframeCurrentUrlRef = useRef<string>(engine.home);
+  
   // Use ref to track if we've already searched this query
   const searchedQueryRef = useRef<string>("");
 
@@ -53,7 +56,9 @@ export function BrowserContent({
     if (searchQuery && searchQuery.trim() && searchQuery !== searchedQueryRef.current) {
       searchedQueryRef.current = searchQuery; // Mark as searched
       const encoded = encodeURIComponent(searchQuery.trim());
-      setCurrentUrl(engine.search(encoded));
+      const searchUrl = engine.search(encoded);
+      setCurrentUrl(searchUrl);
+      iframeCurrentUrlRef.current = searchUrl;
       setSearchInput(searchQuery);
       setIsLoading(true);
       onLoad?.();
@@ -67,6 +72,7 @@ export function BrowserContent({
   useEffect(() => {
     if (directUrl) {
       setCurrentUrl(directUrl);
+      iframeCurrentUrlRef.current = directUrl;
       setIsLoading(true);
       onNavigate?.(directUrl);
     }
@@ -109,6 +115,21 @@ export function BrowserContent({
   const handleIframeLoad = () => {
     setIsLoading(false);
     onLoad?.();
+    
+    // Try to track iframe navigation (works for same-origin only)
+    try {
+      const iframe = iframeRef.current;
+      if (iframe?.contentWindow) {
+        const actualUrl = iframe.contentWindow.location.href;
+        if (actualUrl && actualUrl !== 'about:blank') {
+          console.log('📍 Browser tracked iframe navigation to:', actualUrl);
+          iframeCurrentUrlRef.current = actualUrl;
+        }
+      }
+    } catch (e) {
+      // Cross-origin - can't read location, but that's OK
+      console.log('🔒 Browser: Cross-origin iframe, using last known URL');
+    }
   };
 
   const bgColor = isDark ? 'bg-gray-900' : 'bg-white';
@@ -161,6 +182,31 @@ export function BrowserContent({
             <path d="M12 8v8M8 12h8" />
           </svg>
           Add to Desktop
+        </button>
+        
+        {/* Capture Region Button (Puppeteer) */}
+        <button
+          onClick={() => {
+            const event = new CustomEvent('browser:capture-region', {
+              detail: { 
+                url: iframeCurrentUrlRef.current, // Use tracked URL including navigation
+                title: searchInput || iframeCurrentUrlRef.current 
+              }
+            });
+            window.dispatchEvent(event);
+          }}
+          className={`px-3 py-1.5 text-xs rounded flex items-center gap-1.5 transition-colors ${
+            isDark 
+              ? 'bg-green-600/20 hover:bg-green-600/30 text-green-300 border border-green-500/30' 
+              : 'bg-green-100 hover:bg-green-200 text-green-700 border border-green-300'
+          }`}
+          title="Capture live region from current page (Puppeteer)"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+          Capture Region
         </button>
         
         {/* URL Bar */}

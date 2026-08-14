@@ -5,12 +5,12 @@ import {
   Accessibility, Battery, Bell, Bluetooth, ChevronRight, CircleUserRound, Cloud,
   Gamepad2, Globe2, Hand, Info, Keyboard, Laptop, LockKeyhole, Menu, Monitor,
   Moon, MousePointer2, Network, Palette, PanelRight, Printer, RotateCcw, Search,
-  ShieldCheck, SlidersHorizontal, Speaker, Sun, UserRound, Wifi, X,
+  ShieldCheck, SlidersHorizontal, Speaker, Sun, UserRound, Wifi, X, MessageCircle,
 } from 'lucide-react'
 import { useSettings, type DesktopSettings } from '@/app/context/settingContext'
 import { DESKTOP_APPS } from '@/lib/desktopApps'
 
-type SettingTab = 'account' | 'network' | 'notifications' | 'sound' | 'focus' | 'general' | 'appearance' | 'accessibility' | 'control' | 'desktop' | 'display' | 'wallpaper' | 'battery' | 'privacy' | 'keyboard' | 'trackpad' | 'extras'
+type SettingTab = 'account' | 'network' | 'notifications' | 'sound' | 'focus' | 'general' | 'appearance' | 'accessibility' | 'control' | 'desktop' | 'display' | 'wallpaper' | 'battery' | 'privacy' | 'keyboard' | 'trackpad' | 'extras' | 'telegram'
 type Item = { id: SettingTab; label: string; icon: typeof Palette; color: string; clickId?: string }
 type BluetoothNavigator = Navigator & { bluetooth?: { requestDevice: (options: { acceptAllDevices: boolean }) => Promise<{ name?: string }> } }
 
@@ -31,6 +31,7 @@ const groups: Item[][] = [
     { id: 'control', label: 'Control Center', icon: SlidersHorizontal, color: '#8e8e93', clickId: 'settings_sidebar_control' },
   ],
   [
+    { id: 'telegram', label: 'Telegram', icon: MessageCircle, color: '#0088cc', clickId: 'settings_sidebar_telegram' },
     { id: 'desktop', label: 'Desktop & Dock', icon: PanelRight, color: '#007aff', clickId: 'settings_sidebar_desktop' },
     { id: 'display', label: 'Displays', icon: Monitor, color: '#5856d6', clickId: 'settings_sidebar_display' },
     { id: 'wallpaper', label: 'Wallpaper', icon: Sun, color: '#32ade6', clickId: 'settings_sidebar_wallpaper' },
@@ -71,7 +72,12 @@ function Select({ value, onChange, options }: { value: string; onChange: (value:
   return <select value={value} onChange={(event) => onChange(event.target.value)} className="rounded-md border px-2 py-1 text-xs outline-none" style={{ background: 'var(--macos-surface-raised)', borderColor: 'var(--macos-border)' }}>{options.map((option) => <option key={option}>{option}</option>)}</select>
 }
 
-export default function SettingsModal() {
+interface SettingsModalProps {
+  isSocketConnected?: boolean
+  onReconnect?: () => void
+}
+
+export default function SettingsModal({ isSocketConnected = false, onReconnect }: SettingsModalProps) {
   const { settings, updateSettings, resetSettings, wallpapers, loadWallpapers, updateWallpaperQuery } = useSettings()
   const [activeTab, setActiveTab] = useState<SettingTab>('appearance')
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -81,6 +87,10 @@ export default function SettingsModal() {
   const [appLockStatus, setAppLockStatus] = useState('')
   const [networkOnline, setNetworkOnline] = useState(true)
   const [bluetoothDevice, setBluetoothDevice] = useState('')
+  const [telegramConnected, setTelegramConnected] = useState(false)
+  const [telegramLinking, setTelegramLinking] = useState(false)
+  const [telegramLinkUrl, setTelegramLinkUrl] = useState('')
+  const [telegramStatus, setTelegramStatus] = useState('')
 
   useEffect(() => {
     const updateOnlineStatus = () => setNetworkOnline(navigator.onLine)
@@ -92,6 +102,82 @@ export default function SettingsModal() {
       window.removeEventListener('offline', updateOnlineStatus)
     }
   }, [])
+
+  // Check Telegram connection status
+  useEffect(() => {
+    if (activeTab === 'telegram') {
+      checkTelegramStatus()
+    }
+  }, [activeTab])
+
+  // Poll for connection status while linking
+  useEffect(() => {
+    if (telegramLinking) {
+      const interval = setInterval(async () => {
+        try {
+          const response = await fetch('/api/telegram/link')
+          if (response.ok) {
+            const data = await response.json()
+            if (data.connected) {
+              setTelegramConnected(true)
+              setTelegramLinking(false)
+              setTelegramLinkUrl('')
+              setTelegramStatus('✅ Successfully connected! Redirecting...')
+              // Redirect to desktop after 2 seconds
+              setTimeout(() => {
+                window.location.href = '/desktop'
+              }, 2000)
+            }
+          }
+        } catch (error) {
+          console.error('Failed to check Telegram status:', error)
+        }
+      }, 3000) // Check every 3 seconds
+
+      return () => clearInterval(interval)
+    }
+  }, [telegramLinking])
+
+  const checkTelegramStatus = async () => {
+    try {
+      const response = await fetch('/api/telegram/link')
+      if (response.ok) {
+        const data = await response.json()
+        setTelegramConnected(data.connected || false)
+      }
+    } catch (error) {
+      console.error('Failed to check Telegram status:', error)
+    }
+  }
+
+  const connectTelegram = async () => {
+    setTelegramLinking(true)
+    setTelegramStatus('')
+    try {
+      const response = await fetch('/api/telegram/link', { method: 'POST' })
+      if (!response.ok) {
+        throw new Error('Failed to generate link')
+      }
+      const data = await response.json()
+      setTelegramLinkUrl(data.telegramUrl || '')
+      setTelegramStatus('Click the button below to open Telegram and connect. This page will automatically update when connected.')
+    } catch (error) {
+      setTelegramStatus('Failed to generate connection link. Please try again.')
+      console.error('Telegram link error:', error)
+    } finally {
+      setTelegramLinking(false)
+    }
+  }
+
+  const disconnectTelegram = async () => {
+    if (!confirm('Disconnect Telegram? You will need to reconnect to use Telegram features.')) {
+      return
+    }
+    setTelegramStatus('Disconnecting...')
+    // TODO: Implement disconnect API
+    setTelegramConnected(false)
+    setTelegramStatus('Telegram disconnected')
+  }
 
   const allItems = useMemo(() => groups.flat(), [])
   const visibleGroups = useMemo(() => {
@@ -198,6 +284,238 @@ export default function SettingsModal() {
         {activeTab === 'trackpad' && <><div className="rounded-2xl border p-5 text-center" style={{ background: 'var(--macos-surface)', borderColor: 'var(--macos-border)' }}><Hand className="mx-auto h-14 w-14" style={{ color: 'var(--theme-primary-color)' }} /><h2 className="mt-2 font-semibold">Gesture Mode</h2><p className="mx-auto mt-1 max-w-md text-xs leading-5" style={{ color: 'var(--macos-secondary)' }}>Use hand gestures and the gesture dock to control apps. This setting is connected directly to the desktop.</p></div><Group><SettingRow title="Gesture control" description="Control apps with hand and eye gestures"><Toggle label="Gesture control" value={settings.gestureControl} onChange={(value) => patch('gestureControl', value)} /></SettingRow><SettingRow title="Tap to click"><Toggle label="Tap to click" value={settings.tapToClick} onChange={(value) => patch('tapToClick', value)} /></SettingRow><SettingRow title="Natural scrolling" description="Move content in the direction of finger movement"><Toggle label="Natural scrolling" value={settings.naturalScrolling} onChange={(value) => patch('naturalScrolling', value)} /></SettingRow><SettingRow title="Three-finger drag" last><Toggle label="Three-finger drag" value={settings.threeFingerDrag} onChange={(value) => patch('threeFingerDrag', value)} /></SettingRow></Group></>}
 
         {activeTab === 'general' && <><Group><SettingRow title="Language"><Select value={settings.language} onChange={(value) => patch('language', value)} options={['English', 'Hindi', 'Spanish', 'French', 'German', 'Japanese']} /></SettingRow><SettingRow title="Region"><Select value={settings.region} onChange={(value) => patch('region', value)} options={['India', 'United States', 'United Kingdom', 'Canada', 'Australia', 'Japan']} /></SettingRow><SettingRow title="24-hour time" last><Toggle label="24-hour time" value={settings.use24HourTime} onChange={(value) => patch('use24HourTime', value)} /></SettingRow></Group><Group><SettingRow title="Software Update" description="SmartyAI is up to date"><Info className="h-5 w-5" style={{ color: 'var(--theme-primary-color)' }} /></SettingRow><SettingRow title="Transfer or Reset" last><button onClick={() => confirm('Reset every desktop setting?') && resetSettings()} className="flex items-center gap-1.5 text-xs font-medium text-red-500"><RotateCcw className="h-3.5 w-3.5" />Reset All Settings</button></SettingRow></Group></>}
+
+        {activeTab === 'telegram' && <>
+          {/* WebSocket Connection Status */}
+          <div className="rounded-2xl border p-5" style={{ background: 'var(--macos-surface)', borderColor: 'var(--macos-border)' }}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`h-3 w-3 rounded-full ${isSocketConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+                <div>
+                  <h3 className="text-sm font-semibold">WebSocket Connection</h3>
+                  <p className="text-[10px]" style={{ color: 'var(--macos-secondary)' }}>
+                    {isSocketConnected ? '✅ Connected to server' : '❌ Disconnected - Automation disabled'}
+                  </p>
+                </div>
+              </div>
+              {!isSocketConnected && (
+                <button
+                  onClick={() => {
+                    if (onReconnect) {
+                      onReconnect()
+                    } else {
+                      window.location.reload()
+                    }
+                  }}
+                  className="rounded-lg border px-3 py-1.5 text-xs font-medium"
+                  style={{ background: 'var(--theme-primary-color)', borderColor: 'var(--theme-primary-color)', color: 'white' }}
+                >
+                  🔄 Reconnect
+                </button>
+              )}
+            </div>
+            
+            {/* Quick Test */}
+            {telegramConnected && isSocketConnected && (
+              <div className="mt-4 border-t pt-4" style={{ borderColor: 'var(--macos-border)' }}>
+                <p className="mb-2 text-xs font-medium">Quick Test Automation:</p>
+                <div className="flex flex-wrap gap-2">
+                  {['Open settings', 'Open terminal', 'Open chrome'].map((cmd) => (
+                    <button
+                      key={cmd}
+                      onClick={async () => {
+                        try {
+                          const response = await fetch('/api/telegram/webhook', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              update_id: Date.now(),
+                              message: {
+                                message_id: 1,
+                                from: { id: 1520574544, first_name: 'Test' },
+                                chat: { id: 1520574544, type: 'private' },
+                                text: cmd,
+                                date: Math.floor(Date.now() / 1000)
+                              }
+                            })
+                          })
+                          if (response.ok) {
+                            setTelegramStatus(`✅ Test sent: "${cmd}" - Check your desktop!`)
+                          }
+                        } catch (error) {
+                          setTelegramStatus('❌ Test failed - Check console')
+                        }
+                      }}
+                      className="rounded-md border px-2 py-1 text-[10px] font-medium"
+                      style={{ borderColor: 'var(--macos-border)', background: 'var(--macos-surface-raised)' }}
+                    >
+                      {cmd}
+                    </button>
+                  ))}
+                </div>
+                
+                {/* Custom Message Input */}
+                <div className="mt-3">
+                  <p className="mb-1.5 text-[10px] font-medium" style={{ color: 'var(--macos-secondary)' }}>
+                    Send custom message:
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Open youtube, Open spotify..."
+                      className="h-8 flex-1 rounded-lg border px-3 text-xs outline-none"
+                      style={{ background: 'var(--macos-surface-raised)', borderColor: 'var(--macos-border)' }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const input = e.currentTarget
+                          const text = input.value.trim()
+                          if (text) {
+                            fetch('/api/telegram/webhook', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                update_id: Date.now(),
+                                message: {
+                                  message_id: 1,
+                                  from: { id: 1520574544, first_name: 'Test' },
+                                  chat: { id: 1520574544, type: 'private' },
+                                  text: text,
+                                  date: Math.floor(Date.now() / 1000)
+                                }
+                              })
+                            }).then(res => {
+                              if (res.ok) {
+                                setTelegramStatus(`✅ Sent: "${text}"`)
+                                input.value = ''
+                              }
+                            })
+                          }
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        const input = document.querySelector('input[placeholder*="Open youtube"]') as HTMLInputElement
+                        const text = input?.value.trim()
+                        if (text) {
+                          fetch('/api/telegram/webhook', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              update_id: Date.now(),
+                              message: {
+                                message_id: 1,
+                                from: { id: 1520574544, first_name: 'Test' },
+                                chat: { id: 1520574544, type: 'private' },
+                                text: text,
+                                date: Math.floor(Date.now() / 1000)
+                              }
+                            })
+                          }).then(res => {
+                            if (res.ok) {
+                              setTelegramStatus(`✅ Sent: "${text}"`)
+                              input.value = ''
+                            }
+                          })
+                        }
+                      }}
+                      className="rounded-lg px-3 py-1.5 text-xs font-medium text-white"
+                      style={{ background: '#0088cc' }}
+                    >
+                      Send
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* Telegram Integration Header */}
+          <div className="rounded-2xl border p-5 text-center" style={{ background: 'var(--macos-surface)', borderColor: 'var(--macos-border)' }}>
+            <MessageCircle className="mx-auto h-14 w-14" style={{ color: '#0088cc' }} />
+            <h2 className="mt-2 font-semibold">Telegram Integration</h2>
+            <p className="mx-auto mt-1 max-w-md text-xs leading-5" style={{ color: 'var(--macos-secondary)' }}>
+              Connect your Telegram to interact with SmartyAI from anywhere. Send files, check ATS scores, and use AI commands directly from Telegram.
+            </p>
+          </div>
+          
+          <Group>
+            <SettingRow 
+              title="Telegram Connection" 
+              description={telegramConnected ? 'Your Telegram is connected' : 'Connect to use Telegram features'}
+            >
+              <Toggle 
+                label="Telegram" 
+                value={telegramConnected} 
+                onChange={(value) => {
+                  if (value) {
+                    connectTelegram()
+                  } else {
+                    disconnectTelegram()
+                  }
+                }} 
+              />
+            </SettingRow>
+            
+            {telegramStatus && (
+              <div className="px-4 py-3">
+                <p className="text-xs" style={{ color: 'var(--macos-secondary)' }}>{telegramStatus}</p>
+              </div>
+            )}
+            
+            {telegramLinkUrl && (
+              <div className="px-4 py-3">
+                <a
+                  href={telegramLinkUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium text-white"
+                  style={{ background: '#0088cc' }}
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  Open Telegram to Connect
+                </a>
+                <p className="mt-2 text-[10px]" style={{ color: 'var(--macos-secondary)' }}>
+                  Click the button above to open Telegram and complete the connection.
+                </p>
+              </div>
+            )}
+          </Group>
+          
+          {telegramConnected && (
+            <Group>
+              <SettingRow title="Features" description="What you can do with Telegram" last>
+                <div className="flex flex-wrap gap-1.5">
+                  {['AI Chat', 'File Upload', 'ATS Check', 'Mac Automation'].map((feature) => (
+                    <span 
+                      key={feature}
+                      className="rounded-md px-2 py-1 text-[10px]"
+                      style={{ background: 'var(--macos-surface-raised)', color: 'var(--macos-secondary)' }}
+                    >
+                      {feature}
+                    </span>
+                  ))}
+                </div>
+              </SettingRow>
+            </Group>
+          )}
+          
+          <Group>
+            <SettingRow 
+              title="Bot Commands" 
+              description="Available Telegram commands"
+              last
+            >
+              <div className="space-y-1 text-right">
+                {['/start - Connect Telegram', '/help - Show help', '/status - Check status', '/tasks - View tasks'].map((cmd) => (
+                  <div key={cmd} className="text-[10px] font-mono" style={{ color: 'var(--macos-secondary)' }}>
+                    {cmd}
+                  </div>
+                ))}
+              </div>
+            </SettingRow>
+          </Group>
+        </>}
 
         {activeTab === 'extras' && <div className="grid gap-3 sm:grid-cols-2">{[{ icon: MousePointer2, name: 'Mouse', text: 'Tracking, scrolling, and secondary click' }, { icon: Printer, name: 'Printers & Scanners', text: 'Add and manage printers' }, { icon: Gamepad2, name: 'Game Center', text: 'Controller and game preferences' }, { icon: Globe2, name: 'Internet Accounts', text: 'Mail, contacts, and calendars' }, { icon: Laptop, name: 'Users & Groups', text: 'Login and account options' }, { icon: LockKeyhole, name: 'Lock Screen', text: 'Password and display timing' }].map(({ icon: Icon, name, text }) => <button key={name} className="flex items-center gap-3 rounded-xl border p-4 text-left" style={{ background: 'var(--macos-surface)', borderColor: 'var(--macos-border)' }}><span className="grid h-9 w-9 place-items-center rounded-lg text-white" style={{ background: 'var(--theme-primary-color)' }}><Icon className="h-5 w-5" /></span><span><span className="block text-sm font-medium">{name}</span><span className="block text-[10px]" style={{ color: 'var(--macos-secondary)' }}>{text}</span></span><ChevronRight className="ml-auto h-4 w-4 opacity-30" /></button>)}</div>}
       </div>

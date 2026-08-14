@@ -96,12 +96,23 @@ export default function SnapshotWidget({
 
       {/* Screenshot Image */}
       <div className="relative" style={{ height: 'calc(100% - 40px)' }}>
-        <img
-          src={image}
-          alt={title}
-          className="w-full h-full object-cover"
-          onClick={() => setIsFullscreen(!isFullscreen)}
-        />
+        {image && image.startsWith('data:') ? (
+          <img
+            src={image}
+            alt={title}
+            className="w-full h-full object-contain"
+            onClick={() => setIsFullscreen(!isFullscreen)}
+          />
+        ) : (
+          <div className={`w-full h-full flex items-center justify-center ${
+            isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+          }`}>
+            <div className="text-center">
+              <div className={`text-4xl mb-2 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>📷</div>
+              <p className={`text-sm ${isDarkMode ? 'text-gray-500' : 'text-gray-600'}`}>{title}</p>
+            </div>
+          </div>
+        )}
 
         {/* Gradient Overlay */}
         <div className={`absolute inset-0 pointer-events-none ${
