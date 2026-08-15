@@ -145,16 +145,16 @@ export function Desktop() {
   const automationAPIRef = useRef<any>(null) // Store automationAPI in ref
   
   const handleTelegramCommand = useCallback(async (data: { requestId?: string; commandId: string; command?: string; sequence?: any[] }) => {
-    console.log('\n' + '📩'.repeat(80))
-    console.log('[Desktop] 📨 AUTOMATION-COMMAND EVENT RECEIVED')
-    console.log(`   Request ID: ${data.requestId || 'N/A'}`)
-    console.log(`   Command ID: ${data.commandId}`)
-    console.log(`   Command: ${data.command || 'N/A'}`)
-    console.log(`   Sequence: ${JSON.stringify(data.sequence, null, 2) || 'N/A'}`)
-    console.log(`   Timestamp: ${new Date().toISOString()}`)
+    console.log('\n🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥')
+    console.log('[DESKTOP] 🔥🔥🔥 AUTOMATION COMMAND RECEIVED 🔥🔥🔥')
+    console.log(`   commandId: ${data.commandId}`)
+    console.log(`   requestId: ${data.requestId || 'N/A'}`)
+    console.log(`   userId: ${data}`)
+    console.log(`   command: ${data.command || 'N/A'}`)
+    console.log('   sequence:', JSON.stringify(data.sequence, null, 2))
     console.log('[Desktop] 🔍 Checking automationAPI availability...')
     console.log(`   automationAPIRef.current: ${automationAPIRef.current ? 'AVAILABLE ✅' : 'NULL ❌'}`)
-    console.log('📩'.repeat(80) + '\n')
+    console.log('🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥\n')
     
     // Execute immediately if automationAPI is available
     if (automationAPIRef.current) {
@@ -171,13 +171,9 @@ export function Desktop() {
           console.log('[Desktop] ⚡ Calling automationAPIRef.current.executeSequence()...')
           console.log('🚀'.repeat(80) + '\n')
           
+          console.log('[DESKTOP] ⚡ Calling automationAPI.executeSequence()...')
           success = await automationAPIRef.current.executeSequence(data.sequence)
-          
-          console.log('\n' + '📥'.repeat(80))
-          console.log('[Desktop] 📥 AUTOMATION EXECUTION COMPLETE')
-          console.log(`   Success: ${success}`)
-          console.log(`   Request ID: ${data.requestId || 'N/A'}`)
-          console.log('📥'.repeat(80) + '\n')
+          console.log('[DESKTOP] executeSequence RESULT:', success)
           
           if (success) {
             toast.success(`✅ Telegram automation executed`)
@@ -202,23 +198,17 @@ export function Desktop() {
         }
         
         // Send result back to server (for Telegram webhook to receive)
+        console.log('[DESKTOP] Sending automation-result...')
         if (sendResultRef.current) {
-          console.log('\n' + '📤'.repeat(80))
-          console.log('[Desktop] 📤 Step 3: Sending result back to server')
-          console.log(`   Request ID: ${data.requestId || 'N/A'}`)
-          console.log(`   Command ID: ${data.commandId}`)
-          console.log(`   Success: ${success}`)
-          console.log(`   Message: ${success ? 'Command executed successfully' : 'Command execution failed'}`)
-          console.log('📤'.repeat(80) + '\n')
-          
           sendResultRef.current(
             data.commandId,
             success,
             success ? 'Command executed successfully' : 'Command execution failed',
             data.requestId
           )
-          
-          console.log('[Desktop] ✅ Result sent via Socket.io')
+          console.log('[DESKTOP] automation-result SENT')
+        } else {
+          console.error('[DESKTOP] ❌ sendResultRef.current is NULL')
         }
       } catch (error) {
         console.log('\n' + '❌'.repeat(80))

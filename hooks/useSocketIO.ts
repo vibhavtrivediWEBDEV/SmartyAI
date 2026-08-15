@@ -62,6 +62,28 @@ export function useSocketIO(options: UseSocketIOOptions = {}) {
         })
       }
     }
+    
+    // 🔥 FIX: Register event listeners IMMEDIATELY in same effect
+    if (onCommand) {
+      console.log('[Socket.io Client] 🔧 Setting up event listeners for automation events');
+      
+      // Handler for automation-command
+      const handleCommand = (command: AutomationCommand) => {
+        console.log('\n' + '📥'.repeat(80))
+        console.log('📨 [Desktop WebSocket] AUTOMATION COMMAND RECEIVED')
+        console.log(`   Command ID: ${command.commandId}`)
+        console.log(`   Command: ${command.command}`)
+        console.log(`   Source: ${command.source}`)
+        console.log(`   Timestamp: ${new Date(command.timestamp).toLocaleTimeString()}`)
+        console.log('📥'.repeat(80) + '\n')
+        
+        onCommand(command)
+      }
+      
+      socket.on('automation-command', handleCommand)
+      
+      console.log('[Socket.io Client] ✅ Event listeners registered');
+    }
 
     socket.on('connect', () => {
       console.log('\n' + '='.repeat(80))
@@ -125,7 +147,7 @@ export function useSocketIO(options: UseSocketIOOptions = {}) {
       sendResultRef.current = null
       setIsConnected(false)
     }
-  }, [userId, enabled]) // Removed onCommand from dependencies
+  }, [userId, enabled, onCommand])
 
   // Send automation result back to server
   const sendResult = useCallback((commandId: string, success: boolean, message?: string) => {
@@ -133,61 +155,6 @@ export function useSocketIO(options: UseSocketIOOptions = {}) {
       sendResultRef.current(commandId, success, message)
     }
   }, [])
-
-  // Trigger onCommand callback when command received
-  useEffect(() => {
-    if (!onCommand || !socketRef.current) {
-      console.log('[Socket.io Client] ⚠️ Skipping event listeners setup:', { onCommand: !!onCommand, socket: !!socketRef.current });
-      return
-    }
-    
-    const socket = socketRef.current
-    
-    console.log('[Socket.io Client] 🔧 Setting up event listeners for automation events');
-    
-    // Handler for old format: automation-command (raw text)
-    const handleCommand = (command: AutomationCommand) => {
-      console.log('\n' + '📥'.repeat(80))
-      console.log('📨 [Desktop WebSocket] AUTOMATION COMMAND RECEIVED')
-      console.log(`   Command ID: ${command.commandId}`)
-      console.log(`   Command: ${command.command}`)
-      console.log(`   Source: ${command.source}`)
-      console.log(`   Timestamp: ${new Date(command.timestamp).toLocaleTimeString()}`)
-      console.log('📥'.repeat(80) + '\n')
-      
-      onCommand(command)
-    }
-    
-    // Handler for new format: telegram-automation (sequence)
-    const handleTelegramAutomation = (data: any) => {
-      console.log('\n' + '🚀'.repeat(80))
-      console.log('🤖 [Desktop WebSocket] TELEGRAM AUTOMATION SEQUENCE')
-      console.log(`   Command ID: ${data.commandId}`)
-      console.log(`   Sequence:`, data.sequence)
-      console.log(`   Source: ${data.source}`)
-      console.log(`   Timestamp: ${new Date(data.timestamp).toLocaleTimeString()}`)
-      console.log('🚀'.repeat(80) + '\n')
-      
-      onCommand(data)
-    }
-    
-    socket.on('automation-command', handleCommand)
-    socket.on('telegram-automation', handleTelegramAutomation)
-    
-    console.log('[Socket.io Client] ✅ Event listeners registered');
-    
-    // Listen for automation results from other sources (if needed)
-    socket.on('automation-result-ack', (data) => {
-      console.log('[Desktop WebSocket] 📨 Result acknowledged by server')
-    })
-    
-    return () => {
-      console.log('[Socket.io Client] 🧹 Cleaning up event listeners');
-      socket.off('automation-command', handleCommand)
-      socket.off('telegram-automation', handleTelegramAutomation)
-      socket.off('automation-result-ack')
-    }
-  }, [onCommand])
 
   return {
     socket: socketRef.current,

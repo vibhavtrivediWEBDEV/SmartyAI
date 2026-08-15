@@ -6,12 +6,14 @@
  * 
  * Flow:
  * 1. Receive command from any source
- * 2. Process through existing terminalAI/automation logic
- * 3. Execute via automationAPI
+ * 2. Resolve intent via unified architecture (resolveUserIntent + executeIntent)
+ * 3. Execute via automationAPI or return sequence for WebSocket
  * 4. Return result + events
  */
 
 import type { JSX } from "react/jsx-runtime";
+import { resolveUserIntent } from './resolveUserIntent';
+import { executeIntent } from './executeIntent';
 
 // ============================================
 // TYPES
@@ -85,84 +87,94 @@ export async function executeSmartyCommand(
     }
     
     // ============================================
-    // STEP 2: Check for open/close/maximize actions
+    // STEP 2: UNIFIED INTENT RESOLUTION
     // ============================================
     
-    const parts = trimmedCommand.split(" ");
-    const action = parts[0].toLowerCase(); // Convert to lowercase for comparison
-    const target = parts.slice(1).join(" ");
-    
-    console.log('\n' + '🔍'.repeat(80))
-    console.log('[CommonCommandEngine] STEP 1: COMMAND ANALYSIS')
-    console.log(`   Raw Command: "${trimmedCommand}"`)
-    console.log(`   Parts: [${parts.map(p => `"${p}"`).join(', ')}]`)
-    console.log(`   Action: "${action}"`)
-    console.log(`   Target: "${target}"`)
+    console.log('\n' + '🎯'.repeat(80))
+    console.log('[CommonCommandEngine] STEP 2: INTENT RESOLUTION')
+    console.log(`   Command: "${trimmedCommand}"`)
     console.log(`   Source: ${source}`)
-    console.log(`   Is Automation?: ${['open', 'close', 'minimize', 'maximize', 'focus'].includes(action)}`)
-    console.log('🔍'.repeat(80) + '\n')
+    console.log('🎯'.repeat(80) + '\n')
     
-    if (['open', 'close', 'minimize', 'maximize', 'focus'].includes(action)) {
-      console.log('\n' + '🤖'.repeat(80))
-      console.log('[CommonCommandEngine] 🎯 AUTOMATION ACTION DETECTED')
-      console.log(`   Action: ${action}`)
-      console.log(`   Target: ${target}`)
-      console.log(`   Full Command: ${trimmedCommand}`)
-      console.log(`   Source: ${source}`)
-      console.log('🤖'.repeat(80) + '\n')
+    emit('thinking', 'Understanding command...');
+    
+    try {
+      // 🧠 Step A: Resolve user intent (AI + pattern matching)
+      const resolvedIntent = await resolveUserIntent(trimmedCommand, { 
+        source,
+        userContext: userProfile 
+      });
       
-      emit('automation', `Executing: ${action} ${target}`);
+      console.log('✅ [CommonCommandEngine] Intent resolved:');
+      console.log(`   Intent: "${resolvedIntent.intent}"`);
+      console.log(`   Parameters:`, resolvedIntent.parameters);
+      console.log(`   Confidence: ${resolvedIntent.confidence}`);
+      console.log(`   Source: ${resolvedIntent.source}\n`);
       
-      // CRITICAL: Build the SAME automation sequence for both Terminal and Telegram
-      // No more simple objects - use proper automation registry resolution
+      // ============================================
+      // EXPLICIT BRANCH: ai.chat (conversation)
+      // ============================================
       
-      // Map app names to proper targets
-      const appNameMap: Record<string, string> = {
-        'terminal': 'Terminal',
-        'settings': 'Settings',
-        'chrome': 'chrome',
-        'browser': 'chrome',
-        'music': 'Music',
-        'spotify': 'Spotify',
-        'calendar': 'Calendar',
-        'maps': 'Maps',
-        'youtube': 'Youtube',
-        'excel': 'Excel Editor',
-        'mail': 'Mail',
-        'pdf': 'PDF Viewer',
-        'finder': 'Finder',
-        'photos': 'Photos',
-        'notes': 'Notes',
-        'safari': 'Safari',
-        'facetime': 'FaceTime',
-        'messages': 'Messages',
-        'appstore': 'App Store',
-        'app store': 'App Store',
-      };
+      if (resolvedIntent.intent === 'ai.chat') {
+        console.log('🤖 [CommonCommandEngine] AI chat detected - routing to AI chat handler');
+        emit('thinking', 'Processing with AI...');
+        
+        // Call AI API directly for conversational input
+        const apiUrl = typeof window === 'undefined' 
+          ? `http://localhost:3001/api/terminalAI`
+          : "/api/terminalAI";
+        
+        const res = await fetch(apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            messages: [{ type: "input", value: trimmedCommand }],
+            userId: userId
+          })
+        });
+        
+        const data = await res.json();
+        
+        if (!data.success) {
+          emit('error', data.error || 'Failed to generate response');
+          return {
+            success: false,
+            message: `Error: ${data.error || "Failed to generate response."}`,
+            events
+          };
+        }
+        
+        emit('success', 'Response generated');
+        emit('complete', 'AI response ready');
+        return {
+          success: true,
+          message: data.response,
+          events
+        };
+      } else {
+        // ============================================
+        // EXPLICIT BRANCH: Automation command
+        // ============================================
+        
+        // 🚀 Step B: Execute intent → automation sequence
+        const automationSequence = executeIntent(resolvedIntent);
       
-      const mappedTarget = appNameMap[target.toLowerCase()] || target;
+      console.log('✅ [CommonCommandEngine] Sequence generated:');
+      console.log(`   Steps: ${automationSequence.length}`);
+      console.log(`   Sequence:`, JSON.stringify(automationSequence, null, 2));
+      console.log('\n');
       
-      const automationSequence = [{
-        action: action as 'open' | 'close' | 'minimize' | 'maximize' | 'focus',
-        target: mappedTarget,
-        delay: 100
-      }];
-      
-      console.log('\n' + '📦'.repeat(80))
-      console.log('[CommonCommandEngine] AUTOMATION SEQUENCE BUILT')
-      console.log(`   Source: ${source}`)
-      console.log(`   Mapped Target: "${target}" → "${mappedTarget}"`)
-      console.log(`   Automation Sequence:`, JSON.stringify(automationSequence, null, 2))
-      console.log('📦'.repeat(80) + '\n')
+      // 📡 Step C: Emit for execution
+      emit('automation', `Executing: ${resolvedIntent.intent}`);
       
       // BRANCH: Telegram/remote - Return sequence for WebSocket transport
       if (source === 'telegram' || source === 'api') {
-        console.log('[CommonCommandEngine] 📡 REMOTE SOURCE: Returning sequence for WebSocket')
-        emit('success', `${mappedTarget} ${action}ed`);
+        console.log('[CommonCommandEngine] 📡 REMOTE SOURCE: Returning sequence for WebSocket');
+        emit('success', `Automation sequence ready`);
         emit('complete', 'Command ready for execution');
         return {
           success: true,
-          message: `${action} ${mappedTarget}`,
+          message: `${resolvedIntent.intent}`,
           events,
           automation: automationSequence
         };
@@ -170,138 +182,140 @@ export async function executeSmartyCommand(
       
       // BRANCH: Terminal/local - Check automationAPI availability
       if (!automationAPI) {
-        console.log('[CommonCommandEngine] ❌ ERROR: automationAPI not available for local execution')
+        console.log('[CommonCommandEngine] ❌ ERROR: automationAPI not available for local execution');
         emit('error', 'Automation not available');
         return {
           success: false,
-          message: `Automation not available. Cannot ${action} ${mappedTarget}.`,
+          message: `Automation not available. Cannot execute ${resolvedIntent.intent}.`,
           events
         };
       }
       
       // BRANCH: Terminal/local - Execute directly via automationAPI
-      console.log('[CommonCommandEngine] 🖥️ LOCAL SOURCE: Executing via automationAPI.executeSequence()')
-      console.log('[CommonCommandEngine] 📤 Step 1: Sending to automationAPI.executeSequence()...')
+      console.log('[CommonCommandEngine] 🖥️ LOCAL SOURCE: Executing via automationAPI.executeSequence()');
+      console.log('[CommonCommandEngine] 📤 Step 1: Sending to automationAPI.executeSequence()...');
       const success = await automationAPI.executeSequence(automationSequence);
       console.log('[CommonCommandEngine] 📥 Step 2: Received response:', success)
       
       if (success) {
         console.log('\n' + '✅'.repeat(80))
         console.log('[CommonCommandEngine] 🎉 AUTOMATION SUCCESS')
-        console.log(`   Action: ${action}`)
-        console.log(`   Target: ${mappedTarget}`)
-        console.log(`   Message: ${mappedTarget} ${action}ed`)
+        console.log(`   Intent: ${resolvedIntent.intent}`)
+        console.log(`   Steps: ${automationSequence.length}`)
         console.log('✅'.repeat(80) + '\n')
-        emit('success', `${mappedTarget} ${action}ed`);
+        emit('success', `Executed successfully`);
         emit('complete', 'Command executed successfully');
         return {
           success: true,
-          message: `${mappedTarget} ${action}ed`,
+          message: `Successfully executed ${resolvedIntent.intent}`,
           events,
           automation: automationSequence
         };
       } else {
         console.log('\n' + '❌'.repeat(80))
         console.log('[CommonCommandEngine] 💥 AUTOMATION FAILED')
-        console.log(`   Action: ${action}`)
-        console.log(`   Target: ${mappedTarget}`)
+        console.log(`   Intent: ${resolvedIntent.intent}`)
         console.log('❌'.repeat(80) + '\n')
-        emit('error', `Failed to ${action} ${mappedTarget}`);
+        emit('error', `Failed to execute ${resolvedIntent.intent}`);
         return {
           success: false,
-          message: `Failed to ${action} ${mappedTarget}`,
+          message: `Failed to execute ${resolvedIntent.intent}`,
+          events
+        };
+      }
+      } // End of automation branch (else block)
+      
+    } catch (error: any) {
+      console.log('\n' + '⚠️'.repeat(80))
+      console.log('[CommonCommandEngine] INTENT RESOLUTION FAILED')
+      console.log(`   Error: ${error.message}`)
+      console.log('   Falling back to legacy AI processing...')
+      console.log('⚠️'.repeat(80) + '\n')
+      
+      // FALLBACK: Legacy AI processing (old behavior)
+      console.log('\n' + '🧠'.repeat(80))
+      console.log('[CommonCommandEngine] 🤖 AI PROCESSING STARTED (FALLBACK)')
+      console.log(`   Command: ${trimmedCommand}`)
+      console.log(`   Source: ${source}`)
+      console.log('🧠'.repeat(80) + '\n')
+      
+      emit('thinking', 'Processing with AI...');
+      
+      // Use absolute URL when running server-side (Telegram), relative when client-side (Terminal)
+      const apiUrl = typeof window === 'undefined' 
+        ? `http://localhost:3001/api/terminalAI`
+        : "/api/terminalAI";
+      
+      console.log(`[CommonCommandEngine] 📤 Sending to AI API: ${apiUrl}`)
+      console.log(`[CommonCommandEngine] 📋 Payload:`, {
+        command: trimmedCommand,
+        userId: userId,
+        source: source
+      })
+      
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          messages: [{ type: "input", value: trimmedCommand }],
+          userId: userId
+        })
+      });
+      
+      console.log('[CommonCommandEngine] 📥 Received AI response, status:', res.status)
+      
+      const data = await res.json();
+      
+      console.log('\n' + '🤖'.repeat(80))
+      console.log('[CommonCommandEngine] 🎨 AI RESPONSE RECEIVED')
+      console.log(`   Success: ${data.success}`)
+      console.log(`   Has Output: ${!!data.output}`)
+      console.log(`   Output Preview: ${data.output?.substring(0, 100)}...`)
+      console.log('🤖'.repeat(80) + '\n')
+      
+      if (!data.success) {
+        emit('error', data.error || 'Failed to generate response');
+        return {
+          success: false,
+          message: `Error: ${data.error || "Failed to generate response."}`,
+          events
+        };
+      }
+      
+      const aiResponse = data.response;
+      
+      // ============================================
+      // STEP 4: Parse AI response and execute
+      // ============================================
+      
+      const automationResult = await parseAIResponseAndExecute(
+        aiResponse,
+        automationAPI,
+        userProfile,
+        emit,
+        source // Pass source to determine remote vs local execution
+      );
+      
+      if (automationResult) {
+        emit('complete', 'Automation executed');
+        return {
+          success: automationResult.success,
+          message: aiResponse,
+          automation: automationResult.automation,
+          events
+        };
+      } else {
+        // Just AI response, no automation
+        emit('complete', 'Response generated');
+        return {
+          success: true,
+          message: aiResponse,
           events
         };
       }
     }
-    
-    // ============================================
-    // STEP 3: Call terminalAI for intelligent commands
-    // ============================================
-    
-    console.log('\n' + '🧠'.repeat(80))
-    console.log('[CommonCommandEngine] 🤖 AI PROCESSING STARTED')
-    console.log(`   Command: ${trimmedCommand}`)
-    console.log(`   Source: ${source}`)
-    console.log(`   Action: Getting AI response from /api/terminalAI`)
-    console.log('🧠'.repeat(80) + '\n')
-    
-    emit('thinking', 'Processing with AI...');
-    
-    // Use absolute URL when running server-side (Telegram), relative when client-side (Terminal)
-    const apiUrl = typeof window === 'undefined' 
-      ? `http://localhost:3001/api/terminalAI`
-      : "/api/terminalAI";
-    
-    console.log(`[CommonCommandEngine] 📤 Sending to AI API: ${apiUrl}`)
-    console.log(`[CommonCommandEngine] 📋 Payload:`, {
-      command: trimmedCommand,
-      userId: userId,
-      source: source
-    })
-    
-    const res = await fetch(apiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        messages: [{ type: "input", value: trimmedCommand }],
-        userId: userId
-      }),
-    });
-    
-    console.log('[CommonCommandEngine] 📥 Received AI response, status:', res.status)
-    
-    const data = await res.json();
-    
-    console.log('\n' + '🤖'.repeat(80))
-    console.log('[CommonCommandEngine] 🎨 AI RESPONSE RECEIVED')
-    console.log(`   Success: ${data.success}`)
-    console.log(`   Has Output: ${!!data.output}`)
-    console.log(`   Output Preview: ${data.output?.substring(0, 100)}...`)
-    console.log('🤖'.repeat(80) + '\n')
-    
-    if (!data.success) {
-      emit('error', data.error || 'Failed to generate response');
-      return {
-        success: false,
-        message: `Error: ${data.error || "Failed to generate response."}`,
-        events
-      };
-    }
-    
-    const aiResponse = data.response;
-    
-    // ============================================
-    // STEP 4: Parse AI response and execute
-    // ============================================
-    
-    const automationResult = await parseAIResponseAndExecute(
-      aiResponse,
-      automationAPI,
-      userProfile,
-      emit,
-      source // Pass source to determine remote vs local execution
-    );
-    
-    if (automationResult) {
-      emit('complete', 'Automation executed');
-      return {
-        success: automationResult.success,
-        message: aiResponse,
-        automation: automationResult.automation,
-        events
-      };
-    } else {
-      // Just AI response, no automation
-      emit('complete', 'Response generated');
-      return {
-        success: true,
-        message: aiResponse,
-        events
-      };
-    }
-    
   } catch (error: any) {
+    // Catch for original try block
     emit('error', error.message || 'Unknown error');
     return {
       success: false,

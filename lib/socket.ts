@@ -179,8 +179,8 @@ export function initializeSocketServer(httpServer: HttpServer) {
       socket.join(`user:${userId}`)
       console.log(`✅ [Socket.io] Socket ${socket.id} joined room: user:${userId}`)
       
-      // Register desktop session
-      desktopSessions.set(userId, {
+      // Register desktop session in GLOBAL registry (CRITICAL FIX)
+      global.desktopSessions!.set(userId, {
         socketId: socket.id,
         userId,
         connectedAt: Date.now(),
@@ -193,8 +193,8 @@ export function initializeSocketServer(httpServer: HttpServer) {
       console.log(`   Session Key: "${userId}"`)
       console.log(`   Socket ID: ${socket.id}`)
       console.log(`   Status: online`)
-      console.log(`   Total Active Sessions: ${desktopSessions.size}`)
-      console.log(`   Session Registry Keys: [${Array.from(desktopSessions.keys()).map(k => `"${k}"`).join(', ')}]`)
+      console.log(`   Total Active Sessions: ${global.desktopSessions!.size}`)
+      console.log(`   Session Registry Keys: [${Array.from(global.desktopSessions!.keys()).map(k => `"${k}"`).join(', ')}]`)
       console.log('💾'.repeat(80) + '\n')
       
       // Confirm join
@@ -214,8 +214,8 @@ export function initializeSocketServer(httpServer: HttpServer) {
       console.log(`   Socket ID: ${socket.id}`)
       console.log('📊'.repeat(80) + '\n')
       
-      // Update session activity
-      const session = desktopSessions.get(result.userId)
+      // Update session activity in GLOBAL registry
+      const session = global.desktopSessions?.get(result.userId)
       if (session) {
         session.lastActivity = Date.now()
         console.log(`[Socket.io] 🔄 Updated session activity for user: ${result.userId}`)
@@ -240,12 +240,12 @@ export function initializeSocketServer(httpServer: HttpServer) {
       console.log(`   Reason: ${reason}`)
       console.log('❌'.repeat(80) + '\n')
       
-      // Remove desktop session
-      for (const [userId, session] of desktopSessions.entries()) {
+      // Remove desktop session from GLOBAL registry
+      for (const [userId, session] of global.desktopSessions!.entries()) {
         if (session.socketId === socket.id) {
-          desktopSessions.delete(userId)
+          global.desktopSessions!.delete(userId)
           console.log(`[Socket.io] 💻 Desktop session removed for user: ${userId}`)
-          console.log(`[Socket.io]    Active Sessions: ${desktopSessions.size}`)
+          console.log(`[Socket.io]    Active Sessions: ${global.desktopSessions!.size}`)
           break
         }
       }

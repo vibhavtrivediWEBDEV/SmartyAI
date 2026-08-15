@@ -39,7 +39,7 @@ export interface CursorAutomationAPI {
 
   // Queue management
   executeCommand: (command: AutomationCommand) => Promise<boolean>;
-  executeSequence: (commands: AutomationCommand[]) => Promise<void>;
+  executeSequence: (commands: AutomationCommand[]) => Promise<boolean>;
   clearQueue: () => void;
 
   // Text command parser
@@ -1046,7 +1046,7 @@ export function useCursorAutomation(
   }, [moveTo, clickElement, openWindow, closeWindow, minimizeWindow, maximizeWindow, focusWindow, searchWeb, log]);
 
   // Execute sequence of commands
-  const executeSequence = useCallback(async (commands: AutomationCommand[]): Promise<void> => {
+  const executeSequence = useCallback(async (commands: AutomationCommand[]): Promise<boolean> => {
     stateRef.current.isRunning = true;
     stateRef.current.queue = [...commands];
 
@@ -1057,15 +1057,22 @@ export function useCursorAutomation(
         const command = commands[i];
         log(`Step ${i + 1}/${commands.length}: ${command.action} ${command.target || ''}`, 'info');
 
-        await executeCommand(command);
+        const success = await executeCommand(command);
+        
+        if (!success) {
+          log(`Sequence failed at step ${i + 1}: ${command.action} ${command.target || ''}`, 'error');
+          return false;
+        }
 
         // Remove from queue
         stateRef.current.queue.shift();
       }
 
-      log('Sequence completed', 'success');
+      log('Sequence completed successfully', 'success');
+      return true;
     } catch (error) {
       log(`Sequence error: ${error}`, 'error');
+      return false;
     } finally {
       stateRef.current.isRunning = false;
       stateRef.current.queue = [];
@@ -1293,12 +1300,54 @@ export function useCursorAutomation(
   }, [log]);
 
   // Execute text command
+  // Execute text command using UNIFIED architecture
   const executeTextCommand = useCallback(async (text: string): Promise<boolean> => {
-    const command = parseTextCommand(text);
-    if (!command) return false;
-
-    return await executeCommand(command);
-  }, [parseTextCommand, executeCommand]);
+    try {
+      log(`🎯 Processing command: "${text}"`, 'info');
+      
+      // 🔥 LAZY LOAD: Import unified resolver to avoid circular dependency
+      const { resolveUserIntent } = await import('@/lib/resolveUserIntent');
+      const { executeIntent } = await import('@/lib/executeIntent');
+      
+      // 🎯 Step 1: Resolve user intent (AI + pattern matching)
+      const resolvedIntent = await resolveUserIntent(text, { source: 'terminal' });
+      
+      log(`✅ Intent: ${resolvedIntent.intent}`, 'info');
+      log(`   Confidence: ${resolvedIntent.confidence}`, 'info');
+      
+      // 🚀 Step 2: Execute intent → automation sequence
+      const sequence = executeIntent(resolvedIntent);
+      
+      log(`⚡ Executing ${sequence.length} steps...`, 'info');
+      
+      // 🔧 Step 3: Run sequence
+      const success = await executeSequence(sequence);
+      
+      if (success) {
+        log(`✅ Command executed successfully`, 'success');
+      } else {
+        log(`❌ Command execution failed`, 'error');
+      }
+      
+      return success;
+      
+    } catch (error: any) {
+      log(`❌ Failed to execute command: ${error.message}`, 'error');
+      
+      // FALLBACK: Try legacy parseTextCommand for backward compatibility
+      try {
+        log('⚠️ Trying legacy parser...', 'warn');
+        const command = parseTextCommand(text);
+        if (command) {
+          return await executeCommand(command);
+        }
+      } catch (fallbackError) {
+        log(`❌ Legacy fallback also failed`, 'error');
+      }
+      
+      return false;
+    }
+  }, [executeSequence, executeCommand, parseTextCommand, log]);
 
   // Get current state
   const getState = useCallback((): AutomationState => {

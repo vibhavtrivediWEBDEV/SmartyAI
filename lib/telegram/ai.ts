@@ -422,6 +422,11 @@ To execute automation commands:
       console.log(`[Telegram] ⏳ Now emitting to Desktop...`)
       
       // Now emit to Desktop
+      console.log('\n🔥🔥🔥 [SERVER] EMITTING AUTOMATION COMMAND')
+      console.log(JSON.stringify(payload, null, 2))
+      console.log(`room: user:${userId}`)
+      console.log('🔥🔥🔥\n')
+      
       socketIO.to(`user:${userId}`).emit('automation-command', payload)
       
       console.log('[Telegram] ✅ WebSocket emit complete')
