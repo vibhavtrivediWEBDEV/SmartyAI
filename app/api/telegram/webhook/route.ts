@@ -122,8 +122,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     
     // Process update asynchronously
     // We return 200 immediately so Telegram knows we received it
+    
+    console.log('\n' + '🔥'.repeat(80))
+    console.log('[WEBHOOK ROUE] 📨 CALLING processTelegramUpdate()')
+    console.log(`   Update ID: ${update.update_id}`)
+    console.log(`   Message: ${JSON.stringify(update.message?.text || update.message?.document || 'N/A')}`)
+    console.log('🔥'.repeat(80) + '\n')
+    
     processTelegramUpdate(update)
       .then(async () => {
+        console.log('\n' + '✅'.repeat(80))
+        console.log(`[WEBHOOK] ✅ Update ${update.update_id} PROCESSED SUCCESSFULLY`)
+        console.log('✅'.repeat(80) + '\n')
+        
         logToTelegram.debug(`Update ${update.update_id} processed`, 'Webhook')
         
         // Update message status to completed
@@ -134,6 +145,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         }
       })
       .catch(async error => {
+        console.log('\n' + '❌'.repeat(80))
+        console.log(`[WEBHOOK] ❌ Update ${update.update_id} FAILED`)
+        console.log(`   Error: ${error.message}`)
+        console.log(`   Stack: ${error.stack}`)
+        console.log('❌'.repeat(80) + '\n')
+        
         logToTelegram.error(`Update ${update.update_id} failed`, 'Webhook', undefined, error)
         console.error('[Telegram Webhook] Async processing error:', error)
         

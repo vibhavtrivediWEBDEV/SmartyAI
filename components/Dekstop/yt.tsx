@@ -429,6 +429,8 @@ function Navbar({
         >
           <SearchIcon dark={dark} />
           <input
+            id="youtube_search_input"
+            name="youtube_search_input"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search"

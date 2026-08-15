@@ -80,7 +80,7 @@ const APP_NAME_MAP: Record<string, string> = {
     'appstore': 'App Store',
 };
 
-export function resolveSequence(key: string, params: Params = {}) {
+export function resolveSequence(key: string, params: Params = {}): any[] {
     // 🔥 CHECK: Is it a dynamic pattern like "terminal.open"?
     const parts = key.split('.');
 
@@ -104,9 +104,24 @@ export function resolveSequence(key: string, params: Params = {}) {
         throw new Error(`Automation key not found: ${key}`);
     }
 
-    return rawSequence.map((step: any) => {
+    // 🔥 EXTRACT META: Get estimatedDuration if present
+    let estimatedDuration = 30000; // Default 30 seconds
+    const lastStep = rawSequence[rawSequence.length - 1];
+    
+    if (lastStep && lastStep._meta && lastStep._meta.estimatedDuration) {
+        estimatedDuration = lastStep._meta.estimatedDuration;
+        console.log(`⏱️ [resolveSequence] Automation "${key}" estimated duration: ${estimatedDuration}ms`);
+    }
+
+    // 🔹 Resolve all {{variables}}
+    const resolvedSequence = rawSequence.map((step: any) => {
         const resolvedStep = JSON.parse(JSON.stringify(step));
 
+        // Skip _meta steps (they're just metadata)
+        if (resolvedStep._meta) {
+            return null;
+        }
+        
         // Replace {{variables}}
         const replaceVars = (val: any) => {
             if (typeof val !== 'string') return val;
@@ -133,7 +148,12 @@ export function resolveSequence(key: string, params: Params = {}) {
         }
 
         return resolvedStep;
-    });
+    }).filter(step => step !== null); // Remove null steps (_meta)
+
+    // 🔥 ATTACH TIMEOUT to sequence (for downstream processing)
+    (resolvedSequence as any)._timeout = estimatedDuration;
+    
+    return resolvedSequence;
 }
 
 // 🚀 Generate basic action sequences dynamically

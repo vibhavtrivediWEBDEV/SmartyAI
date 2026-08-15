@@ -627,7 +627,8 @@
     { "action": "click", "target": "mail_send_button", "delay": 1000 },
     { "action": "wait", "params": { "timeout": 8000, "condition": "textContains:Sent successfully" } },
     { "action": "wait", "params": { "timeout": 2000, "condition": "textContains:Sent successfully" } },
-    { "action": "close", "target": "Mail", "delay": 1000 }
+    { "action": "close", "target": "Mail", "delay": 1000 },
+    { "_meta": { "estimatedDuration": 405000, "description": "Mail composition with AI generation" } }
   ],
 
   "mail.send": [

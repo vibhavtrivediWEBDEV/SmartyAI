@@ -163,6 +163,38 @@ export async function resolveUserIntent(
     };
   }
 
+  // Mail compose - NEW
+  if (lower.includes('compose') && lower.includes('mail') || lower.includes('mail') && lower.includes('compose')) {
+    // Extract email
+    const emailMatch = lower.match(/[\w.-]+@[\w.-]+\.\w+/);
+    const recipient = emailMatch ? emailMatch[0] : '';
+    
+    // Extract subject (after "for" or "subject")
+    let subject = 'No Subject';
+    const subjectMatch = lower.match(/(?:for|subject)\s+([^@]+?)(?=\s+(?:tone|from|$))/);
+    if (subjectMatch) {
+      subject = subjectMatch[1].trim();
+    }
+    
+    // Extract tone
+    let tone = 'professional';
+    if (lower.includes('casual')) tone = 'casual';
+    else if (lower.includes('friendly')) tone = 'friendly';
+    else if (lower.includes('formal')) tone = 'formal';
+    
+    return {
+      intent: 'mail.compose',
+      parameters: {
+        recipient,
+        subject,
+        senderName: 'User',
+        tone
+      },
+      confidence: 'high',
+      source: 'automation'
+    };
+  }
+
   // ========================================
   // STRATEGY 3: Basic actions
   // ========================================

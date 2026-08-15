@@ -103,6 +103,90 @@ export async function processMessageThroughAI(
       }
     }
     
+    // ========================================
+    // CHECK 1: Intent-based response (PRIMARY)
+    // ========================================
+    
+    const intentMatch = response.content.match(/intent:\s*(\S+)\s*\nparameters:\s*(\{[\s\S]*?\})/i)
+    
+    if (intentMatch) {
+      const intent = intentMatch[1].trim()
+      let parameters = {}
+      
+      try {
+        parameters = JSON.parse(intentMatch[2])
+      } catch (e) {
+        console.log('[Telegram AI] ⚠️ Failed to parse parameters, using empty object')
+      }
+      
+      console.log('\n' + '⚡'.repeat(80))
+      console.log('[Telegram AI] 🎯 INTENT-BASED AUTOMATION DETECTED')
+      console.log(`   Intent: ${intent}`)
+      console.log(`   Parameters:`, parameters)
+      console.log(`   Directly executing intent...`)
+      console.log('⚡'.repeat(80) + '\n')
+      
+      await logToTelegram.info('Intent detected in AI response', 'AI', userId, { intent, parameters })
+      
+      // DIRECTLY execute intent via executeIntent() (same as Terminal flow)
+      try {
+        const { executeIntent } = await import('@/lib/executeIntent')
+        console.log('[Telegram AI] ✅ executeIntent imported')
+        
+        const automationSequence = executeIntent({ intent, parameters })
+        console.log('[Telegram AI] ✅ Sequence generated:', automationSequence.length, 'steps')
+        console.log(`   Sequence:`, JSON.stringify(automationSequence, null, 2))
+        
+        // Send sequence to Desktop via WebSocket
+        const { registerPendingCommand } = await import('@/lib/socket')
+        const { getSocketIO } = await import('@/lib/socket')
+        const socketIO = getSocketIO()
+        
+        if (!socketIO) {
+          console.log('[Telegram AI] ❌ Socket.IO not available')
+          return '❌ Desktop connection not available'
+        }
+        
+        const executionId = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        const requestId = `req_${Date.now()}`
+        
+        const payload = {
+          requestId,
+          commandId: executionId,
+          userId,
+          command: intent,
+          sequence: automationSequence,
+          source: 'telegram',
+          timestamp: Date.now()
+        }
+        
+        console.log('[Telegram AI] 📤 Emitting to Desktop...')
+        console.log(`   Room: user:${userId}`)
+        console.log(`   Payload:`, JSON.stringify(payload, null, 2))
+        
+        const pendingResponse = registerPendingCommand(executionId)
+        socketIO.to(`user:${userId}`).emit('automation-command', payload)
+        
+        console.log('[Telegram AI] ⏳ Waiting for Desktop response (15s)...')
+        const success = await pendingResponse
+        
+        console.log('[Telegram AI] 📥 Desktop response:', success)
+        
+        if (success) {
+          return `✅ Executed: ${intent}`
+        } else {
+          return `❌ Failed to execute: ${intent}`
+        }
+      } catch (error: any) {
+        console.log('[Telegram AI] ❌ Intent execution failed:', error.message)
+        return `❌ Error: ${error.message}`
+      }
+    }
+    
+    // ========================================
+    // CHECK 2: appName/action format (LEGACY)
+    // ========================================
+    
     if (appName && action) {
       console.log('\n' + '⚡'.repeat(80))
       console.log('[Telegram AI] 🎯 AUTOMATION COMMAND DETECTED IN AI RESPONSE')
@@ -421,6 +505,21 @@ To execute automation commands:
       console.log('[Telegram] ✅ Pending command registered')
       console.log(`[Telegram] ⏳ Now emitting to Desktop...`)
       
+      // 🔥 CRITICAL: Get timeout from sequence if available
+      let timeoutMs = 30000 // Default 30 seconds
+      
+      // Check if sequence has custom timeout
+      if ((result.automation as any)._timeout) {
+        timeoutMs = (result.automation as any)._timeout
+        console.log(`[Telegram] ⏱️ Custom timeout detected: ${timeoutMs}ms`)
+      } else {
+        console.log(`[Telegram] ⏱️ Using default timeout: ${timeoutMs}ms`)
+      }
+      
+      // Add 5 second buffer for network delays
+      const finalTimeout = timeoutMs + 5000
+      console.log(`[Telegram] ⏱️ Final timeout (with buffer): ${finalTimeout}ms`)
+      
       // Now emit to Desktop
       console.log('\n🔥🔥🔥 [SERVER] EMITTING AUTOMATION COMMAND')
       console.log(JSON.stringify(payload, null, 2))
@@ -430,7 +529,7 @@ To execute automation commands:
       socketIO.to(`user:${userId}`).emit('automation-command', payload)
       
       console.log('[Telegram] ✅ WebSocket emit complete')
-      console.log(`[Telegram] ⏳ Waiting for Desktop response (15s timeout)...`)
+      console.log(`[Telegram] ⏳ Waiting for Desktop response (${finalTimeout/1000}s timeout)...`)
       
       try {
         const success = await pendingResponse

@@ -499,33 +499,27 @@ async function parseAIResponseAndExecute(
       
       emit('automation', `Executing intent: ${intent}`, { intent, parameters });
       
-      const { automationRegistry } = await import('@/lib/automationRegistry');
+      // 🚀 UNIFIED PATH: Use executeIntent (same as main path)
+      // This ensures SINGLE execution path for all automation
+      const { executeIntent } = await import('@/lib/executeIntent');
       
-      if (automationRegistry.hasIntent(intent)) {
-        const template = automationRegistry.getTemplate(intent)!;
-        
-        const getUserName = () => userProfile?.fullName || "Boss";
-        if (!parameters.username) {
-          parameters.username = getUserName();
-        }
-        
-        const { sequence: resolvedSequence } = await automationRegistry.resolveDynamicTargets(
-          template,
-          parameters,
-          { searchQuery: parameters.prompt, username: parameters.username }
-        );
-        
-        // REMOTE: Return sequence for WebSocket transport
-        if (isRemoteSource) {
-          return { success: true, automation: resolvedSequence };
-        }
-        
-        // LOCAL: Execute directly via automationAPI
-        await automationAPI.executeSequence(resolvedSequence);
-        
-        emit('success', `Intent ${intent} executed`);
+      const getUserName = () => userProfile?.fullName || "Boss";
+      if (!parameters.username) {
+        parameters.username = getUserName();
+      }
+      
+      const resolvedSequence = executeIntent({ intent, parameters });
+      
+      // REMOTE: Return sequence for WebSocket transport
+      if (isRemoteSource) {
         return { success: true, automation: resolvedSequence };
       }
+      
+      // LOCAL: Execute directly via automationAPI
+      await automationAPI.executeSequence(resolvedSequence);
+      
+      emit('success', `Intent ${intent} executed`);
+      return { success: true, automation: resolvedSequence };
     }
     
     // Check simple format: "appName: Chrome | action: maximize"

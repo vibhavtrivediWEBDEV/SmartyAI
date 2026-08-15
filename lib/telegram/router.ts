@@ -41,9 +41,17 @@ type MessageHandler = (ctx: RouterContext) => Promise<void>
 export async function processTelegramUpdate(update: TelegramUpdate): Promise<void> {
   const bot = getTelegramBot()
   
+  console.log('\n' + '📬'.repeat(80))
+  console.log('[ROUTER] 🚀 processTelegramUpdate() CALLED')
+  console.log(`   Update ID: ${update.update_id}`)
+  console.log(`   Has Message: ${!!update.message}`)
+  console.log(`   Has Callback: ${!!update.callback_query}`)
+  console.log('📬'.repeat(80) + '\n')
+  
   try {
     // Handle different update types
     if (update.message) {
+      console.log('[ROUTER] 📨 Routing to handleMessage()')
       await handleMessage({
         bot,
         message: update.message,
@@ -629,26 +637,16 @@ Or send your resume now!`
       
       case 'ai_query':
       default:
-        logToTelegram.info('Routing to AI engine', 'Router', userId)
-        console.log('[Telegram] 🧠 Processing with AI engine...')
-        const aiResponse = await processMessageThroughAI(message.text, userId, chatId)
-        console.log('[Telegram] 📤 Sending response to Telegram API...')
+        // 🔥 FIX: Route EVERYTHING through commonCommandEngine (same as Terminal)
+        logToTelegram.info('Routing to common command engine', 'Router', userId)
+        console.log('[Telegram] 🚀 Routing ALL commands to executeSmartyCommand() (same as Terminal)...')
         
-        // Split long messages (Telegram 4096 char limit)
-        if (aiResponse.length > 4000) {
-          console.log('[Telegram] Message too long, splitting into parts')
-          const parts = aiResponse.match(/[\s\S]{1,4000}/g) || []
-          for (let i = 0; i < parts.length; i++) {
-            await bot.sendMessage(chatId, parts[i])
-            await logTelegramOutgoing(userId, chatId, parts[i], true)
-            console.log(`[Telegram] ✅ Part ${i + 1}/${parts.length} sent`)
-          }
-        } else {
-          await bot.sendMessage(chatId, aiResponse)
-          await logTelegramOutgoing(userId, chatId, aiResponse, true)
-          console.log('[Telegram] ✅ Response sent to Telegram')
-        }
-        console.log('[Telegram] ========== MESSAGE PROCESSING COMPLETE ==========\n')
+        const universalResponse = await processAutomationCommand(message.text, userId, chatId)
+        
+        console.log('[Telegram] 📤 Sending response to Telegram API...')
+        await bot.sendMessage(chatId, universalResponse, { parse_mode: 'Markdown' })
+        await logTelegramOutgoing(userId, chatId, universalResponse, true)
+        console.log('[Telegram] ✅ Response sent to Telegram')
         break
     }
   } catch (error) {
