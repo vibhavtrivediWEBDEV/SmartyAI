@@ -640,8 +640,8 @@ function SearchResultsView({
         <EmptyState dark={dark} />
       ) : (
         <div className="flex flex-col gap-4">
-          {results.map((v) => (
-            <SearchResultRow key={v.id} dark={dark} video={v} onOpen={onOpen} />
+          {results.map((v, index) => (
+            <SearchResultRow key={v.id} dark={dark} video={v} onOpen={onOpen} isFirst={index === 0} />
           ))}
         </div>
       )}
@@ -707,13 +707,17 @@ function SearchResultRow({
   dark,
   video,
   onOpen,
+  isFirst = false,
 }: {
   dark: boolean;
   video: NormalizedVideo;
   onOpen: (v: NormalizedVideo) => void;
+  isFirst?: boolean;
 }) {
   return (
     <button
+      id={isFirst ? 'youtube_first_video' : undefined}
+      name={isFirst ? 'youtube_first_video' : undefined}
       onClick={() => onOpen(video)}
       className={
         "w-full text-left flex flex-col sm:flex-row gap-3 p-2 rounded-2xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0A84FF] " +

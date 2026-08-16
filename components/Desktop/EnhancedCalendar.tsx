@@ -690,7 +690,10 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
       {/* Event Form Modal */}
       {showEventForm && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white dark:bg-[#2c2c2e] rounded-xl shadow-2xl overflow-hidden">
+          <div
+            id="calendar_event_form"
+            className="w-full max-w-md bg-white dark:bg-[#2c2c2e] rounded-xl shadow-2xl overflow-hidden"
+          >
             {/* Modal Header */}
             <div className="flex items-center justify-between px-4 h-12 border-b border-black/5 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02]">
               <h3 className="text-[15px] font-semibold">
@@ -712,6 +715,7 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
                   Title *
                 </label>
                 <input
+                  id="calendar_event_title_input"
                   type="text"
                   value={eventTitle}
                   onChange={(e) => setEventTitle(e.target.value)}
@@ -727,6 +731,7 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
                   Date
                 </label>
                 <input
+                  id="calendar_event_date_input"
                   type="date"
                   value={eventDate}
                   onChange={(e) => setEventDate(e.target.value)}
@@ -759,6 +764,7 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
                       Start
                     </label>
                     <input
+                      id="calendar_event_time_input"
                       type="time"
                       value={eventStartTime}
                       onChange={(e) => setEventStartTime(e.target.value)}
@@ -785,6 +791,7 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
                   Location
                 </label>
                 <input
+                  id="calendar_event_location_input"
                   type="text"
                   value={eventLocation}
                   onChange={(e) => setEventLocation(e.target.value)}
@@ -799,6 +806,7 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
                   Notes
                 </label>
                 <textarea
+                  id="calendar_event_notes_input"
                   value={eventDescription}
                   onChange={(e) => setEventDescription(e.target.value)}
                   placeholder="Add notes..."
@@ -813,6 +821,7 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
                   Calendar
                 </label>
                 <select
+                  id="calendar_event_calendar_select"
                   value={eventCalendarId}
                   onChange={(e) => setEventCalendarId(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-black/5 dark:bg-white/10 border-none outline-none text-[14px]"
@@ -861,6 +870,7 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
               <div className="flex-1" />
               
               <button
+                id="calendar_event_cancel_button"
                 onClick={() => setShowEventForm(false)}
                 className="px-4 h-9 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-[14px] transition-colors"
               >
@@ -868,6 +878,7 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
               </button>
               
               <button
+                id="calendar_event_save_button"
                 onClick={handleSaveEvent}
                 disabled={!eventTitle.trim() || saving}
                 className="px-6 h-9 rounded-lg bg-[#0A84FF] text-white hover:bg-[#0A84FF]/90 disabled:opacity-50 text-[14px] font-medium transition-colors"

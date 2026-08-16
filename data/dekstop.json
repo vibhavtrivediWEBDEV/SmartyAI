@@ -715,7 +715,11 @@
       "target": "youtube_search_input",
       "params": { "text": "{{query}}" }
     },
-    { "action": "keypress", "params": { "key": "Enter" } }
+{ "action": "keypress", "target": "youtube_search_input", "params": { "key": "Enter" } },
+    { "action": "wait", "params": { "timeout": 3000, "condition": "elementExists" }, "target": "youtube_first_video", "delay": 2000 },
+    { "action": "move", "target": "youtube_first_video", "delay": 500 },
+    { "action": "click", "target": "youtube_first_video", "delay": 700 },
+    { "action": "wait", "params": { "timeout": 2000, "condition": "videoPlaying" }, "delay": 1000 }
   ],
 
   "desktop.screenshot": [
@@ -762,18 +766,20 @@
     { "action": "close", "target": "Calendar", "delay": 300 }
   ],
 
+
+
   "calendar.add_event": [
     { "action": "open", "target": "Calendar", "delay": 500 },
     { "action": "maximize", "target": "Calendar", "delay": 700 },
-    { "action": "wait", "target": "calendar_toolbar", "params": { "timeout": 3000, "condition": "exists" }, "delay": 500 },
+    { "action": "wait", "target": "calendar_add_event_button", "params": { "timeout": 3000, "condition": "exists" }, "delay": 500 },
     { "action": "click", "target": "calendar_add_event_button", "delay": 1000 },
     { "action": "wait", "target": "calendar_event_form", "params": { "timeout": 2000, "condition": "exists" }, "delay": 500 },
     { "action": "setValue", "target": "calendar_event_title_input", "params": { "value": "{{title}}" }, "delay": 300 },
     { "action": "setValue", "target": "calendar_event_date_input", "params": { "value": "{{date}}" }, "delay": 300 },
     { "action": "setValue", "target": "calendar_event_time_input", "params": { "value": "{{time}}" }, "delay": 300 },
-    { "action": "click", "target": "calendar_event_calendar_select", "delay": 300 },
-    { "action": "select", "target": "calendar_event_calendar_select", "params": { "value": "{{calendarId}}" }, "delay": 300 },
+    { "action": "setValue", "target": "calendar_event_location_input", "params": { "value": "{{location}}" }, "delay": 300 },
     { "action": "setValue", "target": "calendar_event_notes_input", "params": { "value": "{{notes}}" }, "delay": 300 },
+    { "action": "setValue", "target": "calendar_event_calendar_select", "params": { "value": "{{calendarId}}" }, "delay": 300 },
     { "action": "click", "target": "calendar_event_save_button", "delay": 500 },
     { "action": "wait", "params": { "timeout": 3000, "condition": "formClosed" }, "delay": 500 }
   ],

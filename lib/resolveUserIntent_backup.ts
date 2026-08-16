@@ -27,7 +27,7 @@ const APP_ALIASES: Record<string, string> = {
   'browser': 'chrome',
   'settings': 'settings',
   'maps': 'maps',
-  'map': 'maps',
+  'map': 'maps',  // ← Added singular form
   'music': 'music',
   'spotify': 'spotify',
   'terminal': 'terminal',
@@ -35,19 +35,19 @@ const APP_ALIASES: Record<string, string> = {
   'mail': 'mail',
   'calendar': 'calendar',
   'photos': 'photos',
-  'photo': 'photos',
+  'photo': 'photos',  // ← Added singular
   'notes': 'notes',
-  'note': 'notes',
+  'note': 'notes',  // ← Added singular
   'finder': 'finder',
   'facetime': 'facetime',
   'messages': 'messages',
-  'message': 'messages',
+  'message': 'messages',  // ← Added singular
   'appstore': 'app store',
   'app store': 'app store',
   'resume': 'resume',
   'portfolio': 'website',
   'projects': 'projects',
-  'project': 'projects',
+  'project': 'projects',  // ← Added singular
 };
 
 /**
@@ -104,28 +104,6 @@ export async function resolveUserIntent(
   // STRATEGY 2: Automation commands
   // Identify intent, NOT sequence
   // ========================================
-
-  // YouTube search/play pattern
-  const ytSearchMatch = lower.match(/^(?:youtube|yt)\s+(?:search|play)\s+(.+)$/i);
-  if (ytSearchMatch) {
-    return {
-      intent: 'youtube.search',
-      parameters: { query: ytSearchMatch[1].trim() },
-      confidence: 'high',
-      source: 'automation'
-    };
-  }
-
-  // Browser search pattern
-  const browserSearchMatch = lower.match(/^(?:search|research|google|look up|find)\s+(.+)$/i);
-  if (browserSearchMatch) {
-    return {
-      intent: 'browser.search',
-      parameters: { query: browserSearchMatch[1].trim() },
-      confidence: 'high',
-      source: 'automation'
-    };
-  }
 
   // Wallpaper
   if (lower.includes('wallpaper')) {
@@ -215,128 +193,6 @@ export async function resolveUserIntent(
       confidence: 'high',
       source: 'automation'
     };
-  }
-
-  // Calendar event patterns
-  // Pattern: "calendar add event [title] [date] [time]" or "add event to calendar"
-  if (lower.includes('calendar') && (lower.includes('add') || lower.includes('create') || lower.includes('new'))) {
-    // Extract title - improved regex to handle more cases
-    let title = 'New Event';
-    
-    // Strategy: Find everything after 'event' keyword
-    const afterEvent = lower.match(/(?:add|create|new)\s+event\s+(?:for\s+)?(?:today\s+|tomorrow\s+)?(?:for\s+)?(.+)$/);
-    
-    if (afterEvent && afterEvent[1].trim()) {
-      title = afterEvent[1].trim();
-      
-      // Remove known date/time patterns
-      // Remove 'today' or 'tomorrow'
-      title = title.replace(/\s*(today|tomorrow)\s*/gi, ' ').trim();
-      
-      // Remove 'at 2pm' or 'at 14:00'
-      title = title.replace(/\s*at\s+\d{1,2}(:\d{2})?\s*(am|pm)?\s*/gi, '').trim();
-      
-      // Remove 'on 2024-01-01'
-      title = title.replace(/\s*on\s+\d{4}[-/]\d{1,2}[-/]\d{1,2}\s*/gi, '').trim();
-      
-      // Remove 'notes ...'
-      title = title.replace(/\s*notes?\s+.+$/i, '').trim();
-      
-      // If title is too short or just keywords, use generic
-      if (title.length < 2 || /^(?:for|at|on|today|tomorrow)$/i.test(title)) {
-        title = 'New Event';
-      }
-    }
-    
-    // Ensure title is not empty
-    if (!title || title.length === 0) {
-      title = 'New Event';
-    }
-    
-    // Extract date (today, tomorrow, specific date)
-    let date = new Date().toISOString().split('T')[0]; // Default: today
-    if (lower.includes('today')) {
-      date = new Date().toISOString().split('T')[0];
-    } else if (lower.includes('tomorrow')) {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      date = tomorrow.toISOString().split('T')[0];
-    } else {
-      // Try to extract date pattern
-      const dateMatch = lower.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/);
-      if (dateMatch) date = dateMatch[1];
-    }
-    
-    // Extract time
-    let time = '09:00';
-    const timeMatch = lower.match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
-    if (timeMatch) {
-      time = timeMatch[0].replace(/\s/g, '');
-    }
-    
-    // Extract location
-    let location = '';
-    const locationMatch = lower.match(/(?:at|location|place)\s+(.+?)(?=\s+(?:notes|description|$))/i);
-    if (locationMatch) {
-      location = locationMatch[1].trim();
-    }
-    
-    // Extract notes
-    let notes = '';
-    const notesMatch = lower.match(/(?:notes?|description|about)\s+(.+?)(?=\s+(?:calendar|$))/i);
-    if (notesMatch) {
-      notes = notesMatch[1].trim();
-    }
-    
-    return {
-      intent: 'calendar.add_event',
-      parameters: {
-        title,
-        date,
-        time,
-        location,
-        calendarId: 'personal', // Fixed: Use 'personal' instead of 'primary'
-        notes
-      },
-      confidence: 'high',
-      source: 'automation'
-    };
-  }
-
-  // Calendar edit pattern
-  if (lower.includes('calendar') && lower.includes('edit')) {
-    return {
-      intent: 'calendar.edit_event',
-      parameters: { eventId: '' },
-      confidence: 'medium',
-      source: 'automation'
-    };
-  }
-
-  // Calendar delete pattern
-  if (lower.includes('calendar') && (lower.includes('delete') || lower.includes('remove'))) {
-    return {
-      intent: 'calendar.delete_event',
-      parameters: { eventId: '' },
-      confidence: 'medium',
-      source: 'automation'
-    };
-  }
-
-  // Calendar view switching
-  if (lower.includes('calendar') && lower.includes('view')) {
-    if (lower.includes('day')) return { intent: 'calendar.switch_day', parameters: {}, confidence: 'high', source: 'automation' };
-    if (lower.includes('week')) return { intent: 'calendar.switch_week', parameters: {}, confidence: 'high', source: 'automation' };
-    if (lower.includes('month')) return { intent: 'calendar.switch_month', parameters: {}, confidence: 'high', source: 'automation' };
-    if (lower.includes('year')) return { intent: 'calendar.switch_year', parameters: {}, confidence: 'high', source: 'automation' };
-    if (lower.includes('list')) return { intent: 'calendar.switch_list', parameters: {}, confidence: 'high', source: 'automation' };
-  }
-
-  // Calendar navigation
-  if (lower.includes('calendar') && (lower.includes('next') || lower.includes('previous') || lower.includes('today'))) {
-    if (lower.includes('next')) return { intent: 'calendar.navigate_next', parameters: {}, confidence: 'high', source: 'automation' };
-    if (lower.includes('previous') || lower.includes('prev')) return { intent: 'calendar.navigate_previous', parameters: {}, confidence: 'high', source: 'automation' };
-    if (lower.includes('today')) return { intent: 'calendar.go_today', parameters: {}, confidence: 'high', source: 'automation' };
   }
 
   // ========================================

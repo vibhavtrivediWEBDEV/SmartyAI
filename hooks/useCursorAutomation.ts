@@ -776,6 +776,91 @@ export function useCursorAutomation(
             );
           }
           break;
+
+        case 'keypress': {
+          // Press a key (e.g., Enter, Escape, Tab, etc.)
+          const key = command.params?.key;
+          if (!key) {
+            log('keypress action requires "key" parameter', 'error');
+            return false;
+          }
+
+          // Find target element if specified, otherwise use active element
+          let targetElement: HTMLElement | null = null;
+          if (command.target) {
+            targetElement = document.getElementById(command.target) || 
+                           document.querySelector(`[data-automation-id="${command.target}"]`) as HTMLElement;
+          } else {
+            targetElement = document.activeElement as HTMLElement;
+          }
+
+          if (!targetElement) {
+            log(`keypress: No target element found`, 'error');
+            return false;
+          }
+
+          // Ensure element is focused
+          if (document.activeElement !== targetElement) {
+            targetElement.focus();
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+
+          // Create and dispatch keyboard events
+          const keyboardEvent = new KeyboardEvent('keydown', {
+            key: key,
+            code: key === 'Enter' ? 'Enter' : key,
+            keyCode: key === 'Enter' ? 13 : undefined,
+            which: key === 'Enter' ? 13 : undefined,
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+          });
+
+          targetElement.dispatchEvent(keyboardEvent);
+
+          // Also dispatch keypress event for good measure
+          const keypressEvent = new KeyboardEvent('keypress', {
+            key: key,
+            code: key === 'Enter' ? 'Enter' : key,
+            keyCode: key === 'Enter' ? 13 : undefined,
+            which: key === 'Enter' ? 13 : undefined,
+            bubbles: true,
+            cancelable: true,
+          });
+
+          targetElement.dispatchEvent(keypressEvent);
+
+          // Dispatch keyup event
+          const keyupEvent = new KeyboardEvent('keyup', {
+            key: key,
+            code: key === 'Enter' ? 'Enter' : key,
+            keyCode: key === 'Enter' ? 13 : undefined,
+            which: key === 'Enter' ? 13 : undefined,
+            bubbles: true,
+            cancelable: true,
+          });
+
+          targetElement.dispatchEvent(keyupEvent);
+
+          // For form submission, also dispatch submit event if it's an Enter key
+          if (key === 'Enter' && targetElement.tagName === 'INPUT') {
+            const form = targetElement.closest('form');
+            if (form) {
+              // Check if form has onsubmit handler
+              const submitEvent = new Event('submit', { 
+                bubbles: true, 
+                cancelable: true 
+              });
+              form.dispatchEvent(submitEvent);
+              log(`keypress: Dispatched submit on form`, 'info');
+            }
+          }
+
+          log(`keypress: Pressed "${key}" on ${targetElement.tagName}#${targetElement.id || 'unknown'}`, 'success');
+          result = true;
+          break;
+        }
+
         case 'setValue': {
           if (!command.target || command.params?.value == null) return false
 
@@ -829,6 +914,27 @@ export function useCursorAutomation(
             el.dispatchEvent(event);
           }
 
+          return true
+        }
+
+        case 'select': {
+          // Handle select dropdown elements
+          if (!command.target || !command.params?.value) return false
+
+          const selectEl = document.getElementById(command.target) as HTMLSelectElement | null
+          if (!selectEl || selectEl.tagName !== 'SELECT') {
+            log(`select: Element #${command.target} not found or not a select element`, 'error')
+            return false
+          }
+
+          const value = String(command.params.value)
+          selectEl.value = value
+
+          // Dispatch change event to trigger React state update
+          const changeEvent = new Event('change', { bubbles: true })
+          selectEl.dispatchEvent(changeEvent)
+
+          log(`select: Set ${command.target} to "${value}"`, 'success')
           return true
         }
 
