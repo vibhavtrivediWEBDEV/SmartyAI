@@ -366,10 +366,21 @@ ${formattedCommands}
                 console.log("🔹 ACTIONS TO EXECUTE:", actions);
                 addLog(`⚡ Executing ${actions.length} actions...`);
 
-                await automation.executeSequence(actions);
+                {
+                    const execResult = await automation.executeSequence(actions);
+                    const ok = typeof execResult === 'boolean' ? execResult : (execResult && execResult.success === true);
 
-                addLog(`✅ Automation completed successfully`);
-                vapi.say("kaam ho gaya boss 😎");
+                    if (ok) {
+                        addLog(`✅ Automation completed successfully`);
+                        vapi.say("kaam ho gaya boss 😎");
+                    } else if (execResult && execResult.status === 'awaiting_permission') {
+                        addLog(`⏳ Automation queued; awaiting permission`);
+                        vapi.say("Main is kaam ke liye permission mang raha hoon. Kripya allow karen.");
+                    } else {
+                        addLog(`❌ Automation failed`);
+                        vapi.say("Kaam nahi ho paaya.");
+                    }
+                }
 
                 setTimeout(() => {
                     addLog("📞 Ending call...");
@@ -402,10 +413,21 @@ ${formattedCommands}
             console.log("🔹 ACTIONS TO EXECUTE:", actions);
             addLog(`⚡ Executing ${actions.length} actions...`);
 
-            await automation.executeSequence(actions);
+                        {
+                                const execResult = await automation.executeSequence(actions);
+                                const ok = typeof execResult === 'boolean' ? execResult : (execResult && execResult.success === true);
 
-            addLog(`✅ Action completed`);
-            vapi.say("ho gaya boss 😎");
+                                if (ok) {
+                                    addLog(`✅ Action completed`);
+                                    vapi.say("ho gaya boss 😎");
+                                } else if (execResult && execResult.status === 'awaiting_permission') {
+                                    addLog(`⏳ Action queued; awaiting permission`);
+                                    vapi.say("Kaam ke liye permission chahiye. Kripya allow karein.");
+                                } else {
+                                    addLog(`❌ Action failed`);
+                                    vapi.say("Kaam nahi hua, try karo phir se.");
+                                }
+                        }
 
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);

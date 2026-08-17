@@ -13,6 +13,7 @@
  */
 
 import { resolveSequence } from './helper/helper';
+import capabilityManager, { inferCapabilitiesForIntent } from './capabilityManager';
 
 export interface Intent {
   intent: string;
@@ -33,6 +34,11 @@ export interface AutomationCommand {
  */
 export function executeIntent(intent: Intent): AutomationCommand[] {
   const { intent: intentKey, parameters } = intent;
+  // Provide sensible defaults for some intents if parameters missing
+  // e.g., browser.* intents should default to Chrome when browserName not provided
+  if (intentKey.startsWith('browser') && (!parameters || !parameters.browserName)) {
+    parameters.browserName = parameters?.browserName || 'chrome';
+  }
   
   console.log('\n' + '🚀'.repeat(80));
   console.log('[executeIntent] INPUT INTENT');
@@ -41,11 +47,54 @@ export function executeIntent(intent: Intent): AutomationCommand[] {
   console.log('🚀'.repeat(80) + '\n');
   
   try {
+    // Special-case: AI conversational intents (routed to AI resolver)
+    // When the resolver returns `ai.chat` we treat it as a conversational request
+    // that requires user confirmation (and likely network capability). Create
+    // a small fallback sequence that opens the Capability Center so the user
+    // can review and grant permissions before the assistant proceeds.
+    if (intentKey === 'ai.chat') {
+      console.log('⚙️ [executeIntent] Detected conversational AI intent, generating permission-only flow');
+      // Return an empty sequence but attach capability metadata so the
+      // executeSequence() path will queue the operation and trigger UI.
+      const sequence: any[] = [];
+
+      try {
+        const required = capabilityManager.inferCapabilitiesForIntent
+          ? capabilityManager.inferCapabilitiesForIntent(intentKey, parameters)
+          : ['network'];
+        const check = capabilityManager.checkCapabilities(required);
+        (sequence as any)._requiredCapabilities = required;
+        (sequence as any)._permissionStatus = check.granted ? 'granted' : 'missing';
+        (sequence as any)._missingCapabilities = check.missing;
+        (sequence as any)._intent = intentKey;
+        (sequence as any)._parameters = parameters;
+      } catch (metaErr) {
+        console.warn('[executeIntent] Failed to attach capability metadata for ai.chat', metaErr);
+      }
+
+      return sequence;
+    }
     // ========================================
     // STEP 1: Try resolveSequence() (main path)
     // ========================================
     
-    const sequence = resolveSequence(intentKey, parameters);
+    const sequence: any[] = resolveSequence(intentKey, parameters);
+
+    // --- Attach inferred capability metadata for downstream checks/UI ---
+    try {
+      const required = capabilityManager.inferCapabilitiesForIntent
+        ? capabilityManager.inferCapabilitiesForIntent(intentKey, parameters)
+        : inferCapabilitiesForIntent(intentKey, parameters);
+
+      const check = capabilityManager.checkCapabilities(required);
+      // Attach metadata non-destructively
+      (sequence as any)._requiredCapabilities = required;
+      (sequence as any)._permissionStatus = check.granted ? 'granted' : 'missing';
+      (sequence as any)._missingCapabilities = check.missing;
+    } catch (metaErr) {
+      // Ignore metadata failures — sequence still usable
+      console.warn('[executeIntent] Capability metadata attach failed', metaErr);
+    }
     
     console.log('✅ [executeIntent] SEQUENCE RESOLVED');
     console.log(`   Steps: ${sequence.length}`);
@@ -74,11 +123,26 @@ export function executeIntent(intent: Intent): AutomationCommand[] {
         console.log('✅ [executeIntent] FALLBACK: Basic action');
         console.log(`   App: "${appName}" → Action: "${action}"\n`);
         
-        return [{
+        const fallbackSeq: any[] = [{
           action,
           target: appName,
           delay: 500
         }];
+
+        // Attach capability metadata for basic actions as well
+        try {
+          const required = capabilityManager.inferCapabilitiesForIntent
+            ? capabilityManager.inferCapabilitiesForIntent(intentKey, parameters)
+            : inferCapabilitiesForIntent(intentKey, parameters);
+          const check = capabilityManager.checkCapabilities(required);
+          (fallbackSeq as any)._requiredCapabilities = required;
+          (fallbackSeq as any)._permissionStatus = check.granted ? 'granted' : 'missing';
+          (fallbackSeq as any)._missingCapabilities = check.missing;
+        } catch (e) {
+          // no-op
+        }
+
+        return fallbackSeq;
       }
     }
     

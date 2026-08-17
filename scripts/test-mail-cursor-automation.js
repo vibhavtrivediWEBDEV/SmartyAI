@@ -57,9 +57,16 @@ if (window.automationAPI) {
   window.automationAPI.executeSequence([
     { action: 'open', target: 'Mail', delay: 500 },
     { action: 'maximize', target: 'mail', delay: 700 }
-  ]).then(() => {
-    console.log('✅ Mail opened and maximized!');
-    console.log('   Did you see the cursor move?');
+  ]).then((res) => {
+    const ok = typeof res === 'boolean' ? res : (res && res.success === true);
+    if (ok) {
+      console.log('✅ Mail opened and maximized!');
+      console.log('   Did you see the cursor move?');
+    } else if (res && res.status === 'awaiting_permission') {
+      console.log('⏳ Mail automation queued; awaiting permission', res);
+    } else {
+      console.log('❌ Mail automation failed', res);
+    }
   });
 } else {
   console.log('❌ Automation API not available on window');

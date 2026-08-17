@@ -1,4 +1,5 @@
 "use client"
+import DevFinderMock from '@/components/DevFinderMock'
 
 import { useRef, useEffect, useState, useCallback } from "react"
 import dynamic from "next/dynamic"
@@ -70,6 +71,10 @@ import SmartyTeacherWrapper from "@/app/components/terminal/smartyTeacher"
 import { DynamicAgGridConfigurator } from "./dataTableViewer"
 import { getUserAIContext, type UserAIContext } from "@/lib/ai/userAIContext"
 import { useSocketIO } from "@/hooks/useSocketIO"
+import CapabilityCenter from '@/components/CapabilityCenter'
+import useCapabilityManager from '@/hooks/useCapabilityManager'
+import PermissionPrompt from '@/components/PermissionPrompt'
+import TccGuidancePrompt from '@/components/TccGuidancePrompt'
 import WidgetGallery from "../Desktop/widgets/WidgetGallery"
 import CalendarWidget from "../Desktop/widgets/CalendarWidget"
 import WeatherWidget from "../Desktop/widgets/WeatherWidget"
@@ -172,11 +177,16 @@ export function Desktop() {
           console.log('🚀'.repeat(80) + '\n')
           
           console.log('[DESKTOP] ⚡ Calling automationAPI.executeSequence()...')
-          success = await automationAPIRef.current.executeSequence(data.sequence)
-          console.log('[DESKTOP] executeSequence RESULT:', success)
-          
-          if (success) {
+          const execResult = await automationAPIRef.current.executeSequence(data.sequence)
+          console.log('[DESKTOP] executeSequence RESULT:', execResult)
+
+          // Normalize result: older code expected boolean
+          const ok = typeof execResult === 'boolean' ? execResult : (execResult && execResult.success === true);
+
+          if (ok) {
             toast.success(`✅ Telegram automation executed`)
+          } else if (execResult && execResult.status === 'awaiting_permission') {
+            toast(`⏳ Telegram automation queued, awaiting permission`)
           } else {
             toast.error(`❌ Telegram automation failed`)
           }
@@ -428,6 +438,8 @@ export function Desktop() {
   }, []);
   
   const [showWidgetGallery, setShowWidgetGallery] = useState(false);
+  const [showCapabilityCenter, setShowCapabilityCenter] = useState(false);
+  const { pending } = useCapabilityManager(500);
   
   // 🌐 Widget Creation Modal State
   const [showWidgetCreationModal, setShowWidgetCreationModal] = useState(false);
@@ -493,6 +505,230 @@ export function Desktop() {
       console.error('Failed to load user context:', error);
     });
   }, []);
+
+  // Listen for queued operations to notify user
+  useEffect(() => {
+    const handler = (ev: any) => {
+      const d = ev?.detail || {};
+      toast(`⏳ Operation queued (awaiting permission)`);
+      console.log('[Desktop] capability operation queued', d);
+      // Auto-open Capability Center to prompt user
+      setShowCapabilityCenter(true);
+    };
+
+    window.addEventListener('capability:operationQueued', handler as EventListener);
+    const resumedHandler = (ev: any) => {
+      const d = ev?.detail || {};
+      if (d.success) toast.success(`✅ Operation ${d.operationId} auto-resumed`)
+      else toast.error(`❌ Operation ${d.operationId} resume failed`)
+      console.log('[Desktop] capability operation auto-resumed', d);
+    }
+
+    window.addEventListener('capability:operationAutoResumed', resumedHandler as EventListener);
+    const deniedHandler = (ev: any) => {
+      const d = ev?.detail || {};
+      toast.error(`🚫 Capability denied: ${d.capability}`);
+      console.log('[Desktop] capability denied', d);
+      // Keep center open so user can review other pending permissions
+      setShowCapabilityCenter(true);
+    }
+
+    const opCancelledHandler = (ev: any) => {
+      const d = ev?.detail || {};
+      toast(`❌ Operation cancelled: ${d.operationId}`);
+      console.log('[Desktop] capability operation cancelled', d);
+      // refresh UI
+      setTimeout(() => {
+        if (!pending || pending.length === 0) setShowCapabilityCenter(false);
+      }, 600);
+    }
+
+    const grantedHandler = (ev: any) => {
+      const d = ev?.detail || {};
+      toast.success(`🔓 Capability granted: ${d.capability}`)
+      console.log('[Desktop] capability granted', d);
+      // Close the Capability Center only if there are no more pending permissions
+      setTimeout(() => {
+        if (!pending || pending.length === 0) {
+          setShowCapabilityCenter(false);
+        } else {
+          // keep it open so user can finish reviewing remaining permissions
+          console.log('[Desktop] Pending permissions remain, keeping Capability Center open');
+        }
+      }, 1200);
+    }
+
+    window.addEventListener('capability:granted', grantedHandler as EventListener);
+    window.addEventListener('capability:denied', deniedHandler as EventListener);
+    window.addEventListener('capability:operationCancelled', opCancelledHandler as EventListener);
+    const requeuedHandler = (ev: any) => {
+      const d = ev?.detail || {};
+      toast.success(`🔁 Operation requeued: ${d.operationId}`);
+      console.log('[Desktop] capability operation requeued', d);
+      setShowCapabilityCenter(true);
+    }
+    window.addEventListener('capability:operationRequeued', requeuedHandler as EventListener);
+
+    const userOpenClawHandler = (ev: any) => {
+      const d = ev?.detail || {};
+      toast('🔎 Opening Finder for manual selection...');
+      console.log('[Desktop] capability:userOPENCLAW', d);
+      // Try native provider first (local dev): call API that runs AppleScript to choose file
+      const opIds = d?.ops || d?.operationIds || (d?.operationId ? [d.operationId] : []);
+      (async () => {
+        try {
+          const headers: any = { 'Content-Type': 'application/json' };
+          try {
+            const tokens = (window as any).__smarty_ephemeral_tokens || {};
+            const t = tokens['finder.control'];
+            if (t) headers['X-Smarty-Ephemeral'] = t;
+          } catch (e) {}
+          const res = await fetch('/api/native/finder', { method: 'POST', headers, body: JSON.stringify({ operationIds: opIds }) });
+          const body = await res.json();
+          if (body && body.success && body.filePath) {
+            // dispatch finderSelected event with returned filePath
+            try { window.dispatchEvent(new CustomEvent('capability:finderSelected', { detail: { operationIds: body.operationIds || opIds, filePath: body.filePath } })); } catch (e) {}
+            return;
+          }
+
+          // If API indicates app-level consent is required, enqueue request locally so PermissionPrompt appears
+          if (body && body.needConsent) {
+            try {
+              const cm = require('@/lib/capabilityManager').capabilityManager;
+              if ((cm as any).request) (cm as any).request('finder.control');
+            } catch (e) {}
+            setShowCapabilityCenter(true);
+            return;
+          }
+
+          // If API returned a TCC_DENIED guidance payload, surface the guidance UI
+          if (!res.ok && body && body.errorType === 'TCC_DENIED' && body.guidance) {
+            setPermissionGuidance(body.guidance);
+            return;
+          }
+        } catch (e) {
+          console.warn('Native finder API failed', e);
+        }
+
+        // Fallback: open Finder app and show capability center
+        try {
+          openApplication('Finder');
+        } catch (e) {
+          console.warn('Failed to open Finder from userOPENCLAW handler', e);
+        }
+        setShowCapabilityCenter(true);
+      })();
+    };
+    window.addEventListener('capability:userOPENCLAW', userOpenClawHandler as EventListener);
+
+    const finderSelectedHandler = async (ev: any) => {
+      const d = ev?.detail || {};
+      // d should contain: { operationId?: string, operationIds?: string[], filePath: string }
+      console.log('[Desktop] capability:finderSelected', d);
+      toast.success('📁 File selected: ' + (d.filePath || 'unknown'));
+
+      try {
+        const cm = require('@/lib/capabilityManager').capabilityManager;
+        const opIds: string[] = d.operationIds || (d.operationId ? [d.operationId] : []);
+        for (const id of opIds) {
+          // update parameters for operation
+          if ((cm as any).updatePendingOperation) {
+            (cm as any).updatePendingOperation(id, { parameters: { selectedFilePath: d.filePath } });
+          }
+
+          // attempt resume
+          if (cm.resumeOperation) {
+            const res = await cm.resumeOperation(id);
+            if (res && (res as any).success) {
+              toast.success(`✅ Operation ${id} resumed after file selection`);
+              if (sendResultRef.current) {
+                try {
+                  sendResultRef.current(id, true, 'Resumed after file selection');
+                } catch (e) {
+                  console.warn('sendResultRef call failed', e);
+                }
+              }
+            } else {
+              toast.error(`❌ Failed to resume ${id}`);
+              if (sendResultRef.current) {
+                try {
+                  sendResultRef.current(id, false, 'Resume after file selection failed');
+                } catch (e) {
+                  console.warn('sendResultRef call failed', e);
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('finderSelectedHandler error', e);
+      }
+    };
+    window.addEventListener('capability:finderSelected', finderSelectedHandler as EventListener);
+
+    return () => {
+      window.removeEventListener('capability:operationQueued', handler as EventListener);
+      window.removeEventListener('capability:operationAutoResumed', resumedHandler as EventListener);
+      window.removeEventListener('capability:granted', grantedHandler as EventListener);
+      window.removeEventListener('capability:denied', deniedHandler as EventListener);
+      window.removeEventListener('capability:operationCancelled', opCancelledHandler as EventListener);
+      window.removeEventListener('capability:operationRequeued', requeuedHandler as EventListener);
+      window.removeEventListener('capability:userOPENCLAW', userOpenClawHandler as EventListener);
+      window.removeEventListener('capability:finderSelected', finderSelectedHandler as EventListener);
+    };
+  }, []);
+
+  const [permissionGuidance, setPermissionGuidance] = useState<any | null>(null);
+
+  const handleGuidanceRetry = async (): Promise<boolean> => {
+    if (!permissionGuidance) return false;
+    // Retry calling native finder API; keep the same operationIds if present
+    try {
+      const res = await fetch('/api/native/finder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ operationIds: permissionGuidance.operationIds || [] }) });
+      const body = await res.json();
+      if (body && body.success && body.filePath) {
+        window.dispatchEvent(new CustomEvent('capability:finderSelected', { detail: { operationIds: body.operationIds || [], filePath: body.filePath } }));
+        setPermissionGuidance(null);
+        return true;
+      }
+      // if ephemeral token exists, include it when retrying
+      try {
+        const headers: any = { 'Content-Type': 'application/json' };
+        const tokens = (window as any).__smarty_ephemeral_tokens || {};
+        const t = tokens['finder.control'];
+        if (t) headers['X-Smarty-Ephemeral'] = t;
+        const res2 = await fetch('/api/native/finder', { method: 'POST', headers, body: JSON.stringify({ operationIds: permissionGuidance.operationIds || [] }) });
+        const body2 = await res2.json().catch(() => null);
+        if (body2 && body2.success && body2.filePath) {
+          window.dispatchEvent(new CustomEvent('capability:finderSelected', { detail: { operationIds: body2.operationIds || [], filePath: body2.filePath } }));
+          setPermissionGuidance(null);
+          return true;
+        }
+      } catch (e) {}
+      if (body && body.needConsent) {
+        try {
+          const cm = require('@/lib/capabilityManager').capabilityManager;
+          if ((cm as any).request) (cm as any).request('finder.control');
+        } catch (e) {}
+        setPermissionGuidance(null);
+        setShowCapabilityCenter(true);
+        return false;
+      }
+      if (!res.ok && body && body.errorType === 'TCC_DENIED' && body.guidance) {
+        setPermissionGuidance(body.guidance);
+      }
+    } catch (e) {
+      console.warn('Retry native finder failed', e);
+    }
+    return false;
+  };
+
+  const handleGuidanceDismiss = () => {
+    setPermissionGuidance(null);
+    // fallback: open Finder and show capability center
+    try { openApplication('Finder'); } catch (e) {}
+    setShowCapabilityCenter(true);
+  };
 
   useEffect(() => {
     let battery: BatteryManagerLike | undefined
@@ -637,8 +873,16 @@ export function Desktop() {
     )
 
 
-    await automationAPI.executeSequence(sequence)
-    updateSettings({ fontSize: 20 })
+    const execResult = await automationAPI.executeSequence(sequence)
+    const ok = typeof execResult === 'boolean' ? execResult : (execResult && execResult.success === true)
+
+    if (ok) {
+      updateSettings({ fontSize: 20 })
+    } else if (execResult && execResult.status === 'awaiting_permission') {
+      toast(`⏳ Change wallpaper queued; awaiting permission`)
+    } else {
+      toast.error('❌ Failed to change wallpaper')
+    }
   }
 
 
@@ -1219,14 +1463,24 @@ export function Desktop() {
     setOpenWindows,
     speak
   );
-
-  // 🤖 Update automationAPIRef when automationAPI changes
+  // 🤖 Update automationAPIRef once when automationAPI becomes available
+  const automationInitializedRef = useRef(false);
   useEffect(() => {
-    if (automationAPI) {
-      automationAPIRef.current = automationAPI
+    if (automationAPI && !automationInitializedRef.current) {
+      automationAPIRef.current = automationAPI;
+      automationInitializedRef.current = true;
       console.log('[Desktop] 🤖 automationAPI initialized')
+    } else if (automationAPI) {
+      // Always keep the ref up-to-date silently
+      automationAPIRef.current = automationAPI;
     }
-  }, [automationAPI])
+  }, [automationAPI]);
+  // Dev Finder mock for testing OpenClaw flows in the browser.
+  // This mounts a hidden file input that will dispatch `capability:finderSelected`.
+  // Always mount in dev / testing environments.
+  useEffect(() => {
+    // no-op, component is rendered below
+  }, []);
 
   // 🤖 Execute pending Telegram commands when automationAPI is ready
   useEffect(() => {
@@ -1303,8 +1557,10 @@ export function Desktop() {
   }, [automationAPI])
 
   useEffect(() => {
-    (window as any).automationAPI = automationAPI;
-    (window as any).debugAutomation = {
+    // Expose automation API to window once; avoid repeated logs or re-creating debug helpers
+    if (!(window as any).__automationDebugInitialized) {
+      (window as any).automationAPI = automationAPI;
+      (window as any).debugAutomation = {
       listWindows: () => automationAPI.getAllWindows(),
       openApp: (name: string) => automationAPI.openWindow(name),
       closeAll: () => {
@@ -1312,10 +1568,60 @@ export function Desktop() {
           automationAPI.closeWindow(id);
         });
       },
-      testCommand: (cmd: string) => automationAPI.executeTextCommand(cmd)
+      testCommand: (cmd: string) => automationAPI.executeTextCommand(cmd),
+      // Capability debug helpers (for testing only)
+      grantCapability: (cap: string, persistent = false) => {
+        try {
+          const cm = require('@/lib/capabilityManager').capabilityManager; // dynamic require to avoid SSR issues
+          cm.grantCapability(cap, persistent);
+          return true;
+        } catch (e) {
+          console.warn('grantCapability not available in this environment', e);
+          return false;
+        }
+      },
+      listPendingOperations: () => {
+        try {
+          const cm = require('@/lib/capabilityManager').capabilityManager;
+          return cm.getPendingOperations();
+        } catch (e) {
+          console.warn('listPendingOperations not available', e);
+          return [];
+        }
+      },
+      resumeOperation: (id: string) => {
+        try {
+          const cm = require('@/lib/capabilityManager').capabilityManager;
+          return cm.resumeOperation(id);
+        } catch (e) {
+          console.warn('resumeOperation not available', e);
+          return Promise.resolve({ success: false, error: e });
+        }
+      },
+      cancelOperation: (id: string) => {
+        try {
+          const cm = require('@/lib/capabilityManager').capabilityManager;
+          return cm.cancelOperation(id);
+        } catch (e) {
+          console.warn('cancelOperation not available', e);
+          return false;
+        }
+      },
+      setDevBypass: (enabled: boolean) => {
+        try {
+          const cm = require('@/lib/capabilityManager').capabilityManager;
+          if ((cm as any).setDevBypass) (cm as any).setDevBypass(enabled);
+          return true;
+        } catch (e) {
+          console.warn('setDevBypass not available', e);
+          return false;
+        }
+      }
     };
 
-    console.log('[Desktop] ✅ Automation API initialized');
+      (window as any).__automationDebugInitialized = true;
+      console.log('[Desktop] ✅ Automation API initialized');
+    }
   }, [automationAPI]);
 
   //git hub vs code 
@@ -1867,6 +2173,10 @@ export function Desktop() {
 
         >
           <TerminalProvider openApplication={openApplication} automationAPI={automationAPI} runCommandInTerminal={runCommandInTerminal}>
+          <DevFinderMock />
+          {permissionGuidance && (
+            <TccGuidancePrompt guidance={permissionGuidance} onRetry={handleGuidanceRetry} onDismiss={handleGuidanceDismiss} />
+          )}
           {/*  */}
 
           {/**/}
@@ -1974,6 +2284,25 @@ export function Desktop() {
                       automationAPI={automationAPI}
                       openWindows={openWindows}
                     />
+                  </span>
+
+                  {/* Capability Center Toggle */}
+                  <span className="text-gray-400">
+                    <button
+                      title="Open Capability Center"
+                      onClick={() => {
+                        if (pending && pending.length > 0) {
+                          // If there are pending permissions, keep the center open and notify user
+                          toast.info('Please review pending permissions in the Capability Center');
+                          setShowCapabilityCenter(true);
+                          return;
+                        }
+                        setShowCapabilityCenter(prev => !prev);
+                      }}
+                      className="px-2 py-1 rounded bg-gray-800/50 hover:bg-gray-700/60"
+                    >
+                      🔐
+                    </button>
                   </span>
                   
                   {/* PRESERVED: Voice Control Button */}
@@ -2278,6 +2607,47 @@ export function Desktop() {
               }}
             />
           </div>
+
+          {showCapabilityCenter && (
+            // Render Capability Center as a native Window when pending, otherwise as a small bottom-right window
+            pending && pending.length > 0 ? (
+              <Window
+                id="capability-center"
+                title="Capability Center"
+                icon="/icons/lock.png"
+                appName="CapabilityCenter"
+                initialX={Math.max(100, (window.innerWidth / 2) - 220)}
+                initialY={Math.max(80, (window.innerHeight / 2) - 160)}
+                initialWidth={440}
+                initialHeight={420}
+                isMinimized={false}
+                isMaximized={false}
+                zIndex={2147483660}
+                onClose={(id) => {
+                  // Prevent close while pending permissions exist
+                  if (pending && pending.length > 0) {
+                    toast.error('You must resolve pending permissions before closing the Capability Center');
+                    return;
+                  }
+                  // otherwise close by toggling
+                  setShowCapabilityCenter(false);
+                }}
+                onMinimize={() => { toast('Capability Center cannot be minimized while pending'); }}
+                onFocus={() => {}}
+                desktopRef={desktopRef}
+                themeColor={themeColor}
+              >
+                <CapabilityCenter />
+              </Window>
+            ) : (
+              <div style={{ position: 'fixed', right: 24, bottom: 24, zIndex: 2147483650 }}>
+                <CapabilityCenter />
+              </div>
+            )
+          )}
+
+          {/* Permission prompt modal (macOS-like) */}
+          <PermissionPrompt />
         </TerminalProvider>
       </KeyboardProvider >
     </>

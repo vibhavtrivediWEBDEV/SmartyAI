@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useRef, useEffect } from 'react';
+import capabilityManager from '@/lib/capabilityManager';
 
 interface CursorPosition {
   x: number;
@@ -39,7 +40,7 @@ export interface CursorAutomationAPI {
 
   // Queue management
   executeCommand: (command: AutomationCommand) => Promise<boolean>;
-  executeSequence: (commands: AutomationCommand[]) => Promise<boolean>;
+  executeSequence: (commands: AutomationCommand[]) => Promise<any>;
   clearQueue: () => void;
 
   // Text command parser
@@ -1252,7 +1253,37 @@ export function useCursorAutomation(
   }, [moveTo, clickElement, openWindow, closeWindow, minimizeWindow, maximizeWindow, focusWindow, searchWeb, log]);
 
   // Execute sequence of commands
-  const executeSequence = useCallback(async (commands: AutomationCommand[]): Promise<boolean> => {
+  const executeSequence = useCallback(async (commands: AutomationCommand[]): Promise<any> => {
+    // Check for required capabilities attached to the sequence
+    const missingCaps = (commands as any)._missingCapabilities || [];
+
+    if (missingCaps && missingCaps.length > 0) {
+      // Request capabilities and queue the operation
+      const requested = capabilityManager.requestCapabilities(missingCaps);
+
+      const operationId = capabilityManager.queueOperation({
+        sequence: commands,
+        intent: (commands as any)._intent || undefined,
+        parameters: (commands as any)._parameters || undefined,
+        requiredCapabilities: missingCaps,
+        executor: async () => {
+          // When resumed, call executeSequence again — permissions should be granted
+          return await executeSequence(commands);
+        }
+      });
+      log(`Permissions missing: ${missingCaps.join(', ')}. Queued operation ${operationId}`, 'info');
+
+      // Notify UI / external listeners
+      try {
+        window.dispatchEvent(new CustomEvent('capability:operationQueued', {
+          detail: { operationId, missing: missingCaps, sequenceLength: commands.length }
+        }));
+      } catch (e) {
+        // ignore (server-side or no window)
+      }
+      return { success: false, status: 'awaiting_permission', operationId, missing: missingCaps };
+    }
+
     stateRef.current.isRunning = true;
     stateRef.current.queue = [...commands];
 
@@ -1267,7 +1298,7 @@ export function useCursorAutomation(
         
         if (!success) {
           log(`Sequence failed at step ${i + 1}: ${command.action} ${command.target || ''}`, 'error');
-          return false;
+          return { success: false, status: 'failed' };
         }
 
         // Remove from queue
@@ -1275,10 +1306,10 @@ export function useCursorAutomation(
       }
 
       log('Sequence completed successfully', 'success');
-      return true;
+      return { success: true, status: 'completed' };
     } catch (error) {
       log(`Sequence error: ${error}`, 'error');
-      return false;
+      return { success: false, status: 'failed', error };
     } finally {
       stateRef.current.isRunning = false;
       stateRef.current.queue = [];
@@ -1540,18 +1571,54 @@ export function useCursorAutomation(
       
       // 🚀 Step 2: Execute intent → automation sequence
       const sequence = executeIntent(resolvedIntent);
-      
+
+      // Before running the sequence, ensure required capabilities are granted.
+      // This guard prevents actions (like opening apps) from running before the
+      // user has granted the necessary permissions.
+      try {
+        const required = capabilityManager.inferCapabilitiesForIntent
+          ? capabilityManager.inferCapabilitiesForIntent(resolvedIntent.intent, resolvedIntent.parameters)
+          : [];
+        const check = capabilityManager.checkCapabilities(required);
+        if (check.missing && check.missing.length > 0) {
+          // Request and queue the operation instead of executing immediately
+          capabilityManager.requestCapabilities(check.missing);
+          const operationId = capabilityManager.queueOperation({
+            sequence,
+            intent: resolvedIntent.intent,
+            parameters: resolvedIntent.parameters,
+            requiredCapabilities: check.missing,
+            executor: async () => {
+              return await executeSequence(sequence);
+            }
+          });
+          log(`Permissions missing: ${check.missing.join(', ')}. Queued operation ${operationId}`, 'info');
+          try {
+            window.dispatchEvent(new CustomEvent('capability:operationQueued', { detail: { operationId, missing: check.missing, sequenceLength: sequence.length } }));
+          } catch (e) {}
+
+          return false; // indicate command not executed now
+        }
+      } catch (e) {
+        // If capability check fails for any reason, continue to attempt execution
+        console.warn('[executeTextCommand] capability check failed, proceeding', e);
+      }
+
       log(`⚡ Executing ${sequence.length} steps...`, 'info');
-      
+
       // 🔧 Step 3: Run sequence
-      const success = await executeSequence(sequence);
-      
+      const execResult = await executeSequence(sequence);
+
+      const success = typeof execResult === 'boolean' ? execResult : (execResult && execResult.success === true);
+
       if (success) {
         log(`✅ Command executed successfully`, 'success');
+      } else if (execResult && execResult.status === 'awaiting_permission') {
+        log(`⏳ Command queued awaiting permission`, 'warn');
       } else {
         log(`❌ Command execution failed`, 'error');
       }
-      
+
       return success;
       
     } catch (error: any) {

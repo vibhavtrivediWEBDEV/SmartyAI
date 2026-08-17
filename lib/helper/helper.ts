@@ -1,5 +1,6 @@
 // src/automation/resolveSequence.ts
 import automationJson from '../../data/dekstop.json'
+import capabilityManager from '../capabilityManager';
 
 
 // type Params = Record<string, string | number>
@@ -152,6 +153,21 @@ export function resolveSequence(key: string, params: Params = {}): any[] {
 
     // 🔥 ATTACH TIMEOUT to sequence (for downstream processing)
     (resolvedSequence as any)._timeout = estimatedDuration;
+
+    // 🔹 Attach capability metadata so callers that use resolveSequence() directly
+    // can know what capabilities are required and whether any are missing.
+    try {
+        const required = capabilityManager.inferCapabilitiesForIntent
+            ? capabilityManager.inferCapabilitiesForIntent(key, params)
+            : [];
+        const check = capabilityManager.checkCapabilities(required);
+        (resolvedSequence as any)._requiredCapabilities = required;
+        (resolvedSequence as any)._permissionStatus = check.granted ? 'granted' : 'missing';
+        (resolvedSequence as any)._missingCapabilities = check.missing;
+    } catch (e) {
+        // No-op on metadata attach failures
+        console.warn('[resolveSequence] capability metadata attach failed', e);
+    }
     
     return resolvedSequence;
 }

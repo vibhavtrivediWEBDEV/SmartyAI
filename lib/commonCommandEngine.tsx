@@ -194,9 +194,23 @@ export async function executeSmartyCommand(
       // BRANCH: Terminal/local - Execute directly via automationAPI
       console.log('[CommonCommandEngine] 🖥️ LOCAL SOURCE: Executing via automationAPI.executeSequence()');
       console.log('[CommonCommandEngine] 📤 Step 1: Sending to automationAPI.executeSequence()...');
-      const success = await automationAPI.executeSequence(automationSequence);
-      console.log('[CommonCommandEngine] 📥 Step 2: Received response:', success)
-      
+      const execResult = await automationAPI.executeSequence(automationSequence);
+      console.log('[CommonCommandEngine] 📥 Step 2: Received response:', execResult)
+
+      // Normalize possible structured result
+      const success = typeof execResult === 'boolean' ? execResult : (execResult && execResult.success === true);
+
+      if (execResult && execResult.status === 'awaiting_permission') {
+        console.log('[CommonCommandEngine] ⏳ Automation queued, awaiting permission');
+        emit('automation', 'Queued - awaiting permission');
+        return {
+          success: false,
+          message: `Queued: awaiting permission for ${resolvedIntent.intent}`,
+          events,
+          automation: automationSequence
+        };
+      }
+
       if (success) {
         console.log('\n' + '✅'.repeat(80))
         console.log('[CommonCommandEngine] 🎉 AUTOMATION SUCCESS')
@@ -475,10 +489,20 @@ async function parseAIResponseAndExecute(
         }
         
         // LOCAL: Execute directly via automationAPI
-        await automationAPI.executeSequence(parsed.automation);
-        
-        emit('success', 'Automation completed');
-        return { success: true, automation: parsed.automation };
+        const execResult = await automationAPI.executeSequence(parsed.automation);
+        const ok = typeof execResult === 'boolean' ? execResult : (execResult && execResult.success === true);
+
+        if (execResult && execResult.status === 'awaiting_permission') {
+          emit('automation', 'Queued - awaiting permission');
+          return { success: false, automation: parsed.automation };
+        }
+
+        if (ok) {
+          emit('success', 'Automation completed');
+          return { success: true, automation: parsed.automation };
+        }
+        emit('error', 'Automation failed');
+        return { success: false };
       }
     } catch (e) {
       // Not JSON, continue
@@ -516,10 +540,20 @@ async function parseAIResponseAndExecute(
       }
       
       // LOCAL: Execute directly via automationAPI
-      await automationAPI.executeSequence(resolvedSequence);
-      
-      emit('success', `Intent ${intent} executed`);
-      return { success: true, automation: resolvedSequence };
+      {
+        const execResult = await automationAPI.executeSequence(resolvedSequence);
+        const ok = typeof execResult === 'boolean' ? execResult : (execResult && execResult.success === true);
+        if (execResult && execResult.status === 'awaiting_permission') {
+          emit('automation', 'Queued - awaiting permission');
+          return { success: false, automation: resolvedSequence };
+        }
+        if (ok) {
+          emit('success', `Intent ${intent} executed`);
+          return { success: true, automation: resolvedSequence };
+        }
+        emit('error', `Intent ${intent} failed`);
+        return { success: false };
+      }
     }
     
     // Check simple format: "appName: Chrome | action: maximize"
@@ -578,10 +612,18 @@ async function parseAIResponseAndExecute(
         }
       }
       
-      await automationAPI.executeSequence(automationSequence);
-      
-      emit('success', `${action} ${mappedAppName} executed`);
-      return { success: true, automation: automationSequence };
+      const execResult = await automationAPI.executeSequence(automationSequence);
+      const ok = typeof execResult === 'boolean' ? execResult : (execResult && execResult.success === true);
+      if (execResult && execResult.status === 'awaiting_permission') {
+        emit('automation', 'Queued - awaiting permission');
+        return { success: false, automation: automationSequence };
+      }
+      if (ok) {
+        emit('success', `${action} ${mappedAppName} executed`);
+        return { success: true, automation: automationSequence };
+      }
+      emit('error', `${action} ${mappedAppName} failed`);
+      return { success: false };
     }
     
     return null;
