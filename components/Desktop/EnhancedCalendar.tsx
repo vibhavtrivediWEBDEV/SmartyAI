@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { ChevronLeft, ChevronRight, Plus, X, Trash2, Edit3, Calendar, Clock, MapPin, Bell, Repeat, Search } from "lucide-react";
 
 /* -------------------------------------------------------------------------
@@ -72,14 +72,42 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [eventTitle, setEventTitle] = useState("");
   const [eventDate, setEventDate] = useState("");
-  const [eventStartTime, setEventStartTime] = useState("");
-  const [eventEndTime, setEventEndTime] = useState("");
+  const [eventStartTime, setEventStartTime] = useState("09:00");
+  const [eventEndTime, setEventEndTime] = useState("10:00");
   const [eventDescription, setEventDescription] = useState("");
   const [eventLocation, setEventLocation] = useState("");
-  const [eventAllDay, setEventAllDay] = useState(true);
+  const [eventAllDay, setEventAllDay] = useState(false); // ✅ Changed from true to false
   const [eventCalendarId, setEventCalendarId] = useState("");
   const [eventReminder, setEventReminder] = useState<number>(0);
   const [saving, setSaving] = useState(false);
+
+  // ✅ Expose state setters to window for automation (solves React controlled component issue)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).calendarSetTitle = setEventTitle;
+      (window as any).calendarSetDate = setEventDate;
+      (window as any).calendarSetStartTime = setEventStartTime;
+      (window as any).calendarSetEndTime = setEventEndTime;
+      (window as any).calendarSetLocation = setEventLocation;
+      (window as any).calendarSetDescription = setEventDescription;
+      (window as any).calendarSetAllDay = setEventAllDay;
+      (window as any).calendarSetCalendarId = setEventCalendarId;
+      (window as any).calendarSetReminder = setEventReminder;
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        delete (window as any).calendarSetTitle;
+        delete (window as any).calendarSetDate;
+        delete (window as any).calendarSetStartTime;
+        delete (window as any).calendarSetEndTime;
+        delete (window as any).calendarSetLocation;
+        delete (window as any).calendarSetDescription;
+        delete (window as any).calendarSetAllDay;
+        delete (window as any).calendarSetCalendarId;
+        delete (window as any).calendarSetReminder;
+      }
+    };
+  }, []);
 
   // Utility functions
   function todayISO() {
@@ -247,11 +275,11 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
     setEditingEvent(null);
     setEventTitle("");
     setEventDate(date);
-    setEventStartTime("");
-    setEventEndTime("");
+    setEventStartTime("09:00"); // Default time
+    setEventEndTime("10:00"); // Default time
     setEventDescription("");
     setEventLocation("");
-    setEventAllDay(true);
+    setEventAllDay(false); // ✅ Changed from true to false so time inputs show
     setEventReminder(0);
     setShowEventForm(true);
   }

@@ -220,72 +220,172 @@ export async function resolveUserIntent(
   // Calendar event patterns
   // Pattern: "calendar add event [title] [date] [time]" or "add event to calendar"
   if (lower.includes('calendar') && (lower.includes('add') || lower.includes('create') || lower.includes('new'))) {
+    console.log('\n📅 [Calendar Intent Parser] Processing calendar event request...');
+    console.log(`   Input: "${lower}"`);
+    
     // Extract title - improved regex to handle more cases
     let title = 'New Event';
     
-    // Strategy: Find everything after 'event' keyword
-    const afterEvent = lower.match(/(?:add|create|new)\s+event\s+(?:for\s+)?(?:today\s+|tomorrow\s+)?(?:for\s+)?(.+)$/);
+    // Strategy: Extract other components first then use remaining as title
+    let workingText = lower;
     
-    if (afterEvent && afterEvent[1].trim()) {
-      title = afterEvent[1].trim();
-      
-      // Remove known date/time patterns
-      // Remove 'today' or 'tomorrow'
-      title = title.replace(/\s*(today|tomorrow)\s*/gi, ' ').trim();
-      
-      // Remove 'at 2pm' or 'at 14:00'
-      title = title.replace(/\s*at\s+\d{1,2}(:\d{2})?\s*(am|pm)?\s*/gi, '').trim();
-      
-      // Remove 'on 2024-01-01'
-      title = title.replace(/\s*on\s+\d{4}[-/]\d{1,2}[-/]\d{1,2}\s*/gi, '').trim();
-      
-      // Remove 'notes ...'
-      title = title.replace(/\s*notes?\s+.+$/i, '').trim();
-      
-      // If title is too short or just keywords, use generic
-      if (title.length < 2 || /^(?:for|at|on|today|tomorrow)$/i.test(title)) {
-        title = 'New Event';
-      }
-    }
+    // Remove 'calendar add event' or 'add event to calendar'
+    workingText = workingText.replace(/(?:calendar\s+)?(?:add|create|new)\s+event\s+(?:for\s+)?/i, '');
+    workingText = workingText.replace(/add\s+event\s+to\s+calendar\s+(?:for\s+)?/i, '');
     
-    // Ensure title is not empty
-    if (!title || title.length === 0) {
-      title = 'New Event';
-    }
+    console.log(`   After removing event keywords: "${workingText}"`);
     
     // Extract date (today, tomorrow, specific date)
-    let date = new Date().toISOString().split('T')[0]; // Default: today
-    if (lower.includes('today')) {
+    let date = '';
+    let hasDate = false;
+    
+    if (workingText.includes('today')) {
       date = new Date().toISOString().split('T')[0];
-    } else if (lower.includes('tomorrow')) {
+      workingText = workingText.replace(/\s*today\s*/gi, ' ');
+      hasDate = true;
+      console.log(`   ✓ Found "today" → ${date}`);
+    } else if (workingText.includes('tomorrow')) {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       date = tomorrow.toISOString().split('T')[0];
+      workingText = workingText.replace(/\s*tomorrow\s*/gi, ' ');
+      hasDate = true;
+      console.log(`   ✓ Found "tomorrow" → ${date}`);
     } else {
-      // Try to extract date pattern
-      const dateMatch = lower.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/);
-      if (dateMatch) date = dateMatch[1];
+      // Try to extract date patterns: DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD, etc.
+      // Support: 2/8/2026, 02/08/2026, 2026-08-02, 2-8-2026
+      const datePatterns = [
+        // DD/MM/YYYY or MM/DD/YYYY (ambiguous, will assume DD/MM for Indian context)
+        /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/,
+        // YYYY-MM-DD
+        /(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/,
+        // DD/MM/YY or MM/DD/YY
+        /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})/,
+      ];
+      
+      for (const pattern of datePatterns) {
+        const dateMatch = workingText.match(pattern);
+        if (dateMatch) {
+          let extractedDate: string;
+          
+          if (pattern === datePatterns[1]) {
+            // YYYY-MM-DD format
+            extractedDate = `${dateMatch[1]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[3].padStart(2, '0')}`;
+          } else {
+            // DD/MM/YYYY format (Indian context)
+            const day = dateMatch[1].padStart(2, '0');
+            const month = dateMatch[2].padStart(2, '0');
+            const year = dateMatch[3].length === 2 ? `20${dateMatch[3]}` : dateMatch[3];
+            extractedDate = `${year}-${month}-${day}`;
+          }
+          
+          // Validate the date
+          const parsedDate = new Date(extractedDate);
+          if (isNaN(parsedDate.getTime())) {
+            console.log(`   ✗ Invalid date: "${dateMatch[0]}"`);
+          } else {
+            date = extractedDate;
+            workingText = workingText.replace(dateMatch[0], '');
+            hasDate = true;
+            console.log(`   ✓ Found date "${dateMatch[0]}" → ${date}`);
+            break;
+          }
+        }
+      }
     }
     
-    // Extract time
-    let time = '09:00';
-    const timeMatch = lower.match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+    // If no date found, use today's date
+    if (!hasDate) {
+      date = new Date().toISOString().split('T')[0];
+      console.log(`   ⚠️ No date found, using today: ${date}`);
+    }
+    
+    // Extract time - MUST HAVE TIME (don't default to 09:00)
+    let time = '';
+    let hasTime = false;
+    const timeMatch = workingText.match(/(?:at\s+)?(\d{1,2}):(\d{2})\s*(am|pm)?|(?:at\s+)?(\d{1,2})\s*(am|pm)/i);
     if (timeMatch) {
-      time = timeMatch[0].replace(/\s/g, '');
+      let hours = parseInt(timeMatch[1] || timeMatch[4]);
+      const mins = timeMatch[2] || '00';
+      const meridiem = (timeMatch[3] || timeMatch[5] || '').toLowerCase();
+      
+      // Convert to 24-hour format if PM
+      if (meridiem === 'pm' && hours < 12) {
+        hours += 12;
+      } else if (meridiem === 'am' && hours === 12) {
+        hours = 0;
+      }
+      
+      time = `${hours.toString().padStart(2, '0')}:${mins}`;
+      workingText = workingText.replace(timeMatch[0], '');
+      hasTime = true;
+      console.log(`   ✓ Found time "${timeMatch[0]}" → ${time}`);
     }
     
-    // Extract location
+    // If no time found, AI needs to ask for it
+    if (!hasTime) {
+      console.log(`   ✗ No time found - AI should ask user`);
+    }
+    
+    console.log(`   Extracted date: ${date}`);
+    console.log(`   Extracted time: ${time}`);
+    
+    // Extract location - look for 'location [place]' (must be explicit)
     let location = '';
-    const locationMatch = lower.match(/(?:at|location|place)\s+(.+?)(?=\s+(?:notes|description|$))/i);
+    const locationMatch = workingText.match(/(?:location|place)\s+(.+?)(?=\s+(?:notes|description|with|$))/i);
     if (locationMatch) {
       location = locationMatch[1].trim();
+      workingText = workingText.replace(locationMatch[0], '');
     }
     
-    // Extract notes
+    // Extract notes - look for 'with [notes]' or 'notes [description]'
     let notes = '';
-    const notesMatch = lower.match(/(?:notes?|description|about)\s+(.+?)(?=\s+(?:calendar|$))/i);
+    const notesMatch = workingText.match(/(?:with|notes?|description|about)\s+(.+?)$/i);
     if (notesMatch) {
       notes = notesMatch[1].trim();
+      workingText = workingText.replace(notesMatch[0], '');
+    }
+    
+    // Clean up working text for title
+    workingText = workingText.replace(/\s+/g, ' ').trim();
+    // Remove "for the" pattern first
+    workingText = workingText.replace(/\s*for\s+the\s+/gi, ' ');
+    // Then remove leading/trailing filler words
+    workingText = workingText.replace(/^(for|at|on|in|the)\s+/i, '');
+    workingText = workingText.replace(/\s+(for|at|on|in)$/i, '');
+    workingText = workingText.trim();
+    
+    // Use extracted title or fallback
+    if (workingText && workingText.length > 0 && workingText.length < 100) {
+      title = workingText;
+    }
+    
+    // Final title cleanup
+    if (!title || title.length < 2 || /^(?:for|at|on|today|tomorrow|the)$/i.test(title)) {
+      title = 'New Event';
+    }
+    
+    console.log(`   Extracted title: "${title}"`);
+    console.log(`   Extracted location: "${location}"`);
+    console.log(`   Extracted notes: "${notes}"`);
+    console.log('\n');
+    
+    // ✅ Requirement: If NO TIME provided, AI should ask for it
+    if (!hasTime) {
+      return {
+        intent: 'calendar.add_event',
+        parameters: {
+          title,
+          date,
+          time: '', // Empty time - AI will handle this
+          location,
+          calendarId: 'personal',
+          notes,
+          needsTime: true // Flag for AI to ask user
+        },
+        confidence: 'medium',
+        source: 'automation'
+      };
     }
     
     return {
@@ -295,7 +395,7 @@ export async function resolveUserIntent(
         date,
         time,
         location,
-        calendarId: 'personal', // Fixed: Use 'personal' instead of 'primary'
+        calendarId: 'personal',
         notes
       },
       confidence: 'high',

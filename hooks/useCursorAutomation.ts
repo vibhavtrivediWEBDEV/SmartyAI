@@ -862,44 +862,120 @@ export function useCursorAutomation(
         }
 
         case 'setValue': {
-          if (!command.target || command.params?.value == null) return false
+          if (!command.target || command.params?.value == null) {
+            log(`setValue: Missing target or value`, 'warn');
+            return true; // Continue even if missing
+          }
 
           const el = document.getElementById(command.target) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
-          if (!el) return false
-
           const newValue = String(command.params.value)
 
-          // ✅ Use React's native setter for text inputs
-          if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
-            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-              window.HTMLInputElement.prototype,
-              'value'
-            )?.set || Object.getOwnPropertyDescriptor(
-              window.HTMLTextAreaElement.prototype,
-              'value'
-            )?.set;
+          // ✅ CHECK FOR REACT STATE SETTERS FIRST (before DOM manipulation)
+          const windowWithSetters = window as any;
+          
+          // Map automation IDs to window setters
+          const setterMap: Record<string, { setter: string; value: any }> = {
+            'calendar_event_title_input': { setter: 'calendarSetTitle', value: newValue },
+            'calendar_event_date_input': { setter: 'calendarSetDate', value: newValue },
+            'calendar_event_time_input': { setter: 'calendarSetStartTime', value: newValue },
+            'calendar_event_location_input': { setter: 'calendarSetLocation', value: newValue },
+            'calendar_event_notes_input': { setter: 'calendarSetDescription', value: newValue },
+          };
 
-            if (nativeInputValueSetter) {
-              nativeInputValueSetter.call(el, newValue);
+          // Check if we have a React state setter for this input
+          if (command.target in setterMap) {
+            const { setter: setterName, value: valueToSet } = setterMap[command.target];
+            const setter = windowWithSetters[setterName];
+            
+            if (setter && typeof setter === 'function') {
+              log(`setValue: Using React state setter ${setterName}() for "${command.target}"`, 'info');
+              setter(valueToSet);
+              result = true;
+              
+              // Wait for React to update the DOM
+              await new Promise(resolve => setTimeout(resolve, 100));
+              
+              // Verify the value was set
+              const elAfter = document.getElementById(command.target) as HTMLInputElement;
+              if (elAfter && elAfter.value === valueToSet) {
+                log(`setValue: ✅ React state updated successfully, DOM value: "${elAfter.value}"`, 'success');
+              } else {
+                log(`setValue: ⚠️ React state setter called but DOM value mismatch`, 'warn');
+              }
+              
+              break;
             } else {
-              el.value = newValue;
+              log(`setValue: No React setter "${setterName}" found on window, falling back to DOM manipulation`, 'warn');
             }
+          }
 
-            // Dispatch proper React InputEvent
-            const inputEvent = new InputEvent('input', {
-              bubbles: true,
-              cancelable: true,
-              composed: true,
-              inputType: 'insertText',
-              data: newValue,
-            });
-            el.dispatchEvent(inputEvent);
+          // ✅ FALLBACK TO DOM MANIPULATION for non-React inputs
+          if (!el) {
+            log(`setValue: Element "${command.target}" not found, skipping...`, 'warn');
+            return true; // Continue even if element not found
+          }
+
+          // Use React's native setter for text inputs
+          if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+            const inputEl = el as HTMLInputElement;
             
-            // Also dispatch change event
-            const changeEvent = new Event('change', { bubbles: true });
-            el.dispatchEvent(changeEvent);
-            
-            log(`setValue: Set ${command.target} to "${newValue}", current value: "${el.value}"`, 'success');
+            // Special handling for date/time inputs
+            if (inputEl.type === 'date' || inputEl.type === 'time') {
+              log(`setValue: Setting ${inputEl.type} input "${command.target}" to "${newValue}"`, 'info');
+              
+              // Focus the input first
+              inputEl.focus();
+              
+              // Use native value setter
+              const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype,
+                'value'
+              )?.set;
+
+              if (nativeInputValueSetter) {
+                nativeInputValueSetter.call(inputEl, newValue);
+              } else {
+                inputEl.value = newValue;
+              }
+
+              // Trigger multiple events for React
+              inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+              inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+              inputEl.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+              
+              log(`setValue: ✅ Set ${inputEl.type} input successfully`, 'success');
+            } else {
+              // Regular text inputs
+              const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype,
+                'value'
+              )?.set || Object.getOwnPropertyDescriptor(
+                window.HTMLTextAreaElement.prototype,
+                'value'
+              )?.set;
+
+              if (nativeInputValueSetter) {
+                nativeInputValueSetter.call(el, newValue);
+              } else {
+                el.value = newValue;
+              }
+
+              // Dispatch proper React InputEvent
+              const inputEvent = new InputEvent('input', {
+                bubbles: true,
+                cancelable: true,
+                composed: true,
+                inputType: 'insertText',
+                data: newValue,
+              });
+              el.dispatchEvent(inputEvent);
+              
+              // Also dispatch change event
+              const changeEvent = new Event('change', { bubbles: true });
+              el.dispatchEvent(changeEvent);
+              
+              log(`setValue: Set ${command.target} to "${newValue}", current value: "${el.value}"`, 'success');
+            }
           } 
           // ✅ Handle range/color inputs
           else if (el.tagName === 'INPUT' && (el.type === 'range' || el.type === 'color')) {
@@ -1077,6 +1153,30 @@ export function useCursorAutomation(
               
               if (!conditionMet) {
                 log(`Timeout waiting for element #${command.target} to have content`, 'warn');
+              }
+              
+              result = true;
+            }
+            // Wait for form to close (element to disappear)
+            else if (condition === 'formClosed') {
+              log(`Waiting for form to close...`, 'info');
+              
+              const formId = command.target || 'calendar_event_form';
+              
+              while (!conditionMet && Date.now() - startTime < timeout) {
+                const form = document.getElementById(formId);
+                
+                if (!form) {
+                  conditionMet = true;
+                  log('Form closed successfully!', 'success');
+                  break;
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, checkInterval));
+              }
+              
+              if (!conditionMet) {
+                log('Timeout waiting for form to close', 'warn');
               }
               
               result = true;
@@ -1420,6 +1520,23 @@ export function useCursorAutomation(
       
       log(`✅ Intent: ${resolvedIntent.intent}`, 'info');
       log(`   Confidence: ${resolvedIntent.confidence}`, 'info');
+      
+      // ✅ CHECK: If calendar event needs time, ask user instead of creating
+      if (resolvedIntent.parameters?.needsTime) {
+        log(`⏰ Calendar event needs time specification`, 'warn');
+        log(`   Title: "${resolvedIntent.parameters.title}"`, 'info');
+        log(`   Date: ${resolvedIntent.parameters.date}`, 'info');
+        
+        // Emit event to ask user for time
+        if (onMessage) {
+          onMessage({
+            type: 'ai_response',
+            message: `I found the event "${resolvedIntent.parameters.title}" for ${resolvedIntent.parameters.date}, but I need to know what time. Please specify the time, for example: "at 3pm" or "at 14:00"`
+          });
+        }
+        
+        return false; // Don't execute automation yet
+      }
       
       // 🚀 Step 2: Execute intent → automation sequence
       const sequence = executeIntent(resolvedIntent);
