@@ -1,78 +1,114 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import useCapabilityManager from '@/hooks/useCapabilityManager';
 import { Window } from '@/components/Dekstop/window';
 import { toast } from 'sonner';
 
-// macOS-style permission window styled to look like a native dialog
-const styles = {
-  backdrop: {
-    position: 'fixed' as const,
-    left: 0,
-    top: 0,
-    width: '100vw',
-    height: '100vh',
-    zIndex: 2147483660,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'rgba(0,0,0,0.18)',
-    WebkitBackdropFilter: 'blur(6px)'
-  },
-  window: {
-    width: 520,
-    borderRadius: 12,
-    overflow: 'hidden',
-    background: 'rgba(255,255,255,0.85)',
-    boxShadow: '0 40px 120px rgba(0,0,0,0.45)',
-    color: '#111',
-    border: '1px solid rgba(0,0,0,0.08)',
-    backdropFilter: 'blur(8px)'
-  },
-  titlebar: {
-    height: 36,
-    display: 'flex',
-    alignItems: 'center',
-    paddingLeft: 12,
-    paddingRight: 12,
-    WebkitAppRegion: 'drag' as any,
-    background: 'linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.45))'
-  },
-  traffic: {
-    display: 'flex',
-    gap: 8,
-    alignItems: 'center'
-  },
-  trafficDot: (color: string) => ({
-    width: 12,
-    height: 12,
-    borderRadius: 12,
-    background: color,
-    display: 'inline-block'
-  }),
+// Theme-aware styles that work in both dark and light modes
+const getStyles = (isDark: boolean) => ({
   content: {
-    padding: 20
-  },
-  titleText: {
-    flex: 1,
-    textAlign: 'center' as const,
-    fontSize: 13,
-    color: '#222',
-    fontWeight: 600
+    padding: 24
   },
   buttons: {
     display: 'flex',
     justifyContent: 'flex-end',
-    gap: 8,
-    marginTop: 12
+    gap: 10,
+    marginTop: 16,
+    flexWrap: 'wrap' as const
   }
-}
+});
+
+// Detect if we're in dark mode
+const useThemeDetection = () => {
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    const checkDark = () => {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const hasDarkClass = document.documentElement.classList.contains('dark');
+      const bodyBg = window.getComputedStyle(document.body).backgroundColor;
+      const hasDarkBg = bodyBg.includes('rgb(1') || bodyBg.includes('rgb(0');
+      setIsDark(prefersDark || hasDarkClass || hasDarkBg);
+    };
+
+    checkDark();
+    
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    mediaQuery.addEventListener('change', checkDark);
+    
+    const observer = new MutationObserver(checkDark);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+    return () => {
+      mediaQuery.removeEventListener('change', checkDark);
+      observer.disconnect();
+    };
+  }, []);
+
+  return isDark;
+};
+
+// Button style helpers with proper dark/light mode contrast
+const getButtonStyle = (variant: 'primary' | 'secondary' | 'danger' | 'debug', isDark: boolean): React.CSSProperties => {
+  const base: React.CSSProperties = {
+    padding: '10px 18px',
+    borderRadius: 8,
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    border: 'none',
+    outline: 'none'
+  };
+
+  switch (variant) {
+    case 'primary':
+      return {
+        ...base,
+        background: '#0b79ff',
+        color: '#fff'
+      };
+    case 'secondary':
+      return {
+        ...base,
+        background: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.06)',
+        color: isDark ? '#fff' : '#111',
+        border: isDark ? '1px solid rgba(255,255,255,0.25)' : '1px solid rgba(0,0,0,0.12)'
+      };
+    case 'danger':
+      return {
+        ...base,
+        background: isDark ? 'rgba(255,59,48,0.25)' : 'rgba(255,59,48,0.12)',
+        color: '#ff3b30',
+        border: isDark ? '1px solid rgba(255,59,48,0.4)' : '1px solid rgba(255,59,48,0.25)'
+      };
+    case 'debug':
+      return {
+        ...base,
+        background: isDark ? 'rgba(255,204,0,0.15)' : '#ffcc00',
+        color: isDark ? '#ffcc00' : '#333',
+        border: isDark ? '1px solid rgba(255,204,0,0.3)' : '1px solid rgba(255,204,0,0.4)'
+      };
+  }
+};
 
 const PermissionPrompt: React.FC = () => {
   const { pending, grant, deny, operations } = useCapabilityManager(500);
+  const isDark = useThemeDetection();
+  const styles = useMemo(() => getStyles(isDark), [isDark]);
 
-  const [visible, setVisible] = React.useState(false);
-  const [current, setCurrent] = React.useState<any | null>(null);
+  const [visible, setVisible] = useState(false);
+  const [current, setCurrent] = useState<any | null>(null);
+  
+  const [alwaysAllowInDev, setAlwaysAllowInDev] = useState<boolean>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        return window.localStorage.getItem('smarty.capability.devBypass.v1') === 'true';
+      }
+    } catch (e) {}
+    return false;
+  });
 
+  // Monitor capability requests
   useEffect(() => {
     if (pending && pending.length > 0) {
       setCurrent(pending[0]);
@@ -83,127 +119,282 @@ const PermissionPrompt: React.FC = () => {
     }
   }, [pending]);
 
-  if (!visible || !current) return null;
-
-  const onAllowOnce = () => {
-    // Request ephemeral (Allow Once) grant server-side, then update local state and store token
-    (async () => {
-      try {
-        const res = await fetch('/api/capability/grant', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ capability: current.capability, persistent: false }) });
-        const body = await res.json().catch(() => ({}));
-        if (body && body.token) {
-          try {
-            (window as any).__smarty_ephemeral_tokens = (window as any).__smarty_ephemeral_tokens || {};
-            (window as any).__smarty_ephemeral_tokens[current.capability] = body.token;
-          } catch (e) {}
+  const onAllowOnce = useCallback(() => {
+    if (!current) return;
+    
+    // Request ephemeral (Allow Once) grant server-side
+    fetch('/api/capability/grant', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ capability: current.capability, persistent: false }) 
+    })
+      .then(res => res.json())
+      .then(body => {
+        if (body?.token) {
+          (window as any).__smarty_ephemeral_tokens = (window as any).__smarty_ephemeral_tokens || {};
+          (window as any).__smarty_ephemeral_tokens[current.capability] = body.token;
         }
-      } catch (e) {}
-    })();
+      })
+      .catch(() => {});
+    
     grant(current.capability, false);
-    toast.success(`Allowed ${current.capability} once`);
-  };
-  const onAllow = () => {
-    // Persistent grant: inform server and update local state
-    fetch('/api/capability/grant', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ capability: current.capability, persistent: true }) }).catch(() => {});
-    grant(current.capability, true);
-    toast.success(`Allowed ${current.capability}`);
-  };
-  const onDeny = () => {
-    // Inform server (best-effort) and update local state
-    fetch('/api/capability/revoke', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ capability: current.capability }) }).catch(() => {});
-    deny(current.capability);
-    toast.error(`Denied ${current.capability}`);
-  };
+    toast.success(`✓ Allowed ${current.capability} once`);
+  }, [current, grant]);
 
-  const onOpenClaw = () => {
-    // Emit an event for native provider to open Finder / request OS-level assistance
+  const onAllow = useCallback(() => {
+    if (!current) return;
+    
+    // Persistent grant
+    fetch('/api/capability/grant', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ capability: current.capability, persistent: true }) 
+    }).catch(() => {});
+    
+    grant(current.capability, true);
+    toast.success(`✓ Allowed ${current.capability}`);
+  }, [current, grant]);
+
+  const onDeny = useCallback(() => {
+    if (!current) return;
+    
+    fetch('/api/capability/revoke', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ capability: current.capability }) 
+    }).catch(() => {});
+    
+    deny(current.capability);
+    toast.error(`✗ Denied ${current.capability}`);
+  }, [current, deny]);
+
+  const onOpenClaw = useCallback(() => {
+    if (!current) return;
+    
     try {
-      window.dispatchEvent(new CustomEvent('capability:userOPENCLAW', { detail: { capability: current.capability, ops: operations.filter((op: any) => (op.requiredCapabilities || []).includes(current.capability)).map((o: any) => o.id) } }));
-      toast('Opening Finder — please locate the file and complete the operation');
+      window.dispatchEvent(new CustomEvent('capability:userOPENCLAW', { 
+        detail: { 
+          capability: current.capability, 
+          ops: operations
+            .filter((op: any) => (op.requiredCapabilities || []).includes(current.capability))
+            .map((o: any) => o.id) 
+        } 
+      }));
+      toast('🔍 Opening Finder — select the file manually');
     } catch (e) {
       console.warn('userOPENCLAW event dispatch failed', e);
     }
-  };
+  }, [current, operations]);
 
-  const onGrantDebug = () => {
-    // Developer helper to quickly grant during testing
+  const onGrantDebug = useCallback(() => {
+    if (!current) return;
     grant(current.capability, true);
-    toast.success('Granted for debug');
-  };
+    toast.success('✓ Granted for debug');
+  }, [current, grant]);
 
-  const [alwaysAllowInDev, setAlwaysAllowInDev] = React.useState<boolean>(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        return window.localStorage.getItem('smarty.capability.devBypass.v1') === 'true';
-      }
-    } catch (e) {}
-    return false;
-  });
-
-  const toggleAlwaysAllow = () => {
+  const toggleAlwaysAllow = useCallback(() => {
     const next = !alwaysAllowInDev;
     setAlwaysAllowInDev(next);
     try {
-      const cm = require('@/lib/capabilityManager').capabilityManager;
-      if ((cm as any).setDevBypass) (cm as any).setDevBypass(next);
-    } catch (e) {
-      console.warn('setDevBypass not available', e);
-    }
-    toast(next ? 'Dev-bypass enabled: permissions will be auto-granted' : 'Dev-bypass disabled');
-  };
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('smarty.capability.devBypass.v1', next ? 'true' : 'false');
+      }
+    } catch (e) {}
+    toast(next ? '⚙️ Dev-bypass enabled' : '⚙️ Dev-bypass disabled');
+  }, [alwaysAllowInDev]);
 
-  // Chain info: show ops that require this capability
-  const chainOps = operations.filter((op: any) => (op.requiredCapabilities || []).includes(current.capability));
+  // Operations requiring this capability
+  const chainOps = operations.filter((op: any) => 
+    (op.requiredCapabilities || []).includes(current?.capability)
+  );
+
+  // Early return AFTER all hooks (per React rules)
+  if (!visible || !current) return null;
+
+  // Extract capability info for human-readable display
+  const capName = current.capability.split('.').pop() || current.capability;
+  const capScope = current.capability.split('.')[0] || 'system';
 
   return (
     <Window
       id={`permission-${current.capability}`}
-      title={`Permission — ${current.capability}`}
+      title={`Permission Request — ${capName}`}
       icon="/icons/lock.png"
       appName="PermissionPrompt"
-      initialX={Math.max(80, (window.innerWidth / 2) - 260)}
-      initialY={Math.max(80, (window.innerHeight / 2) - 160)}
-      initialWidth={520}
-      initialHeight={260}
+      initialX={Math.max(80, (window.innerWidth / 2) - 280)}
+      initialY={Math.max(80, (window.innerHeight / 2) - 200)}
+      initialWidth={560}
+      initialHeight={380}
       isMinimized={false}
       zIndex={2147483665}
-      onClose={(id) => {
-        // Prevent closing while pending
+      onClose={() => {
         if (pending && pending.length > 0) {
           toast.error('Resolve pending permissions before closing');
-          return;
         }
       }}
-      onMinimize={() => { toast('Permission prompt cannot be minimized while pending'); }}
+      onMinimize={() => toast('Permission prompt cannot be minimized')}
       onFocus={() => {}}
       desktopRef={{ current: document.getElementById('desktop-root') } as any}
       themeColor="220, 14, 91"
     >
-      <div style={styles.content as React.CSSProperties}>
-        <h3 style={{ margin: 0, marginBottom: 8, fontSize: 16 }}>{`Allow \"Smarty\" to use ${current.capability}?`}</h3>
-        <p style={{ marginTop: 6, marginBottom: 10, color: '#333' }}>Allowing this will let the assistant complete the requested action on your Mac. Use "OpenClaw" to open Finder and select files manually.</p>
+      <div style={styles.content}>
+        {/* Header with icon */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 12, 
+          marginBottom: 16 
+        }}>
+          <div style={{
+            width: 48,
+            height: 48,
+            borderRadius: 12,
+            background: isDark ? 'rgba(11,121,255,0.2)' : 'rgba(11,121,255,0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 24
+          }}>
+            🔐
+          </div>
+          <div>
+            <h3 style={{ 
+              margin: 0, 
+              fontSize: 17, 
+              fontWeight: 600,
+              color: isDark ? '#fff' : '#111'
+            }}>
+              Smarty needs permission
+            </h3>
+            <div style={{ 
+              fontSize: 12, 
+              color: isDark ? '#888' : '#666',
+              marginTop: 2
+            }}>
+              {capScope.charAt(0).toUpperCase() + capScope.slice(1)} access required
+            </div>
+          </div>
+        </div>
 
+        {/* Capability name */}
+        <div style={{
+          padding: 12,
+          background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+          borderRadius: 8,
+          marginBottom: 16,
+          borderLeft: `3px solid ${isDark ? '#0b79ff' : '#007aff'}`
+        }}>
+          <div style={{ 
+            fontSize: 14, 
+            fontWeight: 500,
+            color: isDark ? '#fff' : '#111'
+          }}>
+            {current.capability}
+          </div>
+          <div style={{ 
+            fontSize: 12, 
+            color: isDark ? '#aaa' : '#666',
+            marginTop: 4
+          }}>
+            Allow Smarty to use {capName} on your Mac
+          </div>
+        </div>
+
+        {/* Related operations */}
         {chainOps && chainOps.length > 0 && (
-          <div style={{ marginBottom: 12, padding: 10, background: 'rgba(255,255,255,0.6)', borderRadius: 8, border: '1px solid rgba(0,0,0,0.04)' }}>
-            <div style={{ fontSize: 12, color: '#444', fontWeight: 600 }}>This permission is required for:</div>
-            <ul style={{ marginTop: 8, paddingLeft: 18, color: '#444' }}>
-              {chainOps.map((op: any) => (
-                <li key={op.id} style={{ fontSize: 13 }}>{op.intent || 'automation'} • {op.sequence?.length || 0} steps</li>
+          <div style={{
+            marginBottom: 16,
+            padding: 12,
+            background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.5)',
+            borderRadius: 8,
+            border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.06)'
+          }}>
+            <div style={{ 
+              fontSize: 12, 
+              fontWeight: 600,
+              color: isDark ? '#aaa' : '#555',
+              marginBottom: 8
+            }}>
+              Required for:
+            </div>
+            <ul style={{ 
+              margin: 0, 
+              padding: '0 0 0 20',
+              color: isDark ? '#ccc' : '#333'
+            }}>
+              {chainOps.slice(0, 3).map((op: any) => (
+                <li key={op.id} style={{ 
+                  fontSize: 13, 
+                  marginBottom: 4,
+                  color: isDark ? '#ccc' : '#333'
+                }}>
+                  {op.intent || 'automation'} • {op.sequence?.length || 0} steps
+                </li>
               ))}
             </ul>
           </div>
         )}
 
-        <div style={styles.buttons as React.CSSProperties}>
-          <button onClick={onOpenClaw} style={{ padding: '8px 12px', borderRadius: 8, background: '#fff', border: '1px solid rgba(0,0,0,0.06)' }}>OpenClaw (Finder)</button>
-          <button onClick={onAllowOnce} style={{ padding: '8px 12px', borderRadius: 8, background: '#fff', border: '1px solid rgba(0,0,0,0.06)' }}>Allow Once</button>
-          <button onClick={onAllow} style={{ padding: '8px 12px', borderRadius: 8, background: '#0b79ff', color: '#fff', border: 'none' }}>Allow</button>
-          <button onClick={onDeny} style={{ padding: '8px 12px', borderRadius: 8, background: '#fff', border: '1px solid rgba(0,0,0,0.06)' }}>Deny</button>
-          <button onClick={onGrantDebug} style={{ padding: '8px 12px', borderRadius: 8, background: '#eee', border: '1px solid rgba(0,0,0,0.06)' }}>Grant (debug)</button>
+        {/* Permission buttons */}
+        <div style={styles.buttons}>
+          <button 
+            onClick={onOpenClaw} 
+            style={getButtonStyle('secondary', isDark)}
+          >
+            🔍 OpenClaw
+          </button>
+          <button 
+            onClick={onAllowOnce} 
+            style={getButtonStyle('secondary', isDark)}
+          >
+            Allow Once
+          </button>
+          <button 
+            onClick={onAllow} 
+            style={getButtonStyle('primary', isDark)}
+          >
+            Allow
+          </button>
+          <button 
+            onClick={onDeny} 
+            style={getButtonStyle('danger', isDark)}
+          >
+            Deny
+          </button>
+          {process.env.NODE_ENV === 'development' && (
+            <button 
+              onClick={onGrantDebug} 
+              style={getButtonStyle('debug', isDark)}
+            >
+              Debug
+            </button>
+          )}
         </div>
-        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input id="dev-bypass" type="checkbox" checked={alwaysAllowInDev} onChange={toggleAlwaysAllow} />
-          <label htmlFor="dev-bypass" style={{ fontSize: 12, color: '#444' }}>Always allow in dev (auto-grant)</label>
+
+        {/* Dev bypass toggle */}
+        <div style={{ 
+          marginTop: 16, 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 8 
+        }}>
+          <input 
+            id="dev-bypass" 
+            type="checkbox" 
+            checked={alwaysAllowInDev} 
+            onChange={toggleAlwaysAllow}
+            style={{ cursor: 'pointer' }}
+          />
+          <label 
+            htmlFor="dev-bypass" 
+            style={{ 
+              fontSize: 12, 
+              color: isDark ? '#888' : '#666',
+              cursor: 'pointer'
+            }}
+          >
+            Auto-grant in dev mode
+          </label>
         </div>
       </div>
     </Window>

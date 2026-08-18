@@ -71,7 +71,7 @@ import SmartyTeacherWrapper from "@/app/components/terminal/smartyTeacher"
 import { DynamicAgGridConfigurator } from "./dataTableViewer"
 import { getUserAIContext, type UserAIContext } from "@/lib/ai/userAIContext"
 import { useSocketIO } from "@/hooks/useSocketIO"
-import CapabilityCenter from '@/components/CapabilityCenter'
+// CapabilityCenter removed - only PermissionPrompt handles permissions
 import useCapabilityManager from '@/hooks/useCapabilityManager'
 import PermissionPrompt from '@/components/PermissionPrompt'
 import TccGuidancePrompt from '@/components/TccGuidancePrompt'
@@ -438,7 +438,7 @@ export function Desktop() {
   }, []);
   
   const [showWidgetGallery, setShowWidgetGallery] = useState(false);
-  const [showCapabilityCenter, setShowCapabilityCenter] = useState(false);
+  // CapabilityCenter removed - only PermissionPrompt handles permissions
   const { pending } = useCapabilityManager(500);
   
   // 🌐 Widget Creation Modal State
@@ -513,7 +513,7 @@ export function Desktop() {
       toast(`⏳ Operation queued (awaiting permission)`);
       console.log('[Desktop] capability operation queued', d);
       // Auto-open Capability Center to prompt user
-      setShowCapabilityCenter(true);
+      // PermissionPrompt will auto-show
     };
 
     window.addEventListener('capability:operationQueued', handler as EventListener);
@@ -530,7 +530,7 @@ export function Desktop() {
       toast.error(`🚫 Capability denied: ${d.capability}`);
       console.log('[Desktop] capability denied', d);
       // Keep center open so user can review other pending permissions
-      setShowCapabilityCenter(true);
+      // PermissionPrompt will auto-show
     }
 
     const opCancelledHandler = (ev: any) => {
@@ -539,7 +539,7 @@ export function Desktop() {
       console.log('[Desktop] capability operation cancelled', d);
       // refresh UI
       setTimeout(() => {
-        if (!pending || pending.length === 0) setShowCapabilityCenter(false);
+        // PermissionPrompt will automatically show when capabilities are needed
       }, 600);
     }
 
@@ -550,7 +550,7 @@ export function Desktop() {
       // Close the Capability Center only if there are no more pending permissions
       setTimeout(() => {
         if (!pending || pending.length === 0) {
-          setShowCapabilityCenter(false);
+          // PermissionPrompt will automatically show when capabilities are needed
         } else {
           // keep it open so user can finish reviewing remaining permissions
           console.log('[Desktop] Pending permissions remain, keeping Capability Center open');
@@ -565,7 +565,7 @@ export function Desktop() {
       const d = ev?.detail || {};
       toast.success(`🔁 Operation requeued: ${d.operationId}`);
       console.log('[Desktop] capability operation requeued', d);
-      setShowCapabilityCenter(true);
+      // PermissionPrompt will auto-show
     }
     window.addEventListener('capability:operationRequeued', requeuedHandler as EventListener);
 
@@ -597,7 +597,7 @@ export function Desktop() {
               const cm = require('@/lib/capabilityManager').capabilityManager;
               if ((cm as any).request) (cm as any).request('finder.control');
             } catch (e) {}
-            setShowCapabilityCenter(true);
+            // PermissionPrompt will auto-show
             return;
           }
 
@@ -616,7 +616,7 @@ export function Desktop() {
         } catch (e) {
           console.warn('Failed to open Finder from userOPENCLAW handler', e);
         }
-        setShowCapabilityCenter(true);
+        // PermissionPrompt will auto-show
       })();
     };
     window.addEventListener('capability:userOPENCLAW', userOpenClawHandler as EventListener);
@@ -711,7 +711,7 @@ export function Desktop() {
           if ((cm as any).request) (cm as any).request('finder.control');
         } catch (e) {}
         setPermissionGuidance(null);
-        setShowCapabilityCenter(true);
+        // PermissionPrompt will auto-show
         return false;
       }
       if (!res.ok && body && body.errorType === 'TCC_DENIED' && body.guidance) {
@@ -727,7 +727,7 @@ export function Desktop() {
     setPermissionGuidance(null);
     // fallback: open Finder and show capability center
     try { openApplication('Finder'); } catch (e) {}
-    setShowCapabilityCenter(true);
+    // PermissionPrompt will auto-show
   };
 
   useEffect(() => {
@@ -2287,24 +2287,6 @@ export function Desktop() {
                   </span>
 
                   {/* Capability Center Toggle */}
-                  <span className="text-gray-400">
-                    <button
-                      title="Open Capability Center"
-                      onClick={() => {
-                        if (pending && pending.length > 0) {
-                          // If there are pending permissions, keep the center open and notify user
-                          toast.info('Please review pending permissions in the Capability Center');
-                          setShowCapabilityCenter(true);
-                          return;
-                        }
-                        setShowCapabilityCenter(prev => !prev);
-                      }}
-                      className="px-2 py-1 rounded bg-gray-800/50 hover:bg-gray-700/60"
-                    >
-                      🔐
-                    </button>
-                  </span>
-                  
                   {/* PRESERVED: Voice Control Button */}
                   <span className="text-gray-400">
                     <VoiceControlButton
@@ -2608,45 +2590,8 @@ export function Desktop() {
             />
           </div>
 
-          {showCapabilityCenter && (
-            // Render Capability Center as a native Window when pending, otherwise as a small bottom-right window
-            pending && pending.length > 0 ? (
-              <Window
-                id="capability-center"
-                title="Capability Center"
-                icon="/icons/lock.png"
-                appName="CapabilityCenter"
-                initialX={Math.max(100, (window.innerWidth / 2) - 220)}
-                initialY={Math.max(80, (window.innerHeight / 2) - 160)}
-                initialWidth={440}
-                initialHeight={420}
-                isMinimized={false}
-                isMaximized={false}
-                zIndex={2147483660}
-                onClose={(id) => {
-                  // Prevent close while pending permissions exist
-                  if (pending && pending.length > 0) {
-                    toast.error('You must resolve pending permissions before closing the Capability Center');
-                    return;
-                  }
-                  // otherwise close by toggling
-                  setShowCapabilityCenter(false);
-                }}
-                onMinimize={() => { toast('Capability Center cannot be minimized while pending'); }}
-                onFocus={() => {}}
-                desktopRef={desktopRef}
-                themeColor={themeColor}
-              >
-                <CapabilityCenter />
-              </Window>
-            ) : (
-              <div style={{ position: 'fixed', right: 24, bottom: 24, zIndex: 2147483650 }}>
-                <CapabilityCenter />
-              </div>
-            )
-          )}
 
-          {/* Permission prompt modal (macOS-like) */}
+          {/* Permission prompt modal (macOS-like) - handles all permission requests */}
           <PermissionPrompt />
         </TerminalProvider>
       </KeyboardProvider >

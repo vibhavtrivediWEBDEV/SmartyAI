@@ -57,6 +57,9 @@ export async function handleCommand({
   userId
 }: HandleCommandProps) {
   const trimmedCommand = command?.trim();
+  
+  // 🔊 SOUND: Silent on input - only play sound when command completes
+  
   setHistory((prev) => [...prev, { type: "input", value: trimmedCommand }]);
 
   // Display "Thinking..." message
@@ -119,13 +122,27 @@ export async function handleCommand({
     console.log('[Terminal Handler] 📺 Step 3: Displaying to terminal UI...')
     setHistory((prev) => [...prev, { type: "output", value: result.message }]);
     setCurrentInput("");
-    
-  } catch (error: any) {
+        // 🔊 SOUND: Play "Job's Done" (Correct) when response is complete
+    try {
+      const { playById } = await import('@/lib/sound');
+      playById('correct', { volume: 0.6 }).catch(() => {});
+    } catch (error) {
+      // Silently fail - sound is enhancement, not requirement
+    }
+      } catch (error: any) {
     console.log('\n' + '❌'.repeat(80))
     console.log('[Terminal Handler] 💥 ERROR IN COMMAND EXECUTION')
     console.log(`   Error: ${error.message}`)
     console.log(`   Stack: ${error.stack}`)
     console.log('❌'.repeat(80) + '\n')
+    
+    // 🔊 SOUND: Play error sound
+    try {
+      const { react } = await import('@/lib/sound');
+      react({ event: 'runtime_error', severity: 0.7, source: 'terminal' }).catch(() => {});
+    } catch (soundError) {
+      // Silently fail - sound is enhancement, not requirement
+    }
     
     // Remove "Thinking..." message
     setHistory((prev) => prev.filter((entry) => entry.value !== "Thinking..."));

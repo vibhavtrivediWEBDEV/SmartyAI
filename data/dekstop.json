@@ -566,6 +566,16 @@
     { "action": "click", "target": "finder_sidebar_{{folder}}", "delay": 1200 }
   ],
 
+  "finder.searchWithPermission": [
+    { "action": "open", "target": "Finder", "delay": 500 },
+    { 
+      "action": "search", 
+      "target": "finder_search", 
+      "params": { "query": "{{filename}}", "locations": "{{searchLocations}}" }, 
+      "delay": 1000 
+    }
+  ],
+
   "browser.open": [
     { "action": "open", "target": "{{browserName}}", "delay": 500 },
     { "action": "maximize", "target": "{{browserName}}", "delay": 700 }

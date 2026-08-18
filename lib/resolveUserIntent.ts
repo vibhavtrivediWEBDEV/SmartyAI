@@ -470,7 +470,45 @@ export async function resolveUserIntent(
   }
 
   // ========================================
-  // STRATEGY 4: Conversational/AI fallback
+  // STRATEGY 4: File Search Operations
+  // Pattern: "resume kha h", "find file", "where is X"
+  // ========================================
+  
+  // Resume search pattern (Hindi/English mix)
+  if (
+    lower.includes('resume') && 
+    (lower.includes('kha') || lower.includes('kaha') || lower.includes('where'))
+  ) {
+    return {
+      intent: 'finder.searchWithPermission',
+      parameters: { 
+        filename: 'resume',
+        searchLocations: ['Documents', 'Desktop', 'Downloads'],
+        description: 'Search for resume file in common locations'
+      },
+      confidence: 'high',
+      source: 'automation'
+    };
+  }
+
+  // Generic file search pattern
+  const fileSearchMatch = lower.match(/(?:find|search|where(?:\s+is)?)\s+(?:my\s+)?(.+?)(?:\s+file)?$/i);
+  if (fileSearchMatch) {
+    const searchTerm = fileSearchMatch[1].trim();
+    return {
+      intent: 'finder.searchWithPermission',
+      parameters: { 
+        filename: searchTerm,
+        searchLocations: ['Documents', 'Desktop', 'Downloads'],
+        description: `Search for ${searchTerm} in common locations`
+      },
+      confidence: 'high',
+      source: 'automation'
+    };
+  }
+
+  // ========================================
+  // STRATEGY 5: Conversational/AI fallback
   // ========================================
   
   console.log('🤖 [resolveUserIntent] Conversational input - routing to AI');

@@ -8,6 +8,7 @@ import {
   ShieldCheck, SlidersHorizontal, Speaker, Sun, UserRound, Wifi, X, MessageCircle,
 } from 'lucide-react'
 import { useSettings, type DesktopSettings } from '@/app/context/settingContext'
+import SoundSettings from './SoundSettings'
 import { DESKTOP_APPS } from '@/lib/desktopApps'
 
 type SettingTab = 'account' | 'network' | 'notifications' | 'sound' | 'focus' | 'general' | 'appearance' | 'accessibility' | 'control' | 'desktop' | 'display' | 'wallpaper' | 'battery' | 'privacy' | 'keyboard' | 'trackpad' | 'extras' | 'telegram'
@@ -259,7 +260,16 @@ export default function SettingsModal({ isSocketConnected = false, onReconnect }
 
         {activeTab === 'notifications' && <Group><SettingRow title="Allow Notifications" description="Show alerts from desktop applications"><Toggle label="Allow notifications" value={settings.notificationsEnabled} onChange={(value) => void updateNotifications(value)} /></SettingRow><SettingRow title="Show previews" description={settings.notificationPreview} last><Select value={settings.notificationPreview} onChange={(value) => patch('notificationPreview', value as DesktopSettings['notificationPreview'])} options={['Always', 'When Unlocked', 'Never']} /></SettingRow></Group>}
 
-        {activeTab === 'sound' && <Group><SettingRow title="Output volume"><Slider value={settings.soundVolume} onChange={(value) => patch('soundVolume', value)} /></SettingRow><SettingRow title="Mute"><Toggle label="Mute" value={settings.muted} onChange={(value) => patch('muted', value)} /></SettingRow><SettingRow title="Play interface sound effects" last><Toggle label="Interface sounds" value={settings.interfaceSounds} onChange={(value) => patch('interfaceSounds', value)} /></SettingRow></Group>}
+        {activeTab === 'sound' && (
+          <SoundSettings
+            soundVolume={settings.soundVolume}
+            muted={settings.muted}
+            interfaceSounds={settings.interfaceSounds}
+            onVolumeChange={(value) => patch('soundVolume', value)}
+            onMuteChange={(value) => patch('muted', value)}
+            onInterfaceSoundsChange={(value) => patch('interfaceSounds', value)}
+          />
+        )}
 
         {activeTab === 'focus' && <Group><SettingRow title="Focus" description="Silence notifications and reduce interruptions"><Toggle label="Focus mode" value={settings.focusMode} onChange={(value) => patch('focusMode', value)} /></SettingRow><SettingRow title="Share across devices" last><Toggle label="Share focus" value={settings.focusMode} onChange={(value) => patch('focusMode', value)} /></SettingRow></Group>}
 

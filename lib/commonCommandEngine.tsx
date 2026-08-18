@@ -352,9 +352,14 @@ async function parseSpecialCommands(
   const [baseCommand, ...args] = command.toLowerCase().split(" ");
   
   // Helper functions
-  const getUserName = () => userProfile?.fullName || "Guest User";
-  const getUserTitle = () => userProfile?.headline || "Developer";
-  const getUserSkills = () => Array.isArray(userProfile?.skills) ? userProfile.skills.join(", ") : (userProfile?.skills || "");
+  const getUserName = () => userProfile?.fullName || "Guest User - Profile not loaded";
+  const getUserTitle = () => userProfile?.headline || "Developer - Profile not loaded";
+  const getUserSkills = () => {
+    if (Array.isArray(userProfile?.skills) && userProfile.skills.length > 0) {
+      return userProfile.skills.join(", ");
+    }
+    return "No skills found in profile. Please add skills to your profile.";
+  };
   const getUserProjects = () => userProfile?.projects || [];
   const getUserContact = () => userProfile?.contact || { email: "", phone: "", socialLinks: [] };
   

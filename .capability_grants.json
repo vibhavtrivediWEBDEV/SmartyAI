@@ -1,0 +1,6 @@
+{
+  "persistent": [
+    "filesystem.read"
+  ],
+  "ephemeral": []
+}

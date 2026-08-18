@@ -1,0 +1,185 @@
+[
+  {
+    "id": "terminal",
+    "name": "Terminal Sounds",
+    "emoji": "💻",
+    "description": "Sounds played during terminal commands",
+    "sounds": [
+      {
+        "id": "challo",
+        "name": "Challo",
+        "description": "Let's go! Energizing command start",
+        "intent": "command_start",
+        "category": "success",
+        "emoji": "🚀",
+        "playsOn": "When command is sent to terminal",
+        "enabled": true,
+        "volume": 0.5
+      },
+      {
+        "id": "jobs_done",
+        "name": "Job's Done",
+        "description": "Satisfying completion sound",
+        "intent": "command_complete",
+        "category": "success",
+        "emoji": "✅",
+        "playsOn": "When command executes successfully",
+        "enabled": true,
+        "volume": 0.5
+      }
+    ]
+  },
+  {
+    "id": "success",
+    "name": "Success & Celebration",
+    "emoji": "🎉",
+    "description": "Sounds for achievements and successes",
+    "sounds": [
+      {
+        "id": "celebration",
+        "name": "Celebration",
+        "description": "Joyful achievement sound",
+        "intent": "celebration",
+        "category": "celebration",
+        "emoji": "🎊",
+        "playsOn": "Major achievements, milestones reached",
+        "enabled": true,
+        "volume": 0.6
+      },
+      {
+        "id": "success_chime",
+        "name": "Success Chime",
+        "description": "Pleasant completion notification",
+        "intent": "success",
+        "category": "success",
+        "emoji": "🔔",
+        "playsOn": "Automation success, task completion",
+        "enabled": true,
+        "volume": 0.6
+      }
+    ]
+  },
+  {
+    "id": "errors",
+    "name": "Errors & Oops",
+    "emoji": "⚠️",
+    "description": "Sounds for errors and failures",
+    "sounds": [
+      {
+        "id": "are_baap_re",
+        "name": "Are Baap Re",
+        "description": "Surprised exclamation",
+        "intent": "surprise",
+        "category": "dramatic",
+        "emoji": "😲",
+        "playsOn": "Unexpected system events, warnings",
+        "enabled": true,
+        "volume": 0.5
+      },
+      {
+        "id": "bruh",
+        "name": "Bruh",
+        "description": "Disappointed reaction",
+        "intent": "disappointment",
+        "category": "error",
+        "emoji": "😒",
+        "playsOn": "Mild failures, expected errors",
+        "enabled": true,
+        "volume": 0.5
+      },
+      {
+        "id": "fahh",
+        "name": "Fahh",
+        "description": "Shocked reaction sound",
+        "intent": "shock",
+        "category": "dramatic",
+        "emoji": "😱",
+        "playsOn": "Unexpected errors, critical failures",
+        "enabled": true,
+        "volume": 0.5
+      },
+      {
+        "id": "oof",
+        "name": "Oof",
+        "description": "Painful error sound",
+        "intent": "critical_error",
+        "category": "error",
+        "emoji": "😨",
+        "playsOn": "Critical errors, system crashes",
+        "enabled": true,
+        "volume": 0.5
+      }
+    ]
+  },
+  {
+    "id": "dramatic",
+    "name": "Dramatic Effects",
+    "emoji": "🎭",
+    "description": "Sounds for dramatic moments",
+    "sounds": [
+      {
+        "id": "gadbad",
+        "name": "Gadbad",
+        "description": "Investigation mode sound",
+        "intent": "investigation",
+        "category": "neutral",
+        "emoji": "🔍",
+        "playsOn": "Debugging mode, investigation start",
+        "enabled": true,
+        "volume": 0.5
+      },
+      {
+        "id": "sad_violin",
+        "name": "Sad Violin",
+        "description": "Melancholic failure sound",
+        "intent": "sadness",
+        "category": "neutral",
+        "emoji": "🎻",
+        "playsOn": "Failed attempts, disappointing results",
+        "enabled": true,
+        "volume": 0.5
+      },
+      {
+        "id": "vine_boom",
+        "name": "Vine Boom",
+        "description": "Dramatic impact sound",
+        "intent": "dramatic",
+        "category": "dramatic",
+        "emoji": "💥",
+        "playsOn": "Dramatic reveals, major changes",
+        "enabled": true,
+        "volume": 0.5
+      },
+      {
+        "id": "womp_womp",
+        "name": "Womp Womp",
+        "description": "Sad reality check",
+        "intent": "reality_check",
+        "category": "neutral",
+        "emoji": "😔",
+        "playsOn": "Unfortunate outcomes, bad luck",
+        "enabled": true,
+        "volume": 0.5
+      }
+    ]
+  },
+  {
+    "id": "alerts",
+    "name": "Alerts & Notifications",
+    "emoji": "📢",
+    "description": "Sounds for notifications and alerts",
+    "sounds": [
+      {
+        "id": "airhorn",
+        "name": "Airhorn",
+        "description": "Loud attention grabber",
+        "intent": "alert",
+        "category": "dramatic",
+        "emoji": "📯",
+        "playsOn": "Important notifications, alerts",
+        "enabled": true,
+        "volume": 0.7
+      }
+    ]
+  }
+]

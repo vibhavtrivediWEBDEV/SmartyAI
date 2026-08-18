@@ -1,0 +1,44 @@
+[
+  {
+    "action": "grant_ephemeral",
+    "capability": "finder.control",
+    "actor": "user",
+    "at": 1787081950196
+  },
+  {
+    "action": "grant",
+    "capability": "finder.control",
+    "actor": "user",
+    "at": 1787081954832
+  },
+  {
+    "action": "revoke",
+    "capability": "finder.control",
+    "actor": "user",
+    "at": 1787081959135
+  },
+  {
+    "action": "grant",
+    "capability": "filesystem.read",
+    "actor": "user",
+    "at": 1787081963169
+  },
+  {
+    "action": "grant",
+    "capability": "filesystem.read",
+    "actor": "user",
+    "at": 1787082009417
+  },
+  {
+    "action": "grant",
+    "capability": "filesystem.read",
+    "actor": "user",
+    "at": 1787082022998
+  },
+  {
+    "action": "grant",
+    "capability": "filesystem.read",
+    "actor": "user",
+    "at": 1787082029415
+  }
+]

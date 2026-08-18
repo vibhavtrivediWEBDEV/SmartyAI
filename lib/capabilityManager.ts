@@ -241,12 +241,15 @@ export function inferCapabilitiesForIntent(intentKey: string, params: Record<str
     intentKey.startsWith('finder') ||
     intentKey.includes('finder') ||
     intentKey.includes('open Finder') ||
+    intentKey.includes('finder.search') ||
+    intentKey.includes('finder.searchWithPermission') ||
     text.includes('finder') ||
     text.includes('open claw') ||
     text.includes('openclaw') ||
     text.includes('open finder')
   ) {
     caps.add('finder.control');
+    caps.add('filesystem.read');
   }
 
   return Array.from(caps);
