@@ -64,5 +64,89 @@
     "capability": "browser.control",
     "actor": "user",
     "at": 1787131468461
+  },
+  {
+    "action": "grant",
+    "capability": "browser.control",
+    "actor": "user",
+    "at": 1787253146493
+  },
+  {
+    "action": "grant",
+    "capability": "browser.control",
+    "actor": "user",
+    "at": 1787253147229
+  },
+  {
+    "action": "grant",
+    "capability": "browser.control",
+    "actor": "user",
+    "at": 1787253148836
+  },
+  {
+    "action": "grant_ephemeral",
+    "capability": "browser.control",
+    "actor": "user",
+    "at": 1787253155478
+  },
+  {
+    "action": "grant_ephemeral",
+    "capability": "browser.control",
+    "actor": "user",
+    "at": 1787253156788
+  },
+  {
+    "action": "grant",
+    "capability": "browser.control",
+    "actor": "user",
+    "at": 1787253158057
+  },
+  {
+    "action": "grant",
+    "capability": "browser.control",
+    "actor": "user",
+    "at": 1787253161938
+  },
+  {
+    "action": "grant",
+    "capability": "browser.control",
+    "actor": "user",
+    "at": 1787253162179
+  },
+  {
+    "action": "grant",
+    "capability": "browser.control",
+    "actor": "user",
+    "at": 1787253162293
+  },
+  {
+    "action": "grant",
+    "capability": "browser.control",
+    "actor": "user",
+    "at": 1787253162962
+  },
+  {
+    "action": "grant",
+    "capability": "browser.control",
+    "actor": "user",
+    "at": 1787253166387
+  },
+  {
+    "action": "grant_ephemeral",
+    "capability": "browser.control",
+    "actor": "user",
+    "at": 1787253167473
+  },
+  {
+    "action": "grant",
+    "capability": "browser.control",
+    "actor": "user",
+    "at": 1787253169589
+  },
+  {
+    "action": "grant",
+    "capability": "browser.control",
+    "actor": "user",
+    "at": 1787253173637
   }
 ]

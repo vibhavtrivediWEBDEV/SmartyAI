@@ -13,6 +13,7 @@ export interface WorkspaceFile {
   content: string;
   language: string; // Monaco language ID
   lastModified?: Date;
+  isEntry?: boolean; // Whether this is the entry point file
 }
 
 /**

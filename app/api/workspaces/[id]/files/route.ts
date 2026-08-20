@@ -5,7 +5,8 @@ import { requireFinderSubscription } from "@/lib/auth/finder-access";
 import { 
   addFile, 
   deleteFile, 
-  updateFile 
+  updateFile,
+  renameFile 
 } from "@/modules/workspace/workspace.repository";
 
 /**
@@ -31,10 +32,17 @@ const deleteFileSchema = z.object({
   path: z.string(),
 });
 
+const renameFileSchema = z.object({
+  action: z.literal("rename"),
+  oldPath: z.string(),
+  newPath: z.string(),
+});
+
 const fileOperationSchema = z.discriminatedUnion("action", [
   addFileSchema,
   updateFileSchema,
   deleteFileSchema,
+  renameFileSchema,
 ]);
 
 type Context = { params: Promise<{ id: string }> };
@@ -82,6 +90,11 @@ export async function POST(
     case "delete":
       success = await deleteFile(user.id, id, operation.path);
       message = `File "${operation.path}" deleted`;
+      break;
+
+    case "rename":
+      success = await renameFile(user.id, id, operation.oldPath, operation.newPath);
+      message = `File renamed from "${operation.oldPath}" to "${operation.newPath}"`;
       break;
   }
 

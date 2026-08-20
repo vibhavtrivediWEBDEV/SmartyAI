@@ -34,7 +34,7 @@ import CustomCursor from "../CustomCursor"
 import GamePage from "./Game"
 import Webpage from "./webpage"
 import DotGrid from "../animationComponents/dotGrid"
-import Vscode from "./VsCode"
+import VSCodeWithWorkspace from "./VSCodeWithWorkspace"
 import { BrowserContent } from "./Browser"
 import Spotify from "./spotify"
 import MapsNew from "./MapsNew"
@@ -1111,17 +1111,13 @@ export function Desktop() {
           defaultHeight = 550;
           break;
         case "vscode":
-          component = <Vscode
-            initialFile={arg?.initialFile}
+          component = <VSCodeWithWorkspace
             openPreviewWindow={(html, title) => openPreviewWindowRef.current?.(html, title)}
           />;
-          title = "VS code";
+          title = "VS Code";
           iconPath = "/icons/ai.png";
           defaultWidth = 900;
           defaultHeight = 550;
-
-          // automationAPI.maximizeWindow("vscode")
-
           break;
         case "figma":
           component = <Figma />;
@@ -1129,9 +1125,6 @@ export function Desktop() {
           iconPath = "/icons/ai.png";
           defaultWidth = 900;
           defaultHeight = 550;
-
-          // automationAPI.maximizeWindow("vscode")
-
           break;
         case "Settings":
           component = <SettingsPanel
@@ -1451,8 +1444,7 @@ export function Desktop() {
           );
         }
         if (appName === 'vscode' && arg?.initialFile) {
-          const freshComponent = <Vscode
-            initialFile={arg.initialFile}
+          const freshComponent = <VSCodeWithWorkspace
             openPreviewWindow={(html, title) => openPreviewWindowRef.current?.(html, title)}
           />;
           setOpenWindows((prev) =>

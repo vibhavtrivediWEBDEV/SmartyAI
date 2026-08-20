@@ -1,0 +1,174 @@
+/**
+ * Emmet Support for Monaco Editor
+ * Enables abbreviation expansion for HTML and JSX
+ */
+
+import * as monaco from "monaco-editor";
+
+/**
+ * Emmet configuration for different languages
+ */
+const emmetConfigs = {
+  html: {
+    syntaxProfiles: {
+      html: {
+        attr_case: "lower",
+        tag_case: "lower",
+        self_closing_tag: "xhtml",
+      },
+    },
+    variables: {
+      lang: "en",
+      locale: "en-US",
+      charset: "UTF-8",
+    },
+    snippets: {
+      "html:5": `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="\${1:utf-8}">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>\${2:Document}</title>
+</head>
+<body>
+  \${3}
+</body>
+</html>`,
+    },
+  },
+  jsx: {
+    syntaxProfiles: {
+      jsx: {
+        attr_case: "lower",
+        tag_case: "lower",
+        self_closing_tag: "xhtml",
+      },
+    },
+    snippets: {
+      "rafce": `import React from 'react';
+
+const \${1:Component} = () => {
+  return (
+    <div>
+      \${2}
+    </div>
+  );
+};
+
+export default \${1:Component};`,
+      "rfce": `import React from 'react';
+
+function \${1:Component}() {
+  return (
+    <div>
+      \${2}
+    </div>
+  );
+}
+
+export default \${1:Component};`,
+      "useState": `const [\${1:state}, set\${1/^.(.*)$/$1/}] = React.useState(\${2:initialValue});`,
+      "useEffect": `React.useEffect(() => {
+  \${2}
+  
+  return () => {
+    \${3}
+  };
+}, [\${4:dependencies}]);`,
+    },
+  },
+};
+
+/**
+ * Register Emmet support for Monaco
+ */
+export function registerEmmet() {
+  try {
+    // Note: Monaco editor doesn't have built-in Emmet like VS Code
+    // We need to use custom completion provider
+    
+    Object.entries(emmetConfigs).forEach(([languageId, config]) => {
+      // Register completion provider for abbreviations
+      monaco.languages.registerCompletionItemProvider(languageId, {
+        triggerCharacters: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!.>#*[".split(""),
+        provideCompletionItems: (model, position) => {
+          const lineContent = model.getLineContent(position.lineNumber);
+          const textUntilPosition = lineContent.substring(0, position.column - 1);
+          
+          // Match Emmet-like abbreviations
+          const emmetMatch = textUntilPosition.match(/([a-zA-Z][a-zA-Z0-9\-!>#*\[\]]*)$/);
+          
+          if (!emmetMatch) {
+            return { suggestions: [] };
+          }
+          
+          const abbreviation = emmetMatch[1];
+          const word = model.getWordUntilPosition(position);
+          const range = {
+            startLineNumber: position.lineNumber,
+            endLineNumber: position.lineNumber,
+            startColumn: position.column - abbreviation.length,
+            endColumn: position.column,
+          };
+          
+          // Generate suggestions from config
+          const suggestions: monaco.languages.CompletionItem[] = [];
+          
+          Object.entries(config.snippets || {}).forEach(([key, template]) => {
+            if (key.startsWith(abbreviation) || abbreviation === key) {
+              suggestions.push({
+                label: key,
+                kind: monaco.languages.CompletionItemKind.Snippet,
+                insertText: template,
+                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                documentation: `Emmet: ${key}`,
+                range,
+              } as any);
+            }
+          });
+          
+          // Add common Emmet expansions
+          if (languageId === "html" || languageId === "jsx") {
+            // div.className
+            if (/^[a-zA-Z]+\.[a-zA-Z]/.test(abbreviation)) {
+              const parts = abbreviation.split(".");
+              const tagName = parts[0];
+              const className = parts.slice(1).join(" ");
+              
+              suggestions.push({
+                label: abbreviation,
+                kind: monaco.languages.CompletionItemKind.Snippet,
+                insertText: `<${tagName} className="${className}">\${1}\n</${tagName}>`,
+                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                documentation: `Expand to <${tagName} className="${className}">`,
+                range,
+              } as any);
+            }
+            
+            // div#id
+            if (/^[a-zA-Z]+#[a-zA-Z]/.test(abbreviation)) {
+              const parts = abbreviation.split("#");
+              const tagName = parts[0];
+              const id = parts[1];
+              
+              suggestions.push({
+                label: abbreviation,
+                kind: monaco.languages.CompletionItemKind.Snippet,
+                insertText: `<${tagName} id="${id}">\${1}\n</${tagName}>`,
+                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                documentation: `Expand to <${tagName} id="${id}">`,
+                range,
+              } as any);
+            }
+          }
+          
+          return { suggestions };
+        },
+      });
+    });
+    
+    console.log("[Emmet] Registered for HTML and JSX");
+  } catch (error) {
+    console.error("[Emmet] Failed to register:", error);
+  }
+}

@@ -275,285 +275,6 @@ function generateTemplateFiles(template: string, projectName: string): Workspace
 }
 
 /**
- * Seed React Loader Project - Complete project with loader components
- */
-export async function seedLoaderProject(userId: string): Promise<SerializedWorkspace> {
-  const collection = await getCollection();
-  const now = new Date();
-  
-  const loaderProject: WorkspaceDocument = {
-    _id: new ObjectId(),
-    ownerId: new ObjectId(userId),
-    name: "CSS Loading Spinners",
-    description: "React app with pure CSS loading spinners and button states",
-    files: [
-      {
-        path: "package.json",
-        content: JSON.stringify({
-          name: "css-loading-spinners",
-          version: "1.0.0",
-          description: "Pure CSS loading spinners with React",
-          scripts: {
-            start: "react-scripts start",
-            build: "react-scripts build",
-            test: "react-scripts test"
-          },
-          dependencies: {
-            react: "^18.2.0",
-            "react-dom": "^18.2.0",
-            "react-scripts": "5.0.1"
-          }
-        }, null, 2),
-        language: "json",
-      },
-      {
-        path: "public/index.html",
-        content: `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>CSS Loading Spinners</title>
-  </head>
-  <body>
-    <div id="root"></div>
-  </body>
-</html>`,
-        language: "html",
-      },
-      {
-        path: "src/App.js",
-        content: `import './styles.css';
-
-export default function App() {
-  return (
-    <div style={{ minHeight: '100vh', background: '#f9fafb', padding: '40px 24px' }}>
-      <h1
-        style={{
-          textAlign: 'center',
-          marginBottom: '8px',
-          fontSize: '24px',
-          fontWeight: 700,
-        }}
-      >
-        CSS Loading Spinners
-      </h1>
-      <p style={{ textAlign: 'center', color: '#6b7280', marginBottom: '48px' }}>
-        Pure CSS — @keyframes, border-radius, animation
-      </p>
-
-      <div className="spinner-container">
-        <div style={{ textAlign: 'center' }}>
-          <div className="spinner spinner-sm" role="status" aria-label="Loading" />
-          <p style={{ marginTop: '12px', fontSize: '13px', color: '#6b7280' }}>Small</p>
-        </div>
-
-        <div style={{ textAlign: 'center' }}>
-          <div className="spinner spinner-md" />
-          <p style={{ marginTop: '12px', fontSize: '13px', color: '#6b7280' }}>Medium</p>
-        </div>
-
-        <div style={{ textAlign: 'center' }}>
-          <div className="spinner spinner-lg" />
-          <p style={{ marginTop: '12px', fontSize: '13px', color: '#6b7280' }}>Large</p>
-        </div>
-      </div>
-
-      <div style={{ textAlign: 'center', marginTop: '64px' }}>
-        <h2 style={{ marginBottom: '24px', fontSize: '18px', fontWeight: 600 }}>
-          Button States
-        </h2>
-        <div className="button-container">
-          <button className="btn-loading" type="button" disabled>
-            Loading...
-          </button>
-
-          <button className="btn-loaded" type="button">
-            ✓ Done
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}`,
-        language: "javascript",
-      },
-      {
-        path: "src/styles.css",
-        content: `.app {
-  min-height: 100vh;
-  background: #f9fafb;
-  padding: 40px 24px;
-}
-
-.spinner-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 48px;
-  margin-bottom: 64px;
-}
-
-.button-container {
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-/* Spinner Base Styles */
-.spinner {
-  border-radius: 50%;
-  border: 3px solid #e5e7eb;
-  border-top-color: #3b82f6;
-  animation: spin 0.8s linear infinite;
-}
-
-.spinner-sm {
-  width: 24px;
-  height: 24px;
-}
-
-.spinner-md {
-  width: 40px;
-  height: 40px;
-}
-
-.spinner-lg {
-  width: 56px;
-  height: 56px;
-}
-
-/* Keyframes */
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-/* Button Styles */
-button {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-loading {
-  background: #94a3b8;
-  color: white;
-  cursor: not-allowed;
-  position: relative;
-  padding-left: 40px;
-}
-
-.btn-loading::before {
-  content: '';
-  position: absolute;
-  left: 16px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 16px;
-  height: 16px;
-  border: 2px solid #e5e7eb;
-  border-top-color: white;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-.btn-loaded {
-  background: #10b981;
-  color: white;
-}
-
-.btn-loaded:hover {
-  background: #059669;
-}`,
-        language: "css",
-      },
-      {
-        path: "src/index.js",
-        content: `import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App';
-
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);`,
-        language: "javascript",
-      },
-      {
-        path: "README.md",
-        content: `# CSS Loading Spinners
-
-React application showcasing pure CSS loading spinners and button states.
-
-## Features
-
-- **3 Spinner Sizes**: Small (24px), Medium (40px), Large (56px)
-- **Button States**: Loading state with spinner, Loaded state with checkmark
-- **Pure CSS**: Uses @keyframes animations, no external libraries
-- **Accessible**: Includes role="status" and aria labels
-
-## Getting Started
-
-\`\`\`bash
-npm install
-npm start
-\`\`\`
-
-## Project Structure
-
-- \`src/App.js\` - Main component with spinners and buttons
-- \`src/styles.css\` - CSS animations and styling
-- \`src/index.js\` - Entry point
-
-## Customization
-
-Edit \`src/styles.css\` to change:
-- Spinner colors (change #3b82f6 and #e5e7eb)
-- Animation speed (change 0.8s in animation duration)
-- Sizes (modify spinner-sm, spinner-md, spinner-lg)`,
-        language: "markdown",
-      },
-    ],
-    packageJson: {
-      name: "css-loading-spinners",
-      version: "1.0.0",
-      dependencies: {
-        react: "^18.2.0",
-        "react-dom": "^18.2.0",
-      },
-    },
-    settings: {
-      runtime: "react",
-      entryPoint: "src/App.js",
-      autoSave: true,
-      theme: "vs-dark",
-      fontSize: 14,
-    },
-    isPublic: true,
-    isTemplate: true,
-    tags: ["react", "css", "animations", "loaders", "spinners"],
-    lastAccessedAt: now,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  await collection.insertOne(loaderProject);
-  return serialize(loaderProject);
-}
-
-/**
  * Create new workspace
  */
 export async function createWorkspace(
@@ -575,6 +296,104 @@ export async function createWorkspace(
   // Generate files based on selected template (fallback to 'react' if not specified)
   const template = data.settings?.runtime || 'react';
   const defaultFiles: WorkspaceFile[] = data.files || generateTemplateFiles(template, data.name);
+      content: `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>React App</title>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>`,
+      language: "html",
+    },
+    {
+      path: "src/App.js",
+      content: `import React from 'react';
+import './styles.css';
+
+function App() {
+  const [count, setCount] = React.useState(0);
+  
+  return (
+    <div className="app">
+      <header className="app-header">
+        <h1>React App</h1>
+        <p>Edit src/App.js and save to reload.</p>
+        <div className="counter">
+          <p>Count: {count}</p>
+          <button onClick={() => setCount(count + 1)}>
+            Increment
+          </button>
+        </div>
+      </header>
+    </div>
+  );
+}
+
+export default App;`,
+      language: "javascript",
+    },
+    {
+      path: "src/styles.css",
+      content: `.app {
+  text-align: center;
+}
+
+.app-header {
+  background-color: #282c34;
+  padding: 20px;
+  color: white;
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+}
+
+p {
+  font-size: 1rem;
+  color: #61dafb;
+}
+
+.counter {
+  margin-top: 2rem;
+}
+
+button {
+  padding: 10px 24px;
+  background: #61dafb;
+  color: #282c34;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+button:hover {
+  background: #21a9c7;
+}`,
+      language: "css",
+    },
+    {
+      path: "src/index.js",
+      content: `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);`,
+      language: "javascript",
+    },
+  ];
   
   // Add language if missing
   const filesWithLanguage = defaultFiles.map(file => ({
@@ -787,7 +606,7 @@ export async function addFile(
       ownerId: new ObjectId(userId),
     },
     {
-      $push: { files: fileWithLanguage as WorkspaceFile },
+      $push: { files: fileWithLanguage },
       $set: { updatedAt: new Date() },
     }
   );
@@ -811,7 +630,7 @@ export async function deleteFile(
       ownerId: new ObjectId(userId),
     },
     {
-      $pull: { files: { path: filePath } as WorkspaceFile },
+      $pull: { files: { path: filePath } },
       $set: { updatedAt: new Date() },
     }
   );
@@ -925,4 +744,3 @@ export async function getTemplates(): Promise<SerializedWorkspace[]> {
   
   return templates.map(serialize);
 }
-

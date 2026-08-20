@@ -13,7 +13,7 @@ import {
 const createSchema = z.object({
   name: z.string().trim().min(1).max(100),
   description: z.string().max(500).optional(),
-  runtime: z.enum(["react", "html", "node", "python", "java"]).optional(),
+  runtime: z.enum(["react", "react-ts", "html", "node", "python", "java"]).optional(),
   template: z.string().optional(),
   files: z.array(z.object({
     path: z.string(),
@@ -75,7 +75,9 @@ export async function POST(request: Request) {
     name: data.name,
     description: data.description,
     files: data.files,
-    settings: data.runtime ? { runtime: data.runtime } : undefined,
+    settings: {
+      runtime: data.runtime || (data.template as any) || 'react',
+    },
     isPublic: data.isPublic,
     tags: data.tags,
   });

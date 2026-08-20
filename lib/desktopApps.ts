@@ -60,6 +60,7 @@ export const DEFAULT_DOCK_APPS = [
   'Calendar',
   'Music',
   'Terminal',
+  'vscode',
   'App Store',
   'Settings',
 ]
