@@ -1241,6 +1241,44 @@ export function useCursorAutomation(
           }
           break;
 
+        case 'orchestrated-search': {
+          // ✅ ARCHITECTURE V2: Fire-and-forget with immediate ACK
+          // Server sends command → Desktop enqueues → IMMEDIATE response
+          // Search runs in background, UI updates via subscription
+          
+          log('🎯 [orchestrated-search] Enqueueing file search...', 'info');
+          
+          if (!command.params?.filename) {
+            log('orchestrated-search: Missing filename parameter', 'error');
+            return false;
+          }
+
+          try {
+            // Dynamically import FileSearchOrchestrator
+            const { fileSearchOrchestrator } = await import('@/lib/fileSearchOrchestrator');
+            
+            const filename = command.params.filename;
+            const searchLocations = command.params.searchLocations || ['Desktop', 'Documents', 'Downloads'];
+            
+            log(`🔍 Enqueueing search for "${filename}" in: ${searchLocations.join(', ')}`, 'info');
+            
+            // 🎯 ENQUEUE: Returns operation ID immediately (NON-BLOCKING)
+            const operationId = fileSearchOrchestrator.enqueue(filename, searchLocations);
+            
+            // 🎯 IMMEDIATE ACK: Search runs in background
+            log(`✓ Search enqueued: ${operationId}`, 'success');
+            speak?.('Searching for ' + filename);
+            
+            // ✅ Return immediately - operation is queued
+            result = true;
+          } catch (error) {
+            log(`orchestrated-search error: ${error}`, 'error');
+            console.error('[orchestrated-search] Error:', error);
+            result = false;
+          }
+          break;
+        }
+
         default:
           log(`Unknown action: ${command.action}`, 'error');
           return false;

@@ -74,6 +74,7 @@ import { useSocketIO } from "@/hooks/useSocketIO"
 // CapabilityCenter removed - only PermissionPrompt handles permissions
 import useCapabilityManager from '@/hooks/useCapabilityManager'
 import PermissionPrompt from '@/components/PermissionPrompt'
+import FileSearchProgress from '@/components/FileSearchProgress'
 import TccGuidancePrompt from '@/components/TccGuidancePrompt'
 import WidgetGallery from "../Desktop/widgets/WidgetGallery"
 import CalendarWidget from "../Desktop/widgets/CalendarWidget"
@@ -182,6 +183,10 @@ export function Desktop() {
 
           // Normalize result: older code expected boolean
           const ok = typeof execResult === 'boolean' ? execResult : (execResult && execResult.success === true);
+          
+          // 🔥 FIX: Assign result to success variable (was missing!)
+          success = ok;
+          console.log('[DESKTOP] 🔥 Sequence result:', { ok, success })
 
           if (ok) {
             toast.success(`✅ Telegram automation executed`)
@@ -208,7 +213,7 @@ export function Desktop() {
         }
         
         // Send result back to server (for Telegram webhook to receive)
-        console.log('[DESKTOP] Sending automation-result...')
+        console.log('[DESKTOP] 📤 Sending automation-result...', { commandId: data.commandId, success })
         if (sendResultRef.current) {
           sendResultRef.current(
             data.commandId,
@@ -216,7 +221,7 @@ export function Desktop() {
             success ? 'Command executed successfully' : 'Command execution failed',
             data.requestId
           )
-          console.log('[DESKTOP] automation-result SENT')
+          console.log('[DESKTOP] ✅ automation-result SENT')
         } else {
           console.error('[DESKTOP] ❌ sendResultRef.current is NULL')
         }
@@ -245,6 +250,14 @@ export function Desktop() {
     enabled: !!userContext?.userId,
     onCommand: handleTelegramCommand
   })
+
+  // 🎯 Send welcome when Socket.IO connects
+  useEffect(() => {
+    if (isSocketConnected && userContext?.userId) {
+      console.log('[Desktop] 🎉 Socket connected, sending Telegram welcome...');
+      sendTelegramWelcome(userContext.userId, userContext.displayName || 'User');
+    }
+  }, [isSocketConnected, userContext?.userId]);
 
   // Store sendResult function in ref
   useEffect(() => {
@@ -441,6 +454,9 @@ export function Desktop() {
   // CapabilityCenter removed - only PermissionPrompt handles permissions
   const { pending } = useCapabilityManager(500);
   
+  // 🔍 File Search State (OpenClaw-style)
+  const [fileSearchOperation, setFileSearchOperation] = useState<any>(null);
+  
   // 🌐 Widget Creation Modal State
   const [showWidgetCreationModal, setShowWidgetCreationModal] = useState(false);
   const [widgetCreationData, setWidgetCreationData] = useState<{ url: string; title: string }>({
@@ -501,10 +517,52 @@ export function Desktop() {
       setUserContext(ctx);
       console.log('✅ User context loaded:', ctx?.displayName, 'UserId:', ctx?.userId);
       console.log('🔌 WebSocket will connect with userId:', ctx?.userId);
+      
+      // 🚀 Send human-like welcome to Telegram when desktop goes live
+      if (ctx?.userId && socketIO) {
+        setTimeout(() => {
+          sendTelegramWelcome(ctx.userId, ctx.displayName || 'User');
+        }, 2000); // Wait 2s after connection
+      }
     }).catch(error => {
       console.error('Failed to load user context:', error);
     });
   }, []);
+
+  // 🚀 Send human-like welcome message to Telegram
+  const sendTelegramWelcome = async (userId: string, userName: string) => {
+    try {
+      const welcomeMessages = [
+        `👋 Hey! I'm online and ready to help you. What would you like me to do?`,
+        `✨ Desktop is live! I can open apps, search files, or help with anything. Just ask!`,
+        `🎮 Ready when you are! Try saying "open calendar" or "search for resume"`,
+        `🤖 Connected! I'm your personal assistant. Ask me anything about your projects or system.`,
+      ];
+      
+      const randomMessage = welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)];
+      
+      console.log('[Desktop] 📤 Sending Telegram welcome:', randomMessage);
+      
+      const response = await fetch('/api/telegram/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          message: randomMessage
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (response.ok) {
+        console.log('[Desktop] ✅ Telegram welcome sent successfully');
+      } else {
+        console.error('[Desktop] ❌ Telegram welcome failed:', result.error);
+      }
+    } catch (error) {
+      console.error('[Desktop] Failed to send Telegram welcome:', error);
+    }
+  };
 
   // Listen for queued operations to notify user
   useEffect(() => {
@@ -568,6 +626,46 @@ export function Desktop() {
       // PermissionPrompt will auto-show
     }
     window.addEventListener('capability:operationRequeued', requeuedHandler as EventListener);
+
+    // 🔍 Handle file search updates (OpenClaw-style)
+    const fileSearchUpdateHandler = (ev: any) => {
+      const state = ev?.detail;
+      console.log('[Desktop] 📁 File search update:', state);
+      console.log('[Desktop] 📊 Current operation status:', state?.currentOperation?.status);
+      console.log('[Desktop] 📊 Found file:', state?.currentOperation?.foundFile);
+      
+      if (state?.currentOperation) {
+        console.log('[Desktop] ✅ Setting fileSearchOperation with current operation');
+        setFileSearchOperation(state.currentOperation);
+      } else if (state?.queue && state.queue.length > 0) {
+        console.log('[Desktop] ✅ Setting fileSearchOperation from queue');
+        setFileSearchOperation(state.queue[0]);
+      } else {
+        console.log('[Desktop] ⚠️ No operation found - clearing state');
+        setFileSearchOperation(null);
+      }
+    };
+    
+    window.addEventListener('file-search-update', fileSearchUpdateHandler as EventListener);
+    
+    // 🔍 Handle file search completion
+    const fileSearchCompleteHandler = (ev: any) => {
+      const detail = ev?.detail;
+      console.log('[Desktop] 📁 File search complete:', detail);
+      
+      if (detail?.success && detail?.file) {
+        toast.success(`✅ Found: ${detail.file.name}`);
+      } else if (detail?.operation?.status === 'not_found') {
+        toast.error('❌ File not found in Desktop, Documents, or Downloads');
+      }
+      
+      // 🎯 DON'T CLEAR - Keep window open to show final result
+      // User needs to see the complete flow
+      // Window will stay open until user manually closes it
+      // setTimeout(() => setFileSearchOperation(null), 3000);
+    };
+    
+    window.addEventListener('file-search-complete', fileSearchCompleteHandler as EventListener);
 
     const userOpenClawHandler = (ev: any) => {
       const d = ev?.detail || {};
@@ -1109,10 +1207,25 @@ export function Desktop() {
           defaultHeight = 650;
           break;
         case "PDF Viewer":
+          // Support dynamic PDF URLs from file search
+          const pdfUrl = arg?.pdfUrl || "https://ncert.nic.in/textbook/pdf/leph2ps.pdf";
           component = (
-            <PdfViewer pdfUrl="https://ncert.nic.in/textbook/pdf/leph2ps.pdf" />
+            <PdfViewer pdfUrl={pdfUrl} />
           );
-          title = "PDF Viewer";
+          // Decode and extract filename from stream URL
+          if (arg?.pdfUrl?.includes('/api/file/stream?path=')) {
+            try {
+              const decodedPath = decodeURIComponent(arg.pdfUrl.split('path=').pop() || '');
+              const fileName = decodedPath.split('/').pop() || 'PDF';
+              title = `PDF — ${fileName}`;
+            } catch {
+              title = "PDF Viewer";
+            }
+          } else if (arg?.pdfUrl) {
+            title = `PDF — ${arg.pdfUrl.split('/').pop()}`;
+          } else {
+            title = "PDF Viewer";
+          }
           iconPath = "/assets/pdfIcon.png";
           defaultWidth = 700;
           defaultHeight = 600;
@@ -1532,6 +1645,74 @@ export function Desktop() {
     window.addEventListener("smarty:open-app", handleAppStoreLaunch)
     return () => window.removeEventListener("smarty:open-app", handleAppStoreLaunch)
   }, [openApplication])
+
+  // 📁 Handle opening files in Smarty apps
+  useEffect(() => {
+    const handleOpenFile = (event: Event) => {
+      const detail = (event as CustomEvent<{ appName?: string; filePath?: string; fileName?: string; fileUrl?: string }>).detail
+      const { appName, filePath, fileName, fileUrl } = detail || {}
+      
+      console.log('[Desktop] 📁 Opening file in Smarty:', detail)
+      
+      if (!appName || !filePath) return
+      
+      // Use stream URL for browser-safe viewing (file:// is blocked by browsers)
+      const streamUrl = fileUrl || `/api/file/stream?path=${encodeURIComponent(filePath)}`
+      
+      // Open the app with file arguments
+      if (appName === 'PDF Viewer') {
+        // Open PDF Viewer with the stream URL
+        openApplication('PDF Viewer', 100, 100, undefined, { pdfUrl: streamUrl })
+      } else if (appName === 'vscode') {
+        // Open VS Code with the file
+        const fileData = {
+          id: `local-${Date.now()}`,
+          name: fileName || filePath.split('/').pop() || 'file',
+          content: '', // File content will be loaded by VSCode component
+          parentId: null,
+          localPath: filePath
+        }
+        openApplication('vscode', 80, 60, undefined, { initialFile: fileData })
+      } else if (appName === 'Photos') {
+        // Open Photos app (it will handle the file)
+        openApplication('Photos')
+      } else if (appName === 'Music') {
+        // Open Music app
+        openApplication('Music')
+      } else {
+        // Default: Open Finder to show file location
+        openApplication('Finder')
+      }
+      
+      toast.success(`📂 Opening in ${appName}...`)
+    }
+
+    window.addEventListener('smarty:open-file', handleOpenFile as EventListener)
+    return () => window.removeEventListener('smarty:open-file', handleOpenFile as EventListener)
+  }, [openApplication])
+
+  // 🔔 Handle toast notifications from file actions
+  useEffect(() => {
+    const handleToast = (event: Event) => {
+      const detail = (event as CustomEvent<{ type?: string; message?: string }>).detail
+      const { type, message } = detail || {}
+      
+      if (!message) return
+      
+      if (type === 'success') {
+        toast.success(message)
+      } else if (type === 'error') {
+        toast.error(message)
+      } else if (type === 'info') {
+        toast(message)
+      } else {
+        toast(message)
+      }
+    }
+
+    window.addEventListener('smarty:toast', handleToast as EventListener)
+    return () => window.removeEventListener('smarty:toast', handleToast as EventListener)
+  }, [])
 
   // 🤖 Handle Telegram automation commands
   useEffect(() => {
@@ -2593,6 +2774,58 @@ export function Desktop() {
 
           {/* Permission prompt modal (macOS-like) - handles all permission requests */}
           <PermissionPrompt />
+          
+          {/* File Search Progress (OpenClaw-style) */}
+          {fileSearchOperation && (
+            <FileSearchProgress
+              operation={fileSearchOperation}
+              onGrantPermission={async (operationId) => {
+                try {
+                  const { fileSearchOrchestrator } = await import('@/lib/fileSearchOrchestrator');
+                  fileSearchOrchestrator.grantPermission(operationId);
+                } catch (error) {
+                  console.error('[Desktop] Failed to grant permission:', error);
+                }
+              }}
+              onDenyPermission={async (operationId) => {
+                try {
+                  const { fileSearchOrchestrator } = await import('@/lib/fileSearchOrchestrator');
+                  fileSearchOrchestrator.denyPermission(operationId);
+                } catch (error) {
+                  console.error('[Desktop] Failed to deny permission:', error);
+                }
+              }}
+              onCancel={async (operationId) => {
+                try {
+                  const { fileSearchOrchestrator } = await import('@/lib/fileSearchOrchestrator');
+                  fileSearchOrchestrator.cancelOperation(operationId);
+                } catch (error) {
+                  console.error('[Desktop] Failed to cancel search:', error);
+                }
+              }}
+              onSelectFile={async (operationId, filePath) => {
+                try {
+                  console.log('[Desktop] 📁 User selected file:', filePath);
+                  
+                  // Open file in Finder (macOS native)
+                  await fetch('/api/native/finder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                      action: 'reveal',
+                      path: filePath 
+                    })
+                  });
+                  
+                  console.log('[Desktop] ✅ File revealed in Finder');
+                  // Close search window
+                  setFileSearchOperation(null);
+                } catch (error) {
+                  console.error('[Desktop] Failed to open file:', error);
+                }
+              }}
+            />
+          )}
         </TerminalProvider>
       </KeyboardProvider >
     </>

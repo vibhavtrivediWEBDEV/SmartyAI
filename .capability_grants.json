@@ -1,6 +1,7 @@
 {
   "persistent": [
-    "filesystem.read"
+    "filesystem.read",
+    "browser.control"
   ],
   "ephemeral": []
 }

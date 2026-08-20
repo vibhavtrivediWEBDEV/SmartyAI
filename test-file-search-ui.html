@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test File Search Results with 3 Buttons</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            padding: 20px;
+        }
+        
+        .file-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            margin-bottom: 6px;
+            transition: all 0.2s ease;
+        }
+        
+        .file-row:hover {
+            background: rgba(11,121,255,0.15);
+            transform: translateX(4px);
+        }
+        
+        .file-buttons {
+            display: none;
+            margin-top: 8px;
+            margin-left: 48px;
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        
+        .file-buttons.visible {
+            display: flex;
+        }
+        
+        .file-buttons button {
+            flex: 1;
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            border: 1px solid;
+        }
+        
+        .btn-open {
+            background: rgba(11,121,255,0.15);
+            border-color: #0b79ff;
+            color: #0b79ff;
+        }
+        
+        .btn-move {
+            background: rgba(52,199,89,0.15);
+            border-color: #34c759;
+            color: #34c759;
+        }
+        
+        .btn-send {
+            background: rgba(0,136,204,0.15);
+            border-color: #0088cc;
+            color: #0088cc;
+        }
+        
+        .score-badge {
+            padding: 4px 12px;
+            background: rgba(255,204,0,0.15);
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #ffcc00;
+        }
+        
+        .best-match {
+            background: linear-gradient(135deg, rgba(52,199,89,0.2) 0%, rgba(52,199,89,0.05) 100%);
+            border: 2px solid #34c759;
+        }
+        
+        .best-match-badge {
+            margin-left: 8px;
+            padding: 2px 8px;
+            background: #34c759;
+            color: #fff;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <h1>📁 File Search Results - Test</h1>
+    <p>Click on any file to see 3 action buttons</p>
+    
+    <div style="marginTop: 20px;">
+        <!-- Best match file -->
+        <div class="file-container">
+            <div class="file-row best-match" onclick="toggleButtons(this)">
+                <span style="font-size: 20px;">🎯</span>
+                <div style="flex: 1;">
+                    <div style="font-weight: 700; font-size: 14px; margin-bottom: 4px;">
+                        resume.pdf <span class="best-match-badge">BEST MATCH</span>
+                    </div>
+                    <div style="font-size: 11px; color: #aaa; font-family: monospace;">
+                        /Users/benosupport/Downloads/resume.pdf
+                    </div>
+                </div>
+                <div class="score-badge">Score: 95</div>
+                <span style="margin-left: 8px; color: #888; font-size: 12px;">▼</span>
+            </div>
+            <div class="file-buttons">
+                <button class="btn-open" onclick="event.stopPropagation(); alert('Opening resume.pdf')">👁️ Open</button>
+                <button class="btn-move" onclick="event.stopPropagation(); alert('Moving to Smarty Downloads')">📁 Move</button>
+                <button class="btn-send" onclick="event.stopPropagation(); alert('Sending to Telegram')">✈️ Send</button>
+            </div>
+        </div>
+        
+        <!-- Regular files -->
+        <div class="file-container">
+            <div class="file-row" onclick="toggleButtons(this)">
+                <span style="font-size: 20px;">📄</span>
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">
+                        project-notes.txt
+                    </div>
+                    <div style="font-size: 11px; color: #aaa; font-family: monospace;">
+                        /Users/benosupport/Documents/project-notes.txt
+                    </div>
+                </div>
+                <div class="score-badge">Score: 72</div>
+                <span style="margin-left: 8px; color: #888; font-size: 12px;">▼</span>
+            </div>
+            <div class="file-buttons">
+                <button class="btn-open" onclick="event.stopPropagation(); alert('Opening project-notes.txt')">👁️ Open</button>
+                <button class="btn-move" onclick="event.stopPropagation(); alert('Moving to Smarty Downloads')">📁 Move</button>
+                <button class="btn-send" onclick="event.stopPropagation(); alert('Sending to Telegram')">✈️ Send</button>
+            </div>
+        </div>
+        
+        <!-- More files -->
+        <div class="file-container">
+            <div class="file-row" onclick="toggleButtons(this)">
+                <span style="font-size: 20px;">📄</span>
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">
+                        budget.xlsx
+                    </div>
+                    <div style="font-size: 11px; color: #aaa; font-family: monospace;">
+                        /Users/benosupport/Desktop/budget.xlsx
+                    </div>
+                </div>
+                <div class="score-badge">Score: 68</div>
+                <span style="margin-left: 8px; color: #888; font-size: 12px;">▼</span>
+            </div>
+            <div class="file-buttons">
+                <button class="btn-open" onclick="event.stopPropagation(); alert('Opening budget.xlsx')">👁️ Open</button>
+                <button class="btn-move" onclick="event.stopPropagation(); alert('Moving to Smarty Downloads')">📁 Move</button>
+                <button class="btn-send" onclick="event.stopPropagation(); alert('Sending to Telegram')">✈️ Send</button>
+            </div>
+        </div>
+        
+        <div class="file-container">
+            <div class="file-row" onclick="toggleButtons(this)">
+                <span style="font-size: 20px;">📄</span>
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">
+                        meeting-notes.md
+                    </div>
+                    <div style="font-size: 11px; color: #aaa; font-family: monospace;">
+                        /Users/benosupport/Documents/Work/meeting-notes.md
+                    </div>
+                </div>
+                <div class="score-badge">Score: 54</div>
+                <span style="margin-left: 8px; color: #888; font-size: 12px;">▼</span>
+            </div>
+            <div class="file-buttons">
+                <button class="btn-open" onclick="event.stopPropagation(); alert('Opening meeting-notes.md')">👁️ Open</button>
+                <button class="btn-move" onclick="event.stopPropagation(); alert('Moving to Smarty Downloads')">📁 Move</button>
+                <button class="btn-send" onclick="event.stopPropagation(); alert('Sending to Telegram')">✈️ Send</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function toggleButtons(rowElement) {
+            const container = rowElement.parentElement;
+            const buttons = container.querySelector('.file-buttons');
+            
+            if (buttons.classList.contains('visible')) {
+                buttons.classList.remove('visible');
+                rowElement.querySelector('span:last-child').textContent = '▼';
+            } else {
+                buttons.classList.add('visible');
+                rowElement.querySelector('span:last-child').textContent = '▲';
+            }
+        }
+    </script>
+</body>
+</html>

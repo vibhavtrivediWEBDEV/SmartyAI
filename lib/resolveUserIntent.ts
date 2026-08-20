@@ -471,40 +471,51 @@ export async function resolveUserIntent(
 
   // ========================================
   // STRATEGY 4: File Search Operations
-  // Pattern: "resume kha h", "find file", "where is X"
+  // Pattern: "<filename> kha h", "find <name>", "where is <name>", "search for <name>", "<filename> dhundho"
   // ========================================
   
-  // Resume search pattern (Hindi/English mix)
-  if (
-    lower.includes('resume') && 
-    (lower.includes('kha') || lower.includes('kaha') || lower.includes('where'))
-  ) {
-    return {
-      intent: 'finder.searchWithPermission',
-      parameters: { 
-        filename: 'resume',
-        searchLocations: ['Documents', 'Desktop', 'Downloads'],
-        description: 'Search for resume file in common locations'
-      },
-      confidence: 'high',
-      source: 'automation'
-    };
+  // Hindi/English pattern: "<filename> kha h" or "<filename> kaha h" or "<filename> where"
+  // Also: "<filename> dhundho" (Hindi for "find")
+  // Examples: "resume kha h", "project report kaha h", "screenshot where", "resume dhundho"
+  const hindiEnglishPattern = lower.match(/^(.+?)\s+(kha|kaha|where|dhundho|dhundo|dhundh)\s*(?:h|is)?\s*$/i);
+  if (hindiEnglishPattern) {
+    let searchTerm = hindiEnglishPattern[1].trim();
+    // Remove any stray quotes from the search term
+    searchTerm = searchTerm.replace(/^["']+|["']+$/g, '').trim();
+    // Skip if it's just common words
+    if (searchTerm && !['kha', 'kaha', 'where', 'find', 'search', 'the', 'a', 'an'].includes(searchTerm)) {
+      return {
+        intent: 'finder.searchWithPermission',
+        parameters: { 
+          filename: searchTerm,
+          searchLocations: ['Documents', 'Desktop', 'Downloads'],
+          description: `Search for ${searchTerm} in common locations`
+        },
+        confidence: 'high',
+        source: 'automation'
+      };
+    }
   }
 
-  // Generic file search pattern
-  const fileSearchMatch = lower.match(/(?:find|search|where(?:\s+is)?)\s+(?:my\s+)?(.+?)(?:\s+file)?$/i);
+  // Generic file search pattern: "find X", "search X", "search for X", "where is X"
+  // Examples: "find resume", "search project", "where is my file", "search for report"
+  const fileSearchMatch = lower.match(/(?:find|search(?:\s+for)?|where(?:\s+is)?)\s+(?:my\s+)?(.+?)(?:\s+file)?$/i);
   if (fileSearchMatch) {
-    const searchTerm = fileSearchMatch[1].trim();
-    return {
-      intent: 'finder.searchWithPermission',
-      parameters: { 
-        filename: searchTerm,
-        searchLocations: ['Documents', 'Desktop', 'Downloads'],
-        description: `Search for ${searchTerm} in common locations`
-      },
-      confidence: 'high',
-      source: 'automation'
-    };
+    let searchTerm = fileSearchMatch[1].trim();
+    // Remove any stray quotes from the search term
+    searchTerm = searchTerm.replace(/^["']+|["']+$/g, '').trim();
+    if (searchTerm) {
+      return {
+        intent: 'finder.searchWithPermission',
+        parameters: { 
+          filename: searchTerm,
+          searchLocations: ['Documents', 'Desktop', 'Downloads'],
+          description: `Search for ${searchTerm} in common locations`
+        },
+        confidence: 'high',
+        source: 'automation'
+      };
+    }
   }
 
   // ========================================

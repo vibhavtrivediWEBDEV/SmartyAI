@@ -40,5 +40,29 @@
     "capability": "filesystem.read",
     "actor": "user",
     "at": 1787082029415
+  },
+  {
+    "action": "grant",
+    "capability": "browser.control",
+    "actor": "user",
+    "at": 1787131465850
+  },
+  {
+    "action": "grant",
+    "capability": "browser.control",
+    "actor": "user",
+    "at": 1787131465852
+  },
+  {
+    "action": "grant",
+    "capability": "browser.control",
+    "actor": "user",
+    "at": 1787131466975
+  },
+  {
+    "action": "grant",
+    "capability": "browser.control",
+    "actor": "user",
+    "at": 1787131468461
   }
 ]

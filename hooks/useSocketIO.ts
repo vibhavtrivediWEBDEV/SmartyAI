@@ -118,48 +118,68 @@ export function useSocketIO(options: UseSocketIOOptions = {}) {
 
     socket.on('disconnect', (reason) => {
       console.log('\n' + '🔌'.repeat(80))
-      console.log('❌ [Desktop WebSocket] DISCONNECTED')
+      console.log('❌ [Desktop WebSocket] DISCONNECTED FROM SERVER')
       console.log(`   Reason: ${reason}`)
+      console.log(`   Socket ID: ${socket.id}`)
+      console.log(`   User ID: "${userId}"`)
       console.log('🔌'.repeat(80) + '\n')
       setIsConnected(false)
+      
+      // Show user-friendly notification
+      if (reason === 'io server disconnect') {
+        // Server disconnected, try to reconnect
+        console.log('[Desktop WebSocket] 🔄 Server disconnected, will attempt reconnect...')
+      } else if (reason === 'ping timeout') {
+        console.log('[Desktop WebSocket] ⏱️ Connection timeout, reconnecting...')
+      }
     })
 
-    socket.on('connect_error', (err) => {
-      console.error('\n' + '!'.repeat(80))
+    socket.on('connect_error', (error) => {
+      console.error('\n' + '❌'.repeat(80))
       console.error('❌ [Desktop WebSocket] CONNECTION ERROR')
-      console.error(`   Error: ${err.message}`)
-      console.error('!'.repeat(80) + '\n')
-      setError(err.message)
+      console.error(`   Error: ${error.message}`)
+      console.error(`   User ID: "${userId}"`)
+      console.error('❌'.repeat(80) + '\n')
+      setError(error.message)
     })
 
-    socket.on('error', (err) => {
-      console.error('\n' + '!'.repeat(80))
-      console.error('❌ [Desktop WebSocket] SOCKET ERROR')
-      console.error(`   Error: ${err.message || err}`)
-      console.error('!'.repeat(80) + '\n')
-      setError(err.message || 'Socket error')
+    socket.on('error', (error) => {
+      console.error('[Desktop WebSocket] Socket error:', error)
+      setError(error.toString())
     })
 
+    // Cleanup on unmount
     return () => {
-      console.log('[Socket.io Client] Cleaning up...')
-      socket.disconnect()
-      socketRef.current = null
-      sendResultRef.current = null
-      setIsConnected(false)
+      console.log('\n' + '🧹'.repeat(80))
+      console.log('🧹 [Desktop WebSocket] CLEANING UP SOCKET')
+      console.log(`   User ID: "${userId}"`)
+      console.log(`   Socket ID: ${socket.id}`)
+      console.log('🧹'.repeat(80) + '\n')
+      
+      socket.off('connect')
+      socket.off('disconnect')
+      socket.off('room-joined')
+      socket.off('automation-command')
+      socket.off('connect_error')
+      socket.off('error')
+      
+      if (socket.connected) {
+        socket.disconnect()
+      }
     }
   }, [userId, enabled, onCommand])
 
-  // Send automation result back to server
-  const sendResult = useCallback((commandId: string, success: boolean, message?: string) => {
-    if (sendResultRef.current) {
-      sendResultRef.current(commandId, success, message)
-    }
-  }, [])
-
+  // Return public API
   return {
     socket: socketRef.current,
     isConnected,
     error,
-    sendResult
+    sendMessage: (event: string, data: any) => {
+      if (socketRef.current?.connected) {
+        socketRef.current.emit(event, data)
+      } else {
+        console.warn('[Socket.io] Cannot send message: socket not connected')
+      }
+    }
   }
 }

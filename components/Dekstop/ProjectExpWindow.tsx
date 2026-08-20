@@ -186,6 +186,7 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
   const rootFolders = useMemo(() => nodes.filter((node) => !node.parentId && node.type === "folder" && !node.isTrashed), [nodes])
   const developerFolders = useMemo(() => rootFolders.filter((folder) => /^(Resume|About Me|Projects|GitHub\s—)/i.test(folder.name)), [rootFolders])
   const otherRootFolders = useMemo(() => rootFolders.filter((folder) => !developerFolders.some((generated) => generated.id === folder.id)), [developerFolders, rootFolders])
+  const downloadsFolder = useMemo(() => rootFolders.find((f) => f.name.toLowerCase() === 'downloads'), [rootFolders])
   const currentFolder = currentFolderId ? nodeById.get(currentFolderId) : undefined
 
   const rawItems = useMemo(() => {
@@ -539,7 +540,11 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
           <SidebarItem active={smartLocation === "recents"} icon={Clock3} label="Recents" onClick={() => navigate(null, "recents")} />
           <SidebarItem active={smartLocation === "starred"} icon={Star} label="Favourites" onClick={() => navigate(null, "starred")} />
           <SidebarItem icon={HardDrive} label="My Files" active={!smartLocation && !currentFolderId} onClick={() => navigate(null)} />
-          <SidebarItem icon={Download} label="Downloads" onClick={() => navigate(null)} />
+          <SidebarItem icon={Download} label="Downloads" active={!smartLocation && currentFolderId === downloadsFolder?.id} onClick={() => {
+            const downloads = rootFolders.find((f) => f.name.toLowerCase() === 'downloads');
+            if (downloads) navigate(downloads.id);
+            else navigate(null);
+          }} />
         </SidebarSection>
         <SidebarSection title="Locations">
           <SidebarItem icon={Cloud} label="iCloud Drive" onClick={() => navigate(null)} />

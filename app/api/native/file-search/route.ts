@@ -31,10 +31,13 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
+    // Sanitize filename - remove any stray quotes
+    const sanitizedFilename = filename.replace(/^["']+|["']+$/g, '').trim();
+    
     console.log(`\n${'🔍'.repeat(40)}`);
     console.log(`[file-search] Request received`);
     console.log(`   Location: ${location}`);
-    console.log(`   Filename: ${filename}`);
+    console.log(`   Filename: ${sanitizedFilename} (sanitized from: ${filename})`);
     console.log(`   Operation ID: ${operationId}`);
     console.log(`${'🔍'.repeat(40)}\n`);
 
@@ -55,9 +58,9 @@ export async function POST(req: NextRequest) {
     // Use mdfind (Spotlight) for fast search, fallback to find
     try {
       // mdfind is faster and searches Spotlight index
-      const searchQuery = `kMDItemFSName == '*${filename}*' && kMDItemPath == '${expandedPath}'`;
+      const searchQuery = `kMDItemFSName == '*${sanitizedFilename}*' && kMDItemPath == '${expandedPath}'`;
       const { stdout: mdfindResult } = await execAsync(
-        `mdfind -onlyin "${expandedPath}" -name "${filename}"`,
+        `mdfind -onlyin "${expandedPath}" -name "${sanitizedFilename}"`,
         { timeout: 10000 }
       );
 
@@ -89,7 +92,7 @@ export async function POST(req: NextRequest) {
     // Fallback to find command
     try {
       const { stdout: findResult } = await execAsync(
-        `find "${expandedPath}" -type f -iname "*${filename}*" -maxdepth 5 2>/dev/null`,
+        `find "${expandedPath}" -type f -iname "*${sanitizedFilename}*" -maxdepth 5 2>/dev/null`,
         { timeout: 15000 }
       );
 

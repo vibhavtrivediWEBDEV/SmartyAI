@@ -82,6 +82,36 @@ const APP_NAME_MAP: Record<string, string> = {
 };
 
 export function resolveSequence(key: string, params: Params = {}): any[] {
+    // 🔥 SPECIAL CASE: finder.searchWithPermission uses FileSearchOrchestrator
+    // OpenClaw-style sequential permission queue
+    if (key === 'finder.searchWithPermission') {
+        console.log('🎯 [resolveSequence] Intercepting finder.searchWithPermission for FileSearchOrchestrator');
+        console.log('   Filename:', params.filename || 'unknown');
+        console.log('   Search locations:', params.searchLocations);
+        
+        // Return special sequence with orchestrator metadata
+        const sequence = [
+            {
+                action: 'orchestrated-search',
+                target: 'Finder',
+                params: {
+                    filename: params.filename,
+                    searchLocations: params.searchLocations || ['Desktop', 'Documents', 'Downloads'],
+                    useOrchestrator: true
+                },
+                delay: 0,
+                _orchestrator: 'fileSearchOrchestrator'
+            }
+        ];
+        
+        // Attach capability metadata
+        (sequence as any)._requiredCapabilities = ['filesystem.read'];
+        (sequence as any)._permissionStatus = 'missing';
+        (sequence as any)._missingCapabilities = ['filesystem.read'];
+        
+        return sequence;
+    }
+    
     // 🔥 CHECK: Is it a dynamic pattern like "terminal.open"?
     const parts = key.split('.');
 
@@ -104,6 +134,8 @@ export function resolveSequence(key: string, params: Params = {}): any[] {
     if (!rawSequence) {
         throw new Error(`Automation key not found: ${key}`);
     }
+    
+    console.log(`[resolveSequence] 📋 Found automation for "${key}"`);
 
     // 🔥 EXTRACT META: Get estimatedDuration if present
     let estimatedDuration = 30000; // Default 30 seconds
