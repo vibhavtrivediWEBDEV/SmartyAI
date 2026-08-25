@@ -28,25 +28,42 @@ export async function bundleReact(
 
     console.log('[bundler] Using entry file:', entryFile.name)
     
-    // Transform the code for browser execution
-    let code = entryFile.content
+    // Collect ALL JS/JSX/TS/TSX files (not just entry)
+    // EXCLUDE index.js/index.ts files that typically contain createRoot calls
+    const allJsFiles = files.filter(f => 
+      (f.name.endsWith('.js') || f.name.endsWith('.jsx') || 
+       f.name.endsWith('.ts') || f.name.endsWith('.tsx')) &&
+      !f.name.match(/(\/|^)index\.(js|ts|jsx|tsx)$/)
+    );
     
-    // Step 1: Process TypeScript/TSX files
-    if (entryFile.name.endsWith('.tsx') || entryFile.name.endsWith('.ts')) {
-      console.log('[bundler] Stripping TypeScript annotations')
-      code = stripTypeScript(code)
-    }
+    console.log('[bundler] Found', allJsFiles.length, 'JS/JSX/TS/TSX files (excluding index entry files)')
     
-    // Step 2: Transform ES6 imports to use globals
-    code = transformImports(code)
+    // Process all files and combine them
+    const processedCodes = allJsFiles.map(file => {
+      let code = file.content;
+      
+      // Process TypeScript/TSX files
+      if (file.name.endsWith('.tsx') || file.name.endsWith('.ts')) {
+        console.log('[bundler] Stripping TypeScript from:', file.name)
+        code = stripTypeScript(code);
+      }
+      
+      // Transform ES6 imports to use globals
+      code = transformImports(code);
+      
+      // Remove export statements
+      code = removeExports(code);
+      
+      return `// File: ${file.name}\n${code}`;
+    });
     
-    // Step 3: Remove export statements
-    code = removeExports(code)
+    // Combine all processed files
+    const combinedCode = processedCodes.join('\n\n');
     
-    console.log('[bundler] Code ready, length:', code.length)
+    console.log('[bundler] Combined code length:', combinedCode.length)
     
     // Return the processed code
-    return { code }
+    return { code: combinedCode }
     
   } catch (error: any) {
     console.error('[bundler] Processing error:', error)
@@ -72,8 +89,25 @@ function stripTypeScript(code: string): string {
   code = code.replace(/type\s+\w+[^=]*=[^\n]+/g, '')
   code = code.replace(/type\s+\w+[^{]*\{[\s\S]*?^\}/gm, '')
   
-  // Remove generic type parameters from functions and classes
-  code = code.replace(/<[A-Z]\w*(?:\s+(?:extends|=)\s+[^>,\s]+)?(?:,\s*[A-Z]\w*(?:\s+(?:extends|=)\s+[^>,\s]+)?)*>/g, '')
+  // Remove React.FC, React.FunctionComponent and similar BEFORE other processing
+  // This prevents issues with JSX detection
+  code = code.replace(/:\s*React\.(FC|FunctionComponent|ComponentType)(?:<[^>]+>)?\s*=/g, ' =')
+  code = code.replace(/:\s*(FC|FunctionComponent|ComponentType)(?:<[^>]+>)?\s*=/g, ' =')
+  
+  // Remove generic type parameters in specific contexts:
+  // 1. After function/method names: function name<Type>
+  // 2. After useState, useRef, etc.: React.useState<Type>
+  // 3. In class extends: extends Base<Type>
+  // BUT NOT in JSX tags
+  
+  // Remove uppercase generics (Type parameters)
+  code = code.replace(/([a-zA-Z_$]\w*)<[A-Z]\w*(?:\s+(?:extends|keyof|in)\s+[^>,]+)?(?:\s*,\s*[A-Z]\w*(?:\s+(?:extends|keyof|in)\s+[^>,]+)?)*>/g, '$1')
+  
+  // Remove lowercase generics in function call context (after . or lowercase letters)
+  // Matches: .useState<number>, .useRef<string>, etc.
+  code = code.replace(/([a-z]\w*\.)[a-z]\w*<[a-z]\w*>/g, (match, prefix) => {
+    return match.replace(/<[a-z]\w*>/, '')
+  })
   
   // Remove destructuring parameter type annotations: { prop }: Type or { prop = value }: Type
   code = code.replace(/(\{[^}]+\})\s*:\s*[A-Z][a-zA-Z0-9_]*(?:<[^>]+>)?/g, '$1')
@@ -96,10 +130,6 @@ function stripTypeScript(code: string): string {
   
   // Remove `as const` assertions
   code = code.replace(/\s+as\s+const/g, '')
-  
-  // Remove React.FC, React.FunctionComponent and similar
-  code = code.replace(/:\s*React\.(FC|FunctionComponent|ComponentType)(?:<[^>]+>)?/g, ': ')
-  code = code.replace(/:\s*(FC|FunctionComponent|ComponentType)(?:<[^>]+>)?/g, ': ')
   
   // Remove non-null assertion operator (!)
   code = code.replace(/\w!/g, (match) => match.slice(0, -1))
@@ -147,6 +177,9 @@ function transformImports(code: string): string {
   code = code.replace(/import\s+ReactDOM\s+from\s+['"]react-dom['"];\n?/g, '')
   code = code.replace(/import\s+\w+\s+from\s+['"]react-dom\/client['"];\n?/g, '')
   
+  // Remove CSS imports (import './styles.css')
+  code = code.replace(/import\s+['"][^'"]+\.css['"];\n?/g, '')
+  
   // Remove local file imports (components, utils, etc.)
   // Pattern: import ... from './...' OR import ... from '../...'
   // IMPORTANT: Only match the full import statement ending with semicolon and newline
@@ -164,7 +197,13 @@ function transformImports(code: string): string {
  * Remove export statements
  */
 function removeExports(code: string): string {
-  // Remove: export default Component
+  // Transform: export default function Name → function Name
+  code = code.replace(/export\s+default\s+(function|class)\s+(\w+)/g, '$1 $2')
+  
+  // Transform: export default const/let/var Name → const/let/var Name
+  code = code.replace(/export\s+default\s+(const|let|var)\s+(\w+)/g, '$1 $2')
+  
+  // Remove: export default Component (standalone)
   code = code.replace(/export\s+default\s+\w+;?\n?/g, '')
   
   // Remove: export { Component }

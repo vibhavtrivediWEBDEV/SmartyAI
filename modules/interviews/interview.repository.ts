@@ -127,17 +127,34 @@ export async function findFeedback(interviewId: string, userId: string) {
 }
 
 export async function saveFeedback(input: Omit<FeedbackDocument, "createdAt" | "updatedAt">, feedbackId?: string) {
+  console.log("💾 saveFeedback STARTED");
+  console.log("📥 Input:", JSON.stringify(input, null, 2));
+  console.log("🆔 feedbackId param:", feedbackId);
+  
   const { feedback } = await collections();
+  console.log("✅ MongoDB collections connected");
+  
   const now = new Date();
   const filter = feedbackId && ObjectId.isValid(feedbackId)
     ? { _id: new ObjectId(feedbackId) }
     : { interviewId: input.interviewId, userId: input.userId };
+  
+  console.log("🔍 Using filter:", JSON.stringify(filter, null, 2));
+  
   const result = await feedback.findOneAndUpdate(
     filter,
     { $set: { ...input, updatedAt: now }, $setOnInsert: { createdAt: now } },
     { upsert: true, returnDocument: "after" },
   );
-  if (!result) throw new Error("Feedback could not be saved");
+  
+  console.log("📊 MongoDB result:", result ? "Document updated" : "No result");
+  
+  if (!result) {
+    console.error("❌ Feedback could not be saved - no result from MongoDB");
+    throw new Error("Feedback could not be saved");
+  }
+  
+  console.log("✅ Feedback saved successfully, ID:", result._id.toHexString());
   return result._id.toHexString();
 }
 

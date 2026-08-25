@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import FileTree from './FileTree';
 import { getLanguageFromExtension } from '@/lib/utils/language';
+import { configureJSXSupport } from '@/lib/monaco/setup';
 
 // Emmet support for Monaco
 import { emmetHTML, emmetCSS, emmetJSX } from 'emmet-monaco-es';
@@ -145,7 +146,8 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
   const loadWorkspaces = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/workspaces');
+      // Use test endpoint (no auth required) - port 3001
+      const response = await fetch('http://localhost:3001/api/test-workspaces');
       const result = await response.json();
       
       if (result.data && result.data.length > 0) {
@@ -174,9 +176,33 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
     workspace.files.forEach(file => {
       fileContentsRef.current.set(file.path, file.content);
     });
+    
+    // Create Monaco models if Monaco is loaded
+    if (monacoRef.current && editorRef.current) {
+      const monaco = monacoRef.current;
+      
+      // Create models for each file with proper language
+      workspace.files.forEach(file => {
+        if (!modelsRef.current.has(file.path)) {
+          const language = file.language || getLanguageFromExtension(file.path);
+          const uri = monaco.Uri.parse(`smarty://workspace/${workspace.id}/${file.path}`);
+          const model = monaco.editor.createModel(file.content, language, uri);
+          modelsRef.current.set(file.path, model);
+        }
+      });
+      
+      console.log(`[Monaco] Created ${workspace.files.length} models for workspace:`, workspace.name);
+    }
   };
 
   const cleanupModelsForWorkspace = (workspaceId: string) => {
+    // Dispose models
+    modelsRef.current.forEach((model, path) => {
+      if (path.startsWith(workspaceId)) {
+        model.dispose();
+        modelsRef.current.delete(path);
+      }
+    });
     fileContentsRef.current.clear();
   };
 
@@ -405,7 +431,8 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
     addConsoleLog('info', `Running ${activeWorkspace.name}...`);
 
     try {
-      const response = await fetch(`/api/workspaces/${activeWorkspace.id}/run`, {
+      // Use test endpoint (no auth required) - port 3001
+      const response = await fetch(`http://localhost:3001/api/test-workspaces/${activeWorkspace.id}/run`, {
         method: 'POST',
       });
 
@@ -422,6 +449,11 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
 
         addConsoleLog('success', '✓ Build successful');
 
+        // DEBUG: Log preview content length
+        console.log('[VSCode] Preview content length:', result.preview?.length);
+        console.log('[VSCode] Preview mode:', previewMode);
+        console.log('[VSCode] openPreviewWindow exists:', !!openPreviewWindow);
+
         // FIX: Open preview immediately based on mode
         if (previewMode === 'new-window' && openPreviewWindow) {
           openPreviewWindow(result.preview, `Preview - ${activeWorkspace.name}`);
@@ -433,9 +465,13 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
         }
       } else {
         addConsoleLog('error', result.error || 'Run failed');
+        if (result.workspaceId) {
+          addConsoleLog('error', `Workspace ID: ${result.workspaceId}`);
+        }
       }
     } catch (error) {
       addConsoleLog('error', 'Failed to run code');
+      console.error('Run error:', error);
     } finally {
       setIsRunning(false);
     }
@@ -518,9 +554,14 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
   };
 
   // ============ CONSOLE HELPER ============
+  // Counter to ensure unique IDs even when logs are added in the same millisecond
+  const logCounterRef = useRef(0);
+  
   const addConsoleLog = (type: ConsoleLog['type'], message: string) => {
+    const timestamp = Date.now();
+    const counter = logCounterRef.current++;
     setConsoleLogs(prev => [...prev, {
-      id: `log-${Date.now()}`,
+      id: `log-${timestamp}-${counter}`,
       type,
       message,
       time: new Date().toLocaleTimeString(),
@@ -532,14 +573,45 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
     editorRef.current = editor;
     monacoRef.current = monaco;
 
+    // Configure JSX/TSX support (critical for React IntelliSense)
+    try {
+      configureJSXSupport(monaco);
+      console.log('[Monaco] JSX support configured');
+    } catch (error) {
+      console.error('[Monaco] Failed to configure JSX:', error);
+    }
+
     // Initialize Emmet support (only once)
     try {
       emmetHTML(monaco);  // For .html files
       emmetCSS(monaco);   // For .css files
       emmetJSX(monaco);   // For .jsx/.tsx files
-      console.log('✅ Emmet support initialized');
+      console.log('[Monaco] Emmet support initialized');
     } catch (error) {
-      console.warn('Emmet initialization failed:', error);
+      console.warn('[Monaco] Emmet initialization failed:', error);
+    }
+
+    // Create models for all workspace files
+    if (activeWorkspace) {
+      activeWorkspace.files.forEach(file => {
+        if (!modelsRef.current.has(file.path)) {
+          const language = file.language || getLanguageFromExtension(file.path);
+          const uri = monaco.Uri.parse(`smarty://workspace/${activeWorkspace.id}/${file.path}`);
+          
+          // Check if model already exists in Monaco's registry
+          let model = monaco.editor.getModel(uri);
+          if (!model) {
+            model = monaco.editor.createModel(file.content, language, uri);
+          } else {
+            // Update existing model's content if needed
+            if (model.getValue() !== file.content) {
+              model.setValue(file.content);
+            }
+          }
+          modelsRef.current.set(file.path, model);
+        }
+      });
+      console.log(`[Monaco] Created ${activeWorkspace.files.length} models`);
     }
 
     // Set active model
@@ -942,8 +1014,6 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
             >
               <Editor
                 height="100%"
-                language={activeFilePath ? (activeWorkspace.files.find(f => f.path === activeFilePath)?.language || getLanguageFromExtension(activeFilePath)) : 'plaintext'}
-                value={activeFilePath ? (activeWorkspace.files.find(f => f.path === activeFilePath)?.content || '') : ''}
                 theme="vs-dark"
                 options={{
                   automaticLayout: true,
@@ -957,6 +1027,8 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
                   quickSuggestions: true,
                   suggestOnTriggerCharacters: true,
                   parameterHints: { enabled: true },
+                  formatOnPaste: true,
+                  formatOnType: true,
                   emmet: {
                     showExpandedAbbreviation: 'always',
                     showAbbreviationSuggestions: true,
@@ -968,6 +1040,11 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
                   }
                 }}
                 onMount={handleEditorDidMount}
+                onChange={(value) => {
+                  if (activeFilePath && value !== undefined) {
+                    updateFileContent(activeFilePath, value);
+                  }
+                }}
               />
             </div>
 

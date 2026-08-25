@@ -266,25 +266,49 @@ export function useCallManager({
     }
 
     const handleGenerateFeedback = async (messages: SavedMessage[]) => {
-      console.log("handleGenerateFeedback", messages);
+      console.log("🎯 handleGenerateFeedback called");
+      console.log("📊 Messages:", messages);
+      console.log("🆔 InterviewId:", interviewId);
+      console.log("👤 UserId:", userId);
+      console.log("📝 FeedbackId:", feedbackId);
 
-      const { success, feedbackId: id } = await createFeedback({
-        interviewId: interviewId!,
-        userId: userId!,
-        transcript: messages,
-        feedbackId,
-      });
+      if (!interviewId) {
+        console.error("❌ No interviewId provided!");
+        return;
+      }
 
-      
+      if (!userId) {
+        console.error("❌ No userId provided!");
+        return;
+      }
 
-      if (success && id) {
-        alert("Feedback generated")
-        // router.push(`/interview/${interviewId}/feedback`);
-        runCommandInTerminal('feedback',interviewId)
+      if (!messages || messages.length === 0) {
+        console.error("❌ No messages to analyze!");
+        return;
+      }
 
-      } else {
-        console.log("Error saving feedback");
-        router.push("/");
+      try {
+        const { success, feedbackId: id } = await createFeedback({
+          interviewId: interviewId!,
+          userId: userId!,
+          transcript: messages,
+          feedbackId,
+        });
+
+        console.log("✅ createFeedback result:", { success, id });
+
+        if (success && id) {
+          console.log("🎉 Feedback generated successfully!");
+          alert("Feedback generated successfully!")
+          runCommandInTerminal('feedback', interviewId)
+        } else {
+          console.error("❌ Error saving feedback - success:", success);
+          alert("Failed to generate feedback. Please check console for details.");
+          router.push("/");
+        }
+      } catch (error) {
+        console.error("❌ Exception in handleGenerateFeedback:", error);
+        alert("Error generating feedback: " + error);
       }
     };
 

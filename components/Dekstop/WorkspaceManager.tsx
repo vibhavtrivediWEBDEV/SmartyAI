@@ -61,7 +61,8 @@ export function WorkspaceManager({ onSelect, onClose }: WorkspaceManagerProps) {
     setError(null);
 
     try {
-      const response = await fetch("/api/workspaces");
+      // Use test endpoint for development (no auth required)
+      const response = await fetch("/api/test-workspaces");
       const result = await response.json();
 
       if (!response.ok) {
@@ -82,7 +83,8 @@ export function WorkspaceManager({ onSelect, onClose }: WorkspaceManagerProps) {
     setIsCreating(true);
 
     try {
-      const response = await fetch("/api/workspaces", {
+      // Use test endpoint for development (no auth required)
+      const response = await fetch("/api/test-workspaces/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newWorkspace),
@@ -131,6 +133,8 @@ export function WorkspaceManager({ onSelect, onClose }: WorkspaceManagerProps) {
     switch (runtime) {
       case "react":
         return "⚛️";
+      case "react-ts":
+        return "🔷";
       case "html":
         return "🌐";
       case "node":
@@ -318,7 +322,7 @@ export function WorkspaceManager({ onSelect, onClose }: WorkspaceManagerProps) {
               <div className="mb-6">
                 <label className="mb-2 block text-sm text-gray-400">Runtime</label>
                 <div className="grid grid-cols-3 gap-2">
-                  {(["react", "html", "node", "python", "java"] as const).map((runtime) => (
+                  {(["react", "react-ts", "html", "node", "python", "java"] as const).map((runtime) => (
                     <button
                       key={runtime}
                       onClick={() => setNewWorkspace({ ...newWorkspace, runtime })}

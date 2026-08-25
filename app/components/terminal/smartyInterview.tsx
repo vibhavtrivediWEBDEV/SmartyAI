@@ -9,7 +9,11 @@ import { useTerminal } from "@/app/context/terminalContext";
 import { useSettings } from "@/app/context/settingContext";
 import { BriefcaseBusiness, CheckCircle2, ChevronDown, FileText, Plus, Sparkles, WandSparkles, X } from "lucide-react";
 
-export default function SmartyInterview() {
+interface SmartyInterviewProps {
+  interviewId?: string;
+}
+
+export default function SmartyInterview({ interviewId }: SmartyInterviewProps) {
   const [userId, setUserId] = useState<string | null>(null);
   const [userInterviews, setUserInterviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

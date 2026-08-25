@@ -66,6 +66,7 @@ const UserInterviews = ({ interviews, userId  }: UserInterviewsProps) => {
               techstack={interview.techstack}
               createdAt={interview.createdAt}
               feedback={feedbackMap[interview.id]}
+              hasBeenTaken={true}
             />
           ))
         ) : (

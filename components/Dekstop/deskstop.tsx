@@ -67,6 +67,8 @@ import { getDesktopApp } from "@/lib/desktopApps"
 import FaceTimeApp from "./FaceTimeApp"
 import AppStoreApp from "./AppStoreApp"
 import SmartyInterview from "@/app/components/terminal/smartyInterview"
+import StartInterview from "@/app/components/terminal/StartInterview"
+import FeedbackInterview from "@/app/components/terminal/feedbackInterview"
 import SmartyTeacherWrapper from "@/app/components/terminal/smartyTeacher"
 import { DynamicAgGridConfigurator } from "./dataTableViewer"
 import { getUserAIContext, type UserAIContext } from "@/lib/ai/userAIContext"
@@ -557,10 +559,12 @@ export function Desktop() {
       if (response.ok) {
         console.log('[Desktop] ✅ Telegram welcome sent successfully');
       } else {
-        console.error('[Desktop] ❌ Telegram welcome failed:', result.error);
+        // Gracefully handle when Telegram is not connected (expected for unauthenticated users)
+        console.warn('[Desktop] Telegram not available:', result.error);
       }
     } catch (error) {
-      console.error('[Desktop] Failed to send Telegram welcome:', error);
+      // Silently ignore Telegram errors - it's optional functionality
+      console.warn('[Desktop] Telegram welcome skipped (not connected)');
     }
   };
 
@@ -843,13 +847,21 @@ export function Desktop() {
     let active = true
     fetch("/api/profile/resume")
       .then(async (response) => {
-        if (!response.ok) throw new Error("Could not load resume profile")
+        if (!response.ok) {
+          // Gracefully handle auth errors
+          console.warn("Could not load resume profile:", response.status, response.statusText)
+          if (active) setResumeProfile(null)
+          return null
+        }
         return response.json()
       })
       .then((body) => {
-        if (active) setResumeProfile(body.resume)
+        if (active && body) setResumeProfile(body.resume)
       })
-      .catch((error) => console.error(error))
+      .catch((error) => {
+        console.warn("Error loading resume profile:", error)
+        if (active) setResumeProfile(null)
+      })
       .finally(() => {
         if (active) setResumeProfileLoading(false)
       })
@@ -865,7 +877,12 @@ export function Desktop() {
       try {
         const response = await fetch("/api/Projects")
         const body = await response.json()
-        if (!response.ok) throw new Error(body.error || "Could not load Desktop items")
+        if (!response.ok) {
+          // Gracefully handle auth errors - just log and continue
+          console.warn("Could not load Desktop items:", body.error || "Authentication required")
+          if (active) setuserIcons([])
+          return
+        }
         const selected = (body.data as ProjectFile[])
           .filter((item) => item.showOnDesktop && !item.parentId && !item.isTrashed)
           .map((item, index): IconItem => ({
@@ -879,7 +896,8 @@ export function Desktop() {
           }))
         if (active) setuserIcons(selected)
       } catch (error) {
-        console.error(error)
+        console.error("Error loading desktop items:", error)
+        if (active) setuserIcons([])
       }
     }
     void loadDesktopItems()
@@ -1066,11 +1084,30 @@ export function Desktop() {
           break;
 
         case "Interview":
-          component = <SmartyInterview />;
+          // Interview can receive interviewId via arg parameter
+          component = <SmartyInterview interviewId={arg?.interviewId} />;
           title = "Smarty Interview";
-          iconPath = "/app.svg";
+          iconPath = "/ai-avatar.png";
           defaultWidth = 900;
-          defaultHeight = 650;
+          defaultHeight = 700;
+          break;
+
+        case "Start Interview":
+          // Start interview with specific ID
+          component = <StartInterview id={arg?.interviewId} />;
+          title = "Start Interview";
+          iconPath = "/ai-avatar.png";
+          defaultWidth = 900;
+          defaultHeight = 700;
+          break;
+
+        case "Feedback":
+          // Show interview feedback
+          component = <FeedbackInterview id={arg?.interviewId} />;
+          title = "Interview Feedback";
+          iconPath = "/ai-avatar.png";
+          defaultWidth = 900;
+          defaultHeight = 700;
           break;
 
         case "Data Table":
@@ -1335,13 +1372,17 @@ export function Desktop() {
           break;
         case "Preview":
           // VS Code preview window - renders HTML content
+          // Content is passed via the `arg` parameter from openApplication
+          const previewHtml = arg?.htmlContent || previewContent || '<html><body><p>No content</p></body></html>';
+          const previewTitle = arg?.title || previewWindowTitle || 'Preview';
           component = <iframe
-            srcDoc={previewContent || '<html><body><p>No content</p></body></html>'}
+            key={previewHtml}
+            srcDoc={previewHtml}
             className="w-full h-full border-0 bg-white"
             title="Preview"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
           />;
-          title = previewWindowTitle;
+          title = previewTitle;
           iconPath = "/icons/play.png";
           defaultWidth = 800;
           defaultHeight = 600;
@@ -1935,23 +1976,23 @@ export function Desktop() {
   };
 
   // 🆕 Function to open preview window with HTML content
-  const openPreviewWindow = useCallback((htmlContent: string, title: string = 'Preview') => {
-    setPreviewContent(htmlContent)
-    setPreviewWindowTitle(title)
-
-    // Check if preview window is already open
+  const openPreviewWindowActual = useCallback((htmlContent: string, title: string = 'Preview') => {
+    console.log('[openPreviewWindow] Called with content length:', htmlContent?.length);
+    
+    // Close existing preview window if open
     const existingPreview = openWindows.find(w => w.appName === 'Preview')
     if (existingPreview) {
-      // Focus existing window
-      bringToFront(existingPreview.id)
-    } else {
-      // Open new preview window
-      openApplication('Preview', 100, 100)
+      closeWindow(existingPreview.id)
     }
-  }, [openWindows, openApplication, bringToFront])
-
-  // Set the ref so it can be used in openApplication
-  openPreviewWindowRef.current = openPreviewWindow
+    
+    // Open new preview window after a short delay with the content
+    setTimeout(() => {
+      openApplication('Preview', 100, 100, undefined, { htmlContent, title })
+    }, 50)
+  }, [openWindows, closeWindow, openApplication])
+  
+  // Set the ref so it can be called from VS Code component
+  openPreviewWindowRef.current = openPreviewWindowActual
 
 
 

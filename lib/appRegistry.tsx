@@ -38,6 +38,9 @@ import { ATSResumeBuilder } from '@/components/Dekstop/ATSResumeBuilder'
 import ContactsApp from '@/components/Dekstop/Contacts'
 import MessagesApp from '@/components/Dekstop/MessagesApp'
 import PhoneApp from '@/components/Dekstop/PhoneApp'
+import SmartyInterviewComponent from '@/app/components/terminal/smartyInterview'
+import StartInterviewComponent from '@/app/components/terminal/StartInterview'
+import FeedbackInterviewComponent from '@/app/components/terminal/feedbackInterview'
 
 /**
  * App Configuration Interface
@@ -515,6 +518,52 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
     defaultWidth: 800,
     defaultHeight: 600,
     automatable: true,
+    category: 'productivity'
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // INTERVIEW APPS (Standalone windows)
+  // ═══════════════════════════════════════════════════════════════
+
+  Interview: {
+    name: 'Interview',
+    displayName: 'Smarty Interview',
+    icon: '/ai-avatar.png',
+    component: StartInterviewComponent,
+    defaultWidth: 900,
+    defaultHeight: 700,
+    minWidth: 700,
+    minHeight: 500,
+    automatable: true,
+    singleton: false,
+    category: 'productivity'
+  },
+
+  'New Interview': {
+    name: 'New Interview',
+    displayName: 'New Interview',
+    icon: '/ai-avatar.png',
+    component: SmartyInterviewComponent,
+    defaultWidth: 800,
+    defaultHeight: 600,
+    minWidth: 600,
+    minHeight: 400,
+    automatable: true,
+    singleton: false,
+    category: 'productivity'
+  },
+
+  Feedback: {
+    name: 'Feedback',
+    displayName: 'Interview Feedback',
+    icon: '/ai-avatar.png',
+    component: FeedbackInterviewComponent,
+    defaultWidth: 900,
+    defaultHeight: 700,
+    minWidth: 700,
+    minHeight: 500,
+    automatable: true,
+    singleton: false,
     category: 'productivity'
   }
 }

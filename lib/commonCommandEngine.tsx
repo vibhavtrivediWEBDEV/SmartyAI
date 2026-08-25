@@ -434,9 +434,38 @@ async function parseSpecialCommands(
 • close <app> - Close an app
 • maximize <app> - Maximize window
 • search <query> - Search the web
+• startinterview <id> - Start an interview session
+• feedback <id> - View interview feedback
+• newinterview - Create new interview
 
 For AI assistance, just ask naturally!`
       };
+    case "newinterview":
+      // Open new interview form in terminal
+      const { default: NewInterviewForm } = await import('@/app/components/terminal/NewInterview');
+      return { output: <NewInterviewForm /> };
+    case "startinterview": {
+      // Start interview with given ID
+      const interviewId = args[0];
+      if (!interviewId) {
+        return { output: "Error: Interview ID required. Usage: startinterview <interview-id>" };
+      }
+      const { default: StartInterview } = await import('@/app/components/terminal/StartInterview');
+      return { output: <StartInterview id={interviewId} /> };
+    }
+    case "feedback": {
+      // Show interview feedback
+      const feedbackInterviewId = args[0];
+      if (!feedbackInterviewId) {
+        return { output: "Error: Interview ID required. Usage: feedback <interview-id>" };
+      }
+      const { default: FeedbackInterview } = await import('@/app/components/terminal/feedbackInterview');
+      return { output: <FeedbackInterview id={feedbackInterviewId} /> };
+    }
+    case "interview":
+      // Open interview list/manager
+      const { default: SmartyInterviewComponent } = await import('@/app/components/terminal/smartyInterview');
+      return { output: <SmartyInterviewComponent /> };
     default:
       return null; // Continue to AI processing
   }

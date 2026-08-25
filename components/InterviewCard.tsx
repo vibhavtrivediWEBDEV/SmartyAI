@@ -19,6 +19,7 @@ interface InterviewCardProps {
     totalScore?: number;
     finalAssessment?: string;
   } | null;
+  hasBeenTaken?: boolean; // NEW: Track if interview was attempted
 }
 
 export default function InterviewCard({
@@ -28,10 +29,11 @@ export default function InterviewCard({
   techstack,
   createdAt,
   feedback,
+  hasBeenTaken = false,
 }: InterviewCardProps) {
   const normalizedType = /mix/gi.test(type) ? "Mixed" : type;
 
-  const { runCommandInTerminal } = useTerminal();
+  const { openApplication } = useTerminal();
 
   const typeStyle =
     {
@@ -40,6 +42,12 @@ export default function InterviewCard({
       Technical: { icon: Code2, color: "from-[#0a84ff] to-[#32ade6]", tint: "bg-[#0a84ff]/15 text-[#64d2ff]" },
     }[normalizedType] || { icon: Sparkles, color: "from-[#5e5ce6] to-[#bf5af2]", tint: "bg-[#bf5af2]/15 text-[#d48aff]" };
   const TypeIcon = typeStyle.icon;
+  
+  // Show Retake if feedback exists OR interview was attempted
+  const showRetakeOption = feedback || hasBeenTaken;
+  
+  // Only show Feedback button if feedback actually exists
+  const hasActualFeedback = feedback && feedback.totalScore;
 
   const formattedDate = dayjs(
     feedback?.createdAt || createdAt || Date.now()
@@ -67,19 +75,26 @@ export default function InterviewCard({
           </p>
 
         <div className="mt-5 flex gap-2">
-          {feedback ? (
-            <>
-              <button className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0a84ff] text-sm font-semibold text-white transition hover:bg-[#2997ff] active:scale-[.98]"
-                onClick={() => runCommandInTerminal("feedback", interviewId)}
-              ><CheckCircle2 className="size-4" /> Feedback</button>
-              <button className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[.08] px-3 text-sm font-medium text-white transition hover:bg-white/15"
-                onClick={() => runCommandInTerminal("startinterview", interviewId)}
-              ><RotateCcw className="size-4" /> Retake</button>
-            </>
-          ) : (
-            <button className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#0a84ff] text-sm font-semibold text-white shadow-[0_8px_20px_rgba(10,132,255,.25)] transition hover:bg-[#2997ff] active:scale-[.98]"
-              onClick={()=> runCommandInTerminal("startinterview",interviewId)}
-            >Start Interview <ArrowRight className="size-4" /></button>
+          {/* Show Start Interview or Retake button */}
+          <button 
+            className={`flex h-10 ${hasActualFeedback ? 'flex-1' : 'w-full'} items-center justify-center gap-2 rounded-xl bg-[#0a84ff] text-sm font-semibold text-white shadow-[0_8px_20px_rgba(10,132,255,.25)] transition hover:bg-[#2997ff] active:scale-[.98]`}
+            onClick={() => openApplication('Start Interview', 150, 150, undefined, { interviewId })}
+          >
+            {showRetakeOption ? (
+              <><RotateCcw className="size-4" /> Retake</>
+            ) : (
+              <>Start Interview <ArrowRight className="size-4" /></>
+            )}
+          </button>
+          
+          {/* Only show Feedback button if feedback actually exists */}
+          {hasActualFeedback && (
+            <button 
+              className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[.08] px-4 text-sm font-medium text-white transition hover:bg-white/15"
+              onClick={() => openApplication('Feedback', 150, 150, undefined, { interviewId })}
+            >
+              <CheckCircle2 className="size-4" /> Feedback
+            </button>
           )}
         </div>
       </div>

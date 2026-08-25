@@ -19,7 +19,7 @@ interface Interview {
   questions: any[];
 }
 
-export default function StartNewInterview({ id }:any) {
+export default function StartNewInterview({ id }: any) {
   const [user, setUser] = useState<{ id: string; name: string } | null>(null);
   const [lastInterview, setLastInterview] = useState<Interview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,12 +33,19 @@ export default function StartNewInterview({ id }:any) {
   useEffect(() => {
     async function fetchUser() {
       try {
+        if (!id) {
+          console.error("No interview ID provided");
+          setLoading(false);
+          return;
+        }
+        
         const currentUser = await getCurrentUser();
         if (!currentUser?.id) return;
         setUser(currentUser);
-console.log("startInterview -ID",id)
+        console.log("startInterview -ID", id)
+        
         const interview = await getInterviewById(id);
-        console.log("CurrentInterview",interview)
+        console.log("CurrentInterview", interview)
         if (interview) {
           setLastInterview(interview);
         }

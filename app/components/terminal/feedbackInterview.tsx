@@ -14,15 +14,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import { useElevenTTS } from "@/hooks/ElevenLabs";
+import { useTerminal } from "@/app/context/terminalContext";
 
 interface FeedbackInterviewProps {
   id: string;
 }
 
-export default function FeedbackInverview({ id }: FeedbackInterviewProps) {
-
+export default function FeedbackInverview({ id }: any) {
   const router = useRouter();
   const hasFetchedRef = useRef(false);
+  const { openApplication } = useTerminal();
 
   const [user, setUser] = useState<any>(null);
   const [interview, setInterview] = useState<any>(null);
@@ -39,6 +40,12 @@ export default function FeedbackInverview({ id }: FeedbackInterviewProps) {
 
     async function fetchData() {
       try {
+        if (!id) {
+          console.error("No interview ID provided");
+          setLoading(false);
+          return;
+        }
+        
         const currentUser = await getCurrentUser();
         const interview = await getLastInterviewsByUserId(currentUser.id);
         console.log("id", id)
@@ -69,7 +76,31 @@ export default function FeedbackInverview({ id }: FeedbackInterviewProps) {
   }, [id, router]);
 
   if (loading) {
-    return <p className="text-white">Loading feedback...</p>;
+    return <p className="text-white p-4">Loading feedback...</p>;
+  }
+
+  // Show message if no feedback available yet
+  if (!feedback) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-white p-8">
+        <div className="text-6xl mb-4">📝</div>
+        <h2 className="text-2xl font-bold mb-2">Feedback Not Available</h2>
+        <p className="text-gray-400 text-center max-w-md">
+          Feedback for this interview hasn't been generated yet. This could happen if:
+        </p>
+        <ul className="text-gray-400 text-sm mt-4 space-y-2">
+          <li>• The interview call ended unexpectedly</li>
+          <li>• Feedback generation is still in progress</li>
+          <li>• There was an error during feedback generation</li>
+        </ul>
+        <button
+          className="mt-6 px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-xl transition-colors"
+          onClick={() => openApplication('Start Interview', 150, 150, undefined, { interviewId: id })}
+        >
+          Retake Interview
+        </button>
+      </div>
+    );
   }
 
   // Generate professional summary for TTS

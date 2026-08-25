@@ -30,6 +30,7 @@ export async function runWorkspace(
   try {
     switch (settings.runtime) {
       case "react":
+      case "react-ts":
         return await runReact(files, settings);
 
       case "html":
@@ -105,8 +106,14 @@ async function runReact(
     .map(f => f.content)
     .join("\n");
 
+  // Convert WorkspaceFile[] to format expected by bundler
+  const bundlerFiles = files.map(f => ({
+    name: f.path,
+    content: f.content
+  }));
+
   // Bundle React code
-  const { code, error } = await bundleReact(entryPoint, files);
+  const { code, error } = await bundleReact(entryPoint, bundlerFiles);
 
   if (error || !code) {
     return {
@@ -312,10 +319,18 @@ function generateReactPreview(reactCode: string, cssContent: string): string {
   <script type="text/babel">
     ${reactCode}
     
-    // Auto-render
+    // Auto-render with proper root management
     if (typeof App !== 'undefined') {
-      const root = ReactDOM.createRoot(document.getElementById('root'));
-      root.render(<App />);
+      // Clean up any existing root before creating new one
+      const container = document.getElementById('root');
+      if (window._reactRoot) {
+        // Unmount existing root
+        window._reactRoot.unmount();
+        window._reactRoot = null;
+      }
+      // Create fresh root
+      window._reactRoot = ReactDOM.createRoot(container);
+      window._reactRoot.render(<App />);
     } else {
       // Try to find default export or last defined component
       console.warn('No App component found. Make sure you export a component named "App"');

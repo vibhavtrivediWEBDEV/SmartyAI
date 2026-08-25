@@ -27,20 +27,33 @@ interface TeachingSession {
  * Uses Bedrock/GLM if USE_AI_PROVIDER=bedrock, else Google Gemini
  */
 export async function createFeedback(params: CreateFeedbackParams) {
+  console.log("🚀 createFeedback STARTED");
+  console.log("📥 Params:", { interviewId: params.interviewId, userId: params.userId, transcriptLength: params.transcript?.length, feedbackId: params.feedbackId });
+  
   const { interviewId, userId, transcript, feedbackId } = params;
 
   try {
+    console.log("🔐 Checking user authorization...");
     const currentUser = await getCurrentUser();
-    if (!currentUser || currentUser.id !== userId) throw new Error("Unauthorized feedback request");
+    if (!currentUser || currentUser.id !== userId) {
+      console.error("❌ Unauthorized: currentUser.id !== userId", { currentUserId: currentUser?.id, userId });
+      throw new Error("Unauthorized feedback request");
+    }
+    console.log("✅ User authorized:", currentUser.id);
+    console.log("📝 Formatting transcript...");
     const formattedTranscript = transcript
       .map(
         (sentence: { role: string; content: string }) =>
           `- ${sentence.role}: ${sentence.content}\n`
       )
       .join("");
+    
+    console.log("📊 Transcript formatted, length:", formattedTranscript.length);
+    console.log("📖 First 200 chars:", formattedTranscript.substring(0, 200));
 
     // 🎯 Check AI provider and use appropriate model
     const provider = process.env.USE_AI_PROVIDER || process.env.NEXT_PUBLIC_USE_AI_PROVIDER;
+    console.log("🤖 AI Provider:", provider);
     
     let feedbackObject;
     
@@ -78,21 +91,26 @@ Return a JSON object with this structure:
 }
       `;
       
+      console.log("📤 Sending prompt to Bedrock...");
       const response = await aiService.chat([
         { role: 'system', content: 'You are a professional interviewer analyzing a mock interview. Return ONLY valid JSON, no markdown.' },
         { role: 'user', content: feedbackPrompt }
       ], { maxTokens: 2000, temperature: 0.7 });
+      console.log("📥 Bedrock response received:", response.content?.substring(0, 200));
       
       // Parse JSON from Bedrock response
       const jsonMatch = response.content.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
+        console.error('❌ No JSON found in Bedrock response:', response.content);
         throw new Error('Invalid JSON response from Bedrock');
       }
+      console.log("✅ JSON extracted from Bedrock response");
       feedbackObject = JSON.parse(jsonMatch[0]);
+      console.log("✅ Parsed feedback object:", feedbackObject);
       
     } else {
       // Default: Use Google Gemini
-      console.log('🎯 Using Google Gemini for feedback generation');
+      console.log('� Using Google Gemini for feedback generation');
       
       const result = await generateObject({
         model: google("gemini-2.0-flash-001", {
@@ -115,12 +133,17 @@ Please score the candidate from 0 to 100 in the following areas. Do not add cate
           "You are a professional interviewer analyzing a mock interview. Your task is to evaluate the candidate based on structured categories",
       });
       
+      console.log("📤 Sent prompt to Gemini...");
       feedbackObject = result.object;
+      console.log("✅ Received feedback from Gemini:", feedbackObject);
     }
 
+    console.log("🔍 Validating ObjectIds...");
     if (!ObjectId.isValid(interviewId) || !ObjectId.isValid(userId)) {
+      console.error("❌ Invalid ObjectId:", { interviewId, userId });
       throw new Error("Invalid interview or user identifier");
     }
+    console.log("✅ ObjectIds are valid");
 
     const feedback = {
       interviewId: new ObjectId(interviewId),
@@ -131,12 +154,17 @@ Please score the candidate from 0 to 100 in the following areas. Do not add cate
       areasForImprovement: feedbackObject.areasForImprovement,
       finalAssessment: feedbackObject.finalAssessment,
     };
+    
+    console.log("💾 Saving feedback to MongoDB...");
+    console.log("📊 Feedback object:", JSON.stringify(feedback, null, 2));
     const savedFeedbackId = await saveFeedback(feedback, feedbackId);
+    console.log("✅ Feedback SAVED successfully with ID:", savedFeedbackId);
 
     return { success: true, feedbackId: savedFeedbackId };
   } catch (error) {
-    console.error("Error saving feedback:", error);
-    return { success: false };
+    console.error("❌ ERROR in createFeedback:", error);
+    console.error("Stack trace:", error instanceof Error ? error.stack : "No stack trace");
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
   }
 }
 
