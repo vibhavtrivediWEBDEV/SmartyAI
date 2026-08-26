@@ -87,6 +87,35 @@ export async function executeSmartyCommand(
     }
     
     // ============================================
+    // STEP 1.5: CAREER AGENT ROUTING
+    // ============================================
+    
+    // Check if user is calling Career Agent
+    const careerKeywords = /\b(interview|career|job.application|prep|preparation)\b/i;
+    const hasCareerIntent = careerKeywords.test(trimmedCommand.toLowerCase());
+    
+    if (hasCareerIntent) {
+      console.log('🎯 [CommonCommandEngine] Career intent detected');
+      emit('thinking', 'Processing career request...');
+      
+      try {
+        const careerResult = await handleCareerCommand(trimmedCommand, { userId, emit, automationAPI });
+        
+        if (careerResult) {
+          return careerResult;
+        }
+      } catch (error: any) {
+        console.error('Career command error:', error);
+        emit('error', error.message);
+        return {
+          success: false,
+          message: `Error: ${error.message}`,
+          events
+        };
+      }
+    }
+    
+    // ============================================
     // STEP 2: UNIFIED INTENT RESOLUTION
     // ============================================
     
@@ -351,6 +380,22 @@ async function parseSpecialCommands(
   const { userId, userProfile, automationAPI } = context;
   const [baseCommand, ...args] = command.toLowerCase().split(" ");
   
+  // ============================================
+  // CAREER AGENT COMMANDS
+  // ============================================
+  
+  if (baseCommand === 'career') {
+    return await handleCareerCommand(command.slice(7), context, emit);
+  }
+  
+  // Check for interview-related commands
+  if (command.toLowerCase().match(/\b(interview|career)\b/)) {
+    const careerResult = await handleCareerCommand(command, context, emit);
+    if (careerResult) {
+      return careerResult;
+    }
+  }
+  
   // Helper functions
   const getUserName = () => userProfile?.fullName || "Guest User - Profile not loaded";
   const getUserTitle = () => userProfile?.headline || "Developer - Profile not loaded";
@@ -438,6 +483,13 @@ async function parseSpecialCommands(
 • feedback <id> - View interview feedback
 • newinterview - Create new interview
 
+CAREER AGENT:
+• career status - Check career mission progress
+• career tasks - View today's tasks
+• career pause - Pause career agent
+• career resume - Resume career agent
+• "I have an interview at [company] in [X] days" - Create career mission
+
 For AI assistance, just ask naturally!`
       };
     case "newinterview":
@@ -469,6 +521,116 @@ For AI assistance, just ask naturally!`
     default:
       return null; // Continue to AI processing
   }
+}
+
+/**
+ * Handle Career Agent Commands
+ */
+async function handleCareerCommand(
+  command: string,
+  context: CommandContext,
+  emit: Function
+): Promise<{ output: string | JSX.Element } | null> {
+  const { userId } = context;
+  const lowerCommand = command.toLowerCase();
+  
+  // Create new career mission
+  if (lowerCommand.includes('interview') && (lowerCommand.includes('have') || lowerCommand.includes('schedule') || lowerCommand.includes('in'))) {
+    emit('thinking', 'Creating career mission...');
+    
+    try {
+      // Extract interview details (simplified parsing)
+      const companyMatch = command.match(/(?:at|with)\s+([\w\s]+?)(?:\s+in|\s+for|\s*$)/i);
+      const roleMatch = command.match(/(?:for|as)\s+a?\s*([\w\s]+?)(?:\s+role|\s+position|\s*$)/i);
+      const dateMatch = command.match(/in\s+(\d+)\s+days?/i);
+      
+      const company = companyMatch?.[1]?.trim() || 'Company';
+      const role = roleMatch?.[1]?.trim() || 'Developer';
+      const daysUntil = dateMatch?.[1] ? parseInt(dateMatch[1]) : 7;
+      const interviewDate = new Date(Date.now() + daysUntil * 24 * 60 * 60 * 1000);
+      
+      // Call API to create mission
+      const response = await fetch('/api/career/mission', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company,
+          role,
+          interviewDate: interviewDate.toISOString()
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        return { output: `Error creating career mission: ${errorData.error || 'Unknown error'}` };
+      }
+      
+      const data = await response.json();
+      
+      return {
+        output: `✅ **Career Mission Created**
+        
+🏢 Company: ${company}
+💼 Role: ${role}
+📅 Interview: ${interviewDate.toLocaleDateString()}
+🎯 Days to prepare: ${daysUntil}
+
+Career Agent is analyzing and creating a preparation plan.
+
+Commands:
+• career status - Check progress
+• career tasks - View today's tasks
+• career pause/resume - Control agent`
+      };
+      
+    } catch (error: any) {
+      return { output: `Error creating career mission: ${error.message}` };
+    }
+  }
+  
+  // Check career status
+  if (lowerCommand.includes('career') && lowerCommand.includes('status')) {
+    emit('thinking', 'Checking career progress...');
+    
+    try {
+      // Call API instead of importing repository directly
+      const response = await fetch(`/api/career/mission?userId=${userId || 'anonymous'}`);
+      
+      if (!response.ok) {
+        return { output: 'Error checking career status' };
+      }
+      
+      const data = await response.json();
+      const missions = data.missions || [];
+      
+      if (missions.length === 0) {
+        return {
+          output: 'No active career missions. Say "I have an interview at [company] in [X] days" to create one.'
+        };
+      }
+      
+      const mission = missions[0];
+      const daysUntil = mission.interviewDate
+        ? Math.ceil((new Date(mission.interviewDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        : 'N/A';
+      
+      return {
+        output: `📊 **Career Mission Status**
+
+🏢 Company: ${mission.company}
+💼 Role: ${mission.role}
+📅 Interview: ${mission.interviewDate ? new Date(mission.interviewDate).toLocaleDateString() : 'TBD'}
+⏰ Days until interview: ${daysUntil}
+📈 Progress: ${mission.progress}%
+🎯 Status: ${mission.status}`
+      };
+      
+    } catch (error: any) {
+      return { output: `Error checking career status: ${error.message}` };
+    }
+  }
+  
+  return null;
 }
 
 // ============================================

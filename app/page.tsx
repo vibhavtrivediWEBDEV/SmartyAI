@@ -1,23 +1,23 @@
 import type { Metadata } from "next";
 
-import VibhavMarketingPage from "@/components/VibhavMarketing/VibhavMarketingPage";
+import CareerAgentMarketingPage from "@/components/marketing/CareerAgentPage";
 import { getSiteUrl } from "@/lib/site";
 import { generatePageMetadata, generateOrganizationJsonLd } from "@/lib/seo";
 
 export const metadata: Metadata = generatePageMetadata({
-  title: "AI Workspace for Developers, Teachers & Students | VibhavMacOS",
+  title: "SmartyAI — Your AI Career Agent | Interview Preparation on Autopilot",
   description:
-    "A browser-based macOS-inspired AI workspace with coding, teaching, study, productivity, search, and creative applications. Build, learn, and create with AI.",
+    "SmartyAI turns job opportunities into complete preparation systems. One AI agent that teaches, practices, schedules, and tracks your interview preparation journey.",
   path: "/",
 });
 
 const websiteJsonLd = {
   "@context": "https://schema.org",
   "@type": "WebSite",
-  name: "VibhavMacOS",
+  name: "SmartyAI",
   url: getSiteUrl(),
   description:
-    "A macOS-inspired AI workspace for developers, teachers, students, and creators.",
+    "Your AI Career Agent — turn job opportunities into complete preparation systems with intelligent teaching, practice, and scheduling.",
   potentialAction: {
     "@type": "SearchAction",
     target: `${getSiteUrl()}/apps?q={search_term_string}`,
@@ -44,7 +44,7 @@ export default function Home() {
           __html: JSON.stringify(organizationJsonLd).replace(/</g, "\\u003c"),
         }}
       />
-      <VibhavMarketingPage />
+      <CareerAgentMarketingPage />
     </>
   );
 }

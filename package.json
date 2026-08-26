@@ -16,6 +16,7 @@
         "@ai-sdk/google": "^1.1.25",
         "@aws-sdk/client-bedrock": "^3.1097.0",
         "@aws-sdk/client-bedrock-runtime": "^3.1097.0",
+        "@clerk/nextjs": "^7.8.2",
         "@daily-co/daily-js": "^0.91.0",
         "@google/genai": "^1.17.0",
         "@google/generative-ai": "^0.24.1",

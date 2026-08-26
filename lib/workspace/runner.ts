@@ -5,6 +5,7 @@
 
 import type { WorkspaceFile, WorkspaceSettings, ConsoleLogEntry } from "@/lib/types/workspace";
 import { bundleReact } from "@/lib/utils/reactBundler";
+import { executePython, executeJava, executeNode } from "./backendRunner";
 
 /**
  * Generate unique ID
@@ -36,21 +37,56 @@ export async function runWorkspace(
       case "html":
         return await runHTML(files);
 
-      case "node":
-      case "python":
-      case "java":
-        // Backend execution - return placeholder
+      case "node": {
+        // Node.js execution
+        const mainFile = files.find(f => f.path.endsWith(".js") || f.path.endsWith(".ts"));
+        if (!mainFile) {
+          return {
+            preview: "",
+            logs: [{ id: generateId(), type: "error", message: "No JavaScript/TypeScript file found", timestamp: new Date().toISOString() }],
+            error: "No JavaScript/TypeScript file found",
+          };
+        }
+        const nodeLogs = await executeNode(mainFile.content);
         return {
-          preview: generateBackendPlaceholder(settings.runtime),
-          logs: [
-            {
-              id: generateId(),
-              type: "info",
-              message: `${settings.runtime.charAt(0).toUpperCase() + settings.runtime.slice(1)} execution not available in browser preview`,
-              timestamp: new Date().toISOString(),
-            },
-          ],
+          preview: "",
+          logs: nodeLogs,
         };
+      }
+
+      case "python": {
+        // Python execution
+        const mainFile = files.find(f => f.path.endsWith(".py"));
+        if (!mainFile) {
+          return {
+            preview: "",
+            logs: [{ id: generateId(), type: "error", message: "No Python file found", timestamp: new Date().toISOString() }],
+            error: "No Python file found",
+          };
+        }
+        const pythonLogs = await executePython(mainFile.content);
+        return {
+          preview: "",
+          logs: pythonLogs,
+        };
+      }
+
+      case "java": {
+        // Java execution
+        const mainFile = files.find(f => f.path.endsWith(".java"));
+        if (!mainFile) {
+          return {
+            preview: "",
+            logs: [{ id: generateId(), type: "error", message: "No Java file found", timestamp: new Date().toISOString() }],
+            error: "No Java file found",
+          };
+        }
+        const javaLogs = await executeJava(mainFile.content);
+        return {
+          preview: "",
+          logs: javaLogs,
+        };
+      }
 
       default:
         return {

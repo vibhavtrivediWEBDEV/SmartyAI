@@ -86,7 +86,6 @@ interface VSCodeWithWorkspaceProps {
 const MIN_EDITOR_WIDTH = 300;
 const MAX_EDITOR_WIDTH = 1200;
 const DEFAULT_EDITOR_WIDTH_PERCENT = 60;
-const SAVE_DEBOUNCE_MS = 800;
 
 // ============ COMPONENT ============
 export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWorkspaceProps) {
@@ -111,6 +110,8 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
   const [previewMode, setPreviewMode] = useState<'new-window' | 'inline'>('new-window');
   const [preview, setPreview] = useState<string>('');
   const [showInlinePreview, setShowInlinePreview] = useState(false);
+  const [isPreviewActive, setIsPreviewActive] = useState(false); // Track if preview window is open
+  const previewRefreshTimeout = useRef<NodeJS.Timeout | null>(null);
   const [editorWidth, setEditorWidth] = useState<number>(DEFAULT_EDITOR_WIDTH_PERCENT);
   const [isDraggingDivider, setIsDraggingDivider] = useState(false);
   
@@ -262,9 +263,7 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
     }
   };
 
-  // Debounced save
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
+  // Track content changes without auto-saving
   const updateFileContent = (path: string, content: string) => {
     // Update local content
     fileContentsRef.current.set(path, content);
@@ -273,23 +272,21 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
     setOpenFiles(prev => 
       prev.map(f => f.path === path ? { ...f, hasUnsavedChanges: true } : f)
     );
-
-    // Debounced save
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-    
-    saveTimeoutRef.current = setTimeout(() => {
-      saveFile(path, content);
-    }, SAVE_DEBOUNCE_MS);
   };
 
   const saveFile = async (path: string, content: string) => {
-    if (!activeWorkspace) return;
+    if (!activeWorkspace) {
+      console.error('❌ No active workspace loaded');
+      addConsoleLog('error', 'No active workspace loaded');
+      return;
+    }
 
+    console.log('💾 Saving to MongoDB:', { path, workspaceId: activeWorkspace.id });
     setIsSaving(true);
+    addConsoleLog('info', `Saving ${path}...`);
+    
     try {
-      const response = await fetch(`/api/workspaces/${activeWorkspace.id}/files`, {
+      const response = await fetch(`http://localhost:3001/api/test-workspaces/${activeWorkspace.id}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -300,14 +297,72 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
       });
 
       if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Saved to MongoDB:', result);
+        
+        // Update local workspace state
+        setActiveWorkspace(prev => {
+          if (!prev) return prev;
+          const fileIndex = prev.files.findIndex(f => f.path === path);
+          const updatedFiles = [...prev.files];
+          
+          if (fileIndex >= 0) {
+            // Update existing file
+            updatedFiles[fileIndex] = {
+              ...updatedFiles[fileIndex],
+              content,
+              lastModified: new Date(),
+            };
+          } else {
+            // Add new file
+            updatedFiles.push({
+              path,
+              content,
+              language: getLanguageFromExtension(path),
+              lastModified: new Date(),
+            });
+          }
+          
+          return { ...prev, files: updatedFiles };
+        });
+        
         // Mark as saved
         setOpenFiles(prev => 
           prev.map(f => f.path === path ? { ...f, hasUnsavedChanges: false } : f)
         );
-        addConsoleLog('log', `Saved ${path}`);
+        
+        addConsoleLog('success', `✓ Saved ${path} to MongoDB`);
+        
+        // Auto-refresh preview if active (only for frontend files)
+        const isFrontendFile = path.endsWith('.html') || path.endsWith('.css') || 
+                               path.endsWith('.js') || path.endsWith('.jsx') || 
+                               path.endsWith('.tsx');
+        
+        const isBackendFile = path.endsWith('.py') || path.endsWith('.java') || path.endsWith('.ts');
+        
+        if (isPreviewActive && isFrontendFile) {
+          addConsoleLog('info', 'Auto-refreshing preview...');
+          
+          // Clear previous timeout
+          if (previewRefreshTimeout.current) {
+            clearTimeout(previewRefreshTimeout.current);
+          }
+          
+          // Debounced refresh (800ms after save)
+          previewRefreshTimeout.current = setTimeout(() => {
+            runCode(); // Re-run the preview
+          }, 800);
+        } else if (isBackendFile) {
+          addConsoleLog('info', 'Backend file saved - no preview refresh needed');
+        }
+      } else {
+        const error = await response.json();
+        console.error('❌ Save failed:', error);
+        addConsoleLog('error', `Failed to save ${path}: ${error.error || 'Unknown error'}`);
       }
     } catch (error) {
-      addConsoleLog('error', `Failed to save ${path}`);
+      console.error('❌ Network error:', error);
+      addConsoleLog('error', `Failed to save ${path}: Network error`);
     } finally {
       setIsSaving(false);
     }
@@ -320,7 +375,7 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
     const fullPath = fileName.includes('/') ? fileName : fileName;
 
     try {
-      const response = await fetch(`/api/workspaces/${activeWorkspace.id}/files`, {
+      const response = await fetch(`http://localhost:3001/api/test-workspaces/${activeWorkspace.id}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -351,7 +406,7 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
     const gitkeepPath = `${folderName}/.gitkeep`;
     
     try {
-      const response = await fetch(`/api/workspaces/${activeWorkspace.id}/files`, {
+      const response = await fetch(`http://localhost:3001/api/test-workspaces/${activeWorkspace.id}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -379,7 +434,7 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
     if (!confirm(`Delete ${path}?`)) return;
 
     try {
-      const response = await fetch(`/api/workspaces/${activeWorkspace.id}/files`, {
+      const response = await fetch(`http://localhost:3001/api/test-workspaces/${activeWorkspace.id}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -402,7 +457,7 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
     if (!activeWorkspace) return;
 
     try {
-      const response = await fetch(`/api/workspaces/${activeWorkspace.id}/files`, {
+      const response = await fetch(`http://localhost:3001/api/test-workspaces/${activeWorkspace.id}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -438,30 +493,35 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
 
       const result = await response.json();
 
-      if (result.success && result.preview) {
-        setPreview(result.preview);
-        
+      if (result.success) {
+        // Add all logs from execution
         if (result.logs) {
           result.logs.forEach((log: ConsoleLog) => {
             addConsoleLog(log.type, log.message);
           });
         }
 
-        addConsoleLog('success', '✓ Build successful');
+        // Check if this is a backend language (Python, Java, Node)
+        const isBackendLanguage = activeWorkspace.runtime === 'python' || 
+                                   activeWorkspace.runtime === 'java' || 
+                                   activeWorkspace.runtime === 'node';
 
-        // DEBUG: Log preview content length
-        console.log('[VSCode] Preview content length:', result.preview?.length);
-        console.log('[VSCode] Preview mode:', previewMode);
-        console.log('[VSCode] openPreviewWindow exists:', !!openPreviewWindow);
+        if (isBackendLanguage) {
+          // Backend languages: Only show console output, NO preview window
+          // Logs already added above
+          setIsPreviewActive(false); // Ensure preview is not active
+        } else if (result.preview) {
+          // Frontend languages (React, HTML): Show preview
+          setPreview(result.preview);
+          setIsPreviewActive(true);
 
-        // FIX: Open preview immediately based on mode
-        if (previewMode === 'new-window' && openPreviewWindow) {
-          openPreviewWindow(result.preview, `Preview - ${activeWorkspace.name}`);
-          addConsoleLog('info', 'Preview opened in new window');
-        } else if (previewMode === 'inline') {
-          setShowInlinePreview(true);
-          setActiveConsoleTab('browser');
-          addConsoleLog('info', 'Preview loaded inline');
+          // Open preview window
+          if (previewMode === 'new-window' && openPreviewWindow) {
+            openPreviewWindow(result.preview, `Preview - ${activeWorkspace.name}`);
+          } else if (previewMode === 'inline') {
+            setShowInlinePreview(true);
+            setActiveConsoleTab('browser');
+          }
         }
       } else {
         addConsoleLog('error', result.error || 'Run failed');
@@ -482,7 +542,8 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
     if (!newProjectName.trim()) return;
 
     try {
-      const response = await fetch('/api/workspaces', {
+      // Use test endpoint (no auth required) - port 3001
+      const response = await fetch('http://localhost:3001/api/test-workspaces', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -513,7 +574,7 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
   const seedLoaderProject = async () => {
     try {
       addConsoleLog('log', 'Seeding loader project...');
-      const response = await fetch('/api/workspaces/seed', {
+      const response = await fetch('http://localhost:3001/api/test-workspaces/seed', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -867,12 +928,29 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
                 saveFile(activeFilePath, content);
               }
             }}
-            disabled={!openFiles.find(f => f.path === activeFilePath && f.hasUnsavedChanges) || isSaving}
-            className="flex items-center gap-1 rounded px-2 py-1 text-xs text-gray-400 hover:bg-[#2a2d2e] disabled:opacity-50"
+            disabled={isSaving}
+            className="flex items-center gap-1 rounded px-3 py-1.5 text-xs font-medium bg-[#37373d] text-blue-400 hover:bg-[#45454d] disabled:opacity-50 transition-colors"
           >
             {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            <span>Save</span>
+            <span>{isSaving ? 'Saving...' : 'Save'}</span>
+            {!isSaving && (
+              <span className="text-[10px] text-gray-500 ml-1">(⌘S)</span>
+            )}
           </button>
+          
+          {/* Auto-save Indicator */}
+          {openFiles.some(f => f.hasUnsavedChanges) && !isSaving && (
+            <div className="flex items-center gap-1 px-3 py-1 rounded bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-400">
+              <span className="font-bold">●</span>
+              <span>Unsaved Changes</span>
+            </div>
+          )}
+          {isSaving && (
+            <div className="flex items-center gap-2 px-3 py-1 rounded bg-blue-500/10 border border-blue-500/30 text-xs text-blue-400">
+              <Loader2 size={12} className="animate-spin" />
+              <span>Saving to MongoDB...</span>
+            </div>
+          )}
 
           {/* Preview Mode Toggle */}
           <div className="flex items-center gap-1 rounded bg-[#2a2d2e] px-2 py-1">
@@ -1024,11 +1102,38 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
                   wordWrap: 'on',
                   tabSize: 2,
                   scrollBeyondLastLine: false,
-                  quickSuggestions: true,
+                  // Enable IntelliSense
+                  quickSuggestions: {
+                    other: true,
+                    comments: false,
+                    strings: true,
+                  },
                   suggestOnTriggerCharacters: true,
-                  parameterHints: { enabled: true },
+                  acceptSuggestionOnEnter: 'on',
+                  wordBasedSuggestions: 'allDocuments',
+                  parameterHints: { 
+                    enabled: true,
+                    cycle: true,
+                  },
+                  // TypeScript/JavaScript specific
+                  jsDocCompletion: 'on',
+                  typescriptCompletionOptions: {
+                    completeFunctionCalls: true,
+                  },
+                  // Semantic highlighting
+                  'semanticHighlighting.enabled': true,
+                  // Format on type/paste
                   formatOnPaste: true,
                   formatOnType: true,
+                  //Brackets
+                  matchBrackets: 'always',
+                  autoClosingBrackets: 'always',
+                  autoClosingQuotes: 'always',
+                  autoIndent: 'advanced',
+                  // Colorization
+                  colorDecorators: true,
+                  renderLineHighlight: 'all',
+                  // Emmet
                   emmet: {
                     showExpandedAbbreviation: 'always',
                     showAbbreviationSuggestions: true,

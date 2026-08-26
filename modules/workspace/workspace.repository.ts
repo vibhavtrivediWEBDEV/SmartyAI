@@ -746,24 +746,104 @@ export async function updateFile(
   filePath: string,
   content: string
 ): Promise<boolean> {
-  const collection = await getCollection();
-  
-  const result = await collection.updateOne(
-    {
+  try {
+    const collection = await getCollection();
+    
+    console.log('[updateFile] Attempting to save:', { userId, workspaceId, filePath });
+    
+    // First check if workspace exists
+    const workspace = await collection.findOne({
       _id: new ObjectId(workspaceId),
       ownerId: new ObjectId(userId),
-      "files.path": filePath,
-    },
-    {
-      $set: {
-        "files.$.content": content,
-        "files.$.lastModified": new Date(),
-        updatedAt: new Date(),
-      },
+    });
+    
+    if (!workspace) {
+      console.error('[updateFile] Workspace not found:', { workspaceId, userId });
+      return false;
     }
-  );
-  
-  return result.modifiedCount > 0;
+    
+    console.log('[updateFile] Workspace found, checking files...', {
+      filesCount: workspace.files?.length || 0,
+      filesType: Array.isArray(workspace.files) ? 'array' : typeof workspace.files
+    });
+    
+    // Ensure files is an array
+    if (!workspace.files || !Array.isArray(workspace.files)) {
+      console.log('[updateFile] Files not initialized, creating file...');
+      const newFile: WorkspaceFile = {
+        path: filePath,
+        content,
+        language: inferLanguage(filePath),
+        lastModified: new Date(),
+      };
+      
+      const result = await collection.updateOne(
+        {
+          _id: new ObjectId(workspaceId),
+          ownerId: new ObjectId(userId),
+        },
+        {
+          $set: {
+            files: [newFile],
+            updatedAt: new Date(),
+          },
+        }
+      );
+      
+      console.log('[updateFile] Added first file:', result.modifiedCount > 0);
+      return result.modifiedCount > 0;
+    }
+    
+    const fileExists = workspace.files.some(f => f.path === filePath);
+    
+    if (!fileExists) {
+      // File doesn't exist, add it instead
+      console.log('[updateFile] File not found, adding new file:', filePath);
+      const newFile: WorkspaceFile = {
+        path: filePath,
+        content,
+        language: inferLanguage(filePath),
+        lastModified: new Date(),
+      };
+      
+      const result = await collection.updateOne(
+        {
+          _id: new ObjectId(workspaceId),
+          ownerId: new ObjectId(userId),
+        },
+        {
+          $push: { files: newFile } as any,
+          $set: { updatedAt: new Date() },
+        }
+      );
+      
+      console.log('[updateFile] Added new file:', result.modifiedCount > 0);
+      return result.modifiedCount > 0;
+    }
+    
+    // File exists, update it
+    console.log('[updateFile] Updating existing file:', filePath);
+    const result = await collection.updateOne(
+      {
+        _id: new ObjectId(workspaceId),
+        ownerId: new ObjectId(userId),
+        "files.path": filePath,
+      },
+      {
+        $set: {
+          "files.$.content": content,
+          "files.$.lastModified": new Date(),
+          updatedAt: new Date(),
+        },
+      }
+    );
+    
+    console.log('[updateFile] Update result:', { matchedCount: result.matchedCount, modifiedCount: result.modifiedCount });
+    return result.modifiedCount > 0;
+  } catch (error) {
+    console.error('[updateFile] Error:', error);
+    return false;
+  }
 }
 
 /**

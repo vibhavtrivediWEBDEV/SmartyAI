@@ -10,6 +10,7 @@ import { getFormattedCommands, getFormattedCommandsWithExamples } from "@/lib/he
 import { createAIService } from "@/lib/ai";
 import { useElevenTTS } from "./ElevenLabs";
 import { getUserAIContext, generateDesktopAssistantPrompt, type UserAIContext } from "@/lib/ai/userAIContext";
+import { setVoiceMode, isCareerVoiceActive } from "@/lib/voiceMode";
 
 export enum CallStatus {
     INACTIVE = "INACTIVE",
@@ -442,17 +443,34 @@ ${formattedCommands}
 
     useEffect(() => {
         const onCallStart = () => {
+            // ❌ Skip if Career Agent is active
+            if (isCareerVoiceActive()) {
+                addLog("⚠️ Career Agent is active, ignoring desktop call");
+                return;
+            }
+            
             setCallStatus(CallStatus.ACTIVE);
             addLog("📞 Voice assistant connected");
         };
 
         const onCallEnd = () => {
+            // ❌ Skip if Career Agent is active
+            if (isCareerVoiceActive()) {
+                addLog("⚠️ Career Agent is active, ignoring desktop call end");
+                return;
+            }
+            
             setCallStatus(CallStatus.INACTIVE);
             addLog("📞 Voice assistant disconnected");
             lastUserText.current = "";
         };
 
         const onMessage = (message: Message) => {
+            // ❌ Skip if Career Agent is active
+            if (isCareerVoiceActive()) {
+                return;
+            }
+            
             if (message.type === "transcript" && message.transcriptType === "final") {
                 setLastTranscript(message.transcript);
 
@@ -470,9 +488,22 @@ ${formattedCommands}
             }
         };
 
-        const onSpeechStart = () => setIsSpeaking(true);
-        const onSpeechEnd = () => setIsSpeaking(false);
+        const onSpeechStart = () => {
+            if (!isCareerVoiceActive()) {
+                setIsSpeaking(true);
+            }
+        };
+        
+        const onSpeechEnd = () => {
+            if (!isCareerVoiceActive()) {
+                setIsSpeaking(false);
+            }
+        };
+        
         const onError = (error: Error) => {
+            if (isCareerVoiceActive()) {
+                return;
+            }
             addLog(`❌ VAPI Error: ${error.message}`);
             console.error("VAPI error:", error);
         };

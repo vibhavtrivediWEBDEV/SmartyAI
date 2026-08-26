@@ -57,7 +57,7 @@ export async function createFeedback(params: CreateFeedbackParams) {
     
     let feedbackObject;
     
-    if (provider === 'bedrock') {
+    if (provider === 'bedrock' || provider === 'bedrock-mantle') {
       // Use Bedrock/GLM for feedback generation
       console.log('🎯 Using Bedrock/GLM for feedback generation');
       

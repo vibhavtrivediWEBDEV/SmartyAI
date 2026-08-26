@@ -48,6 +48,8 @@ import { FakeCursor } from "./FakeCursor"
 import { useElevenTTS } from "@/hooks/ElevenLabs"
 import { resolveSequence } from "@/lib/helper/helper"
 import { VoiceControlButton } from "./VoiceControlButton"
+import { CareerAgentVoice } from "./CareerAgentVoice"
+import { CareerAgentProgress } from "./CareerAgentProgress"
 import { getFormattedCommandsWithExamples } from "@/lib/helper/commandRegistry"
 import { useWindowLayout } from "@/hooks/useWindowLayout"
 import { SnapPreview } from "./SnapPreview"
@@ -116,6 +118,8 @@ interface WindowState {
   zIndex: number
   previousBounds?: { x: number; y: number; width: number; height: number } // For restore after maximize
   snapPosition?: 'left-50' | 'right-50' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'maximized' | null
+  previewContent?: string // For Preview window - allows content updates
+  previewTitle?: string // For Preview window title
 }
 
 interface IconItem {
@@ -296,6 +300,7 @@ export function Desktop() {
   // 🆕 Preview window state for VS Code
   const [previewContent, setPreviewContent] = useState<string | null>(null)
   const [previewWindowTitle, setPreviewWindowTitle] = useState<string>('Preview')
+  const [previewVersion, setPreviewVersion] = useState(0) // Force re-render on content change
 
   // 🆕 Ref to hold openPreviewWindow function (avoids circular dependency)
   const openPreviewWindowRef = useRef<((htmlContent: string, title?: string) => void) | null>(null)
@@ -1372,11 +1377,11 @@ export function Desktop() {
           break;
         case "Preview":
           // VS Code preview window - renders HTML content
-          // Content is passed via the `arg` parameter from openApplication
+          // Content is passed via state variables (previewContent, previewWindowTitle)
           const previewHtml = arg?.htmlContent || previewContent || '<html><body><p>No content</p></body></html>';
           const previewTitle = arg?.title || previewWindowTitle || 'Preview';
           component = <iframe
-            key={previewHtml}
+            key={`preview-iframe-${previewVersion}`}
             srcDoc={previewHtml}
             className="w-full h-full border-0 bg-white"
             title="Preview"
@@ -1544,6 +1549,11 @@ export function Desktop() {
         isMinimized: false,
         isMaximized: isAlwaysMax,
         zIndex: z,
+        // Store preview content for dynamic rendering
+        ...(appName === 'Preview' && arg?.htmlContent ? {
+          previewContent: arg.htmlContent,
+          previewTitle: arg?.title || 'Preview'
+        } : {})
       };
 
       // Update the ref immediately so rapid clicks cannot launch duplicates
@@ -1979,17 +1989,23 @@ export function Desktop() {
   const openPreviewWindowActual = useCallback((htmlContent: string, title: string = 'Preview') => {
     console.log('[openPreviewWindow] Called with content length:', htmlContent?.length);
     
-    // Close existing preview window if open
-    const existingPreview = openWindows.find(w => w.appName === 'Preview')
-    if (existingPreview) {
-      closeWindow(existingPreview.id)
-    }
+    // Check if preview window already exists
+    const existingPreview = openWindows.find(w => w.appName === 'Preview');
     
-    // Open new preview window after a short delay with the content
-    setTimeout(() => {
-      openApplication('Preview', 100, 100, undefined, { htmlContent, title })
-    }, 50)
-  }, [openWindows, closeWindow, openApplication])
+    if (existingPreview) {
+      // UPDATE existing window content
+      console.log('[openPreviewWindow] Updating content in existing window');
+      setOpenWindows(prev => prev.map(w => 
+        w.appName === 'Preview' 
+          ? { ...w, previewContent: htmlContent, previewTitle: title }
+          : w
+      ));
+    } else {
+      // Open new window with content
+      console.log('[openPreviewWindow] Opening new window');
+      openApplication('Preview', 100, 100, undefined, { htmlContent, title });
+    }
+  }, [openWindows, openApplication])
   
   // Set the ref so it can be called from VS Code component
   openPreviewWindowRef.current = openPreviewWindowActual
@@ -2741,31 +2757,47 @@ export function Desktop() {
             />
 
             {/* Render open windows */}
-            {openWindows.map((win) => (
-              <Window
-                key={win.id}
-                id={win.id}
-                title={win.title}
-                icon={win.icon}
-                appName={win.appName}
-                initialX={win.x}
-                initialY={win.y}
-                initialWidth={win.width}
-                initialHeight={win.height}
-                isMinimized={win.isMinimized}
-                isMaximized={win.isMaximized}
-                zIndex={50 + win.zIndex}
-                onClose={closeWindow}
-                onMinimize={minimizeWindow}
-                onFocus={bringToFront}
-                desktopRef={desktopRef}
-                themeColor={themeColor}
-                onDrag={handleWindowDrag}
-                onDragEnd={handleWindowDragEnd}
-              >
-                {win.component}
-              </Window>
-            ))}
+            {openWindows.map((win) => {
+              // Special handling for Preview window - create component dynamically
+              let windowContent = win.component;
+              if (win.appName === 'Preview' && win.previewContent) {
+                windowContent = (
+                  <iframe
+                    key={`preview-${win.id}-${win.previewContent.length}`}
+                    srcDoc={win.previewContent}
+                    className="w-full h-full border-0 bg-white"
+                    title="Preview"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                  />
+                );
+              }
+              
+              return (
+                <Window
+                  key={win.id}
+                  id={win.id}
+                  title={win.appName === 'Preview' && win.previewTitle ? win.previewTitle : win.title}
+                  icon={win.icon}
+                  appName={win.appName}
+                  initialX={win.x}
+                  initialY={win.y}
+                  initialWidth={win.width}
+                  initialHeight={win.height}
+                  isMinimized={win.isMinimized}
+                  isMaximized={win.isMaximized}
+                  zIndex={50 + win.zIndex}
+                  onClose={closeWindow}
+                  onMinimize={minimizeWindow}
+                  onFocus={bringToFront}
+                  desktopRef={desktopRef}
+                  themeColor={themeColor}
+                  onDrag={handleWindowDrag}
+                  onDragEnd={handleWindowDragEnd}
+                >
+                  {windowContent}
+                </Window>
+              );
+            })}
             
             {/* Snap Preview Overlay */}
             <SnapPreview style={snapPreview} visible={!!activeSnapZone} />
@@ -2859,6 +2891,21 @@ export function Desktop() {
               }}
             />
           )}
+          
+{/* CAREER AGENT: Dedicated Voice Pipeline - No interference with useDekstopAgent */}
+        <div style={{marginLeft:100 }}>
+            <CareerAgentVoice
+            openApplication={openApplication}
+            openWindows={openWindows}
+            setOpenWindows={setOpenWindows}
+            userContext={userContext}
+            userId={userContext?.userId}
+          />
+        </div>
+        
+        {/* CAREER AGENT: Progress Tracker - Shows active missions and progress */}
+        <CareerAgentProgress />
+        
         </TerminalProvider>
       </KeyboardProvider >
     </>

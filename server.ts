@@ -38,6 +38,17 @@ app.prepare().then(async () => {
     console.log(`🚀 Server ready on http://${hostname}:${port}`)
     console.log(`🔌 Socket.io WebSocket enabled`)
     
+    // Initialize Career Agent Orchestrator
+    console.log('🎯 Initializing Career Agent Orchestrator...')
+    try {
+      const { initializeCareerOrchestrator, startCareerScheduler } = await import('./lib/career')
+      await initializeCareerOrchestrator()
+      startCareerScheduler()
+      console.log('✅ Career Agent initialized')
+    } catch (error) {
+      console.error('⚠️ Career Agent initialization failed:', error)
+    }
+    
     // Auto-setup Telegram webhook (ensures webhook is always connected when server starts)
     console.log(`🔍 Debug: dev=${dev}, TELEGRAM_BOT_TOKEN exists=${!!process.env.TELEGRAM_BOT_TOKEN}`)
     
