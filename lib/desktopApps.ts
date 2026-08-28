@@ -47,6 +47,7 @@ export const DESKTOP_APPS: DesktopAppDefinition[] = [
   { name: 'Youtube', displayName: 'YouTube', description: 'Watch videos and discover channels.', category: 'Entertainment', icon: 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/youtube.svg' },
   { name: 'TV', displayName: 'Apple TV', description: 'Browse visual news and entertainment.', category: 'Entertainment', icon: 'https://framerusercontent.com/images/1pORyCnfgAxpXWyCa1l7s8IJeK0.png' },
   { name: 'game', displayName: 'Games', description: 'Launch the desktop game center.', category: 'Entertainment', icon: '/app.svg' },
+  { name: 'Career', displayName: 'Career Agent', description: 'AI-powered interview preparation assistant. Manage career missions with step-by-step guidance.', category: 'Productivity', icon: 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 96 96\'%3E%3ClinearGradient id=\'grad1\' x1=\'0%25\' y1=\'0%25\' x2=\'100%25\' y2=\'100%25\'%3E%3Cstop offset=\'0%25\' style=\'stop-color:%2310B981\'/%3E%3Cstop offset=\'100%25\' style=\'stop-color:%23059669\'/%3E%3C/linearGradient%3E%3Crect width=\'96\' height=\'96\' rx=\'20\' fill=\'url(%23grad1)\'/%3E%3Cpath d=\'M48 20c-8.8 0-16 7.2-16 16v8c0 2.2 1.8 4 4 4h4c0 4.4 3.6 8 8 8s8-3.6 8-8h4c2.2 0 4-1.8 4-4v-8c0-8.8-7.2-16-16-16z\' fill=\'white\'/%3E%3Ccircle cx=\'48\' cy=\'36\' r=\'12\' fill=\'white\'/%3E%3Cpath d=\'M36 52v8c0 2.2 1.8 4 4 4h16c2.2 0 4-1.8 4-4v-8\' stroke=\'white\' stroke-width=\'3\' fill=\'none\'/%3E%3Cpath d=\'M32 68h32M40 68v8M56 68v8\' stroke=\'white\' stroke-width=\'3\' stroke-linecap=\'round\'/%3E%3C/svg%3E' },
   { name: "Don't Look", displayName: 'Trash', description: 'Open the mysterious Trash folder.', category: 'System', icon: '/file.svg' },
 ]
 
@@ -58,6 +59,7 @@ export const DEFAULT_DOCK_APPS = [
   'Messages',
   'Mail',
   'Calendar',
+  'Career',
   'Music',
   'Terminal',
   'vscode',

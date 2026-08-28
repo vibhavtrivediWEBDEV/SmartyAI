@@ -27,6 +27,7 @@ interface AppStoreProps {
   onMinimize?: () => void
   onMaximize?: () => void
   maximized?: boolean
+  openApplication?: (appName: string, x?: number, y?: number, command?: string, arg?: any) => void
 }
 
 const TrafficLights = ({ onClose, onMinimize, onMaximize, maximized = false }: {
@@ -83,7 +84,7 @@ const StarRating = ({ rating }: { rating: number }) => {
   )
 }
 
-export default function AppStoreApp({ onClose, onMinimize, onMaximize, maximized = false }: AppStoreProps) {
+export default function AppStoreApp({ onClose, onMinimize, onMaximize, maximized = false, openApplication }: AppStoreProps) {
   const { settings } = useSettings()
   const isDarkMode = settings.darkMode
   const [searchQuery, setSearchQuery] = useState("")
@@ -265,6 +266,21 @@ export default function AppStoreApp({ onClose, onMinimize, onMaximize, maximized
       ageRating: "9+",
       featured: true,
     },
+    {
+      id: "13",
+      name: "Career Agent",
+      developer: "SmartyAI",
+      category: "productivity",
+      rating: 5,
+      reviews: 1500,
+      price: "Free",
+      icon: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3ClinearGradient id='grad1' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%2310B981'/%3E%3Cstop offset='100%25' style='stop-color:%23059669'/%3E%3C/linearGradient%3E%3Crect width='96' height='96' rx='20' fill='url(%23grad1)'/%3E%3Cpath d='M48 20c-8.8 0-16 7.2-16 16v8c0 2.2 1.8 4 4 4h4c0 4.4 3.6 8 8 8s8-3.6 8-8h4c2.2 0 4-1.8 4-4v-8c0-8.8-7.2-16-16-16z' fill='white'/%3E%3Ccircle cx='48' cy='36' r='12' fill='white'/%3E%3Cpath d='M36 52v8c0 2.2 1.8 4 4 4h16c2.2 0 4-1.8 4-4v-8' stroke='white' stroke-width='3' fill='none'/%3E%3Cpath d='M32 68h32M40 68v8M56 68v8' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E",
+      description: "AI-powered interview preparation assistant. Manage your career missions with step-by-step guidance.",
+      size: "12.4 MB",
+      ageRating: "4+",
+      featured: true,
+      downloaded: false,
+    },
   ]
 
   const filteredApps = apps.filter((app) => {
@@ -276,8 +292,14 @@ export default function AppStoreApp({ onClose, onMinimize, onMaximize, maximized
 
   const featuredApps = apps.filter((app) => app.featured)
 
-  const handleDownload = (appId: string) => {
+  const handleDownload = (appId: string, appName?: string) => {
     setDownloadedApps((prev) => new Set(prev).add(appId))
+    
+    // Handle special apps
+    if (appName === "Career Agent" && openApplication) {
+      // Open the Career app
+      openApplication('Career')
+    }
   }
 
   return (
@@ -413,7 +435,9 @@ export default function AppStoreApp({ onClose, onMinimize, onMaximize, maximized
                       onClick={(e) => {
                         e.stopPropagation()
                         if (!downloadedApps.has(app.id) && !app.downloaded) {
-                          handleDownload(app.id)
+                          handleDownload(app.id, app.name)
+                        } else if (openApplication && app.name === "Career Agent") {
+                          openApplication('Career')
                         }
                       }}
                       className={`px-4 py-1 rounded-full text-sm font-medium transition ${
@@ -468,7 +492,9 @@ export default function AppStoreApp({ onClose, onMinimize, onMaximize, maximized
             <button
               onClick={() => {
                 if (!downloadedApps.has(selectedApp.id) && !selectedApp.downloaded) {
-                  handleDownload(selectedApp.id)
+                  handleDownload(selectedApp.id, selectedApp.name)
+                } else if (openApplication && selectedApp.name === "Career Agent") {
+                  openApplication('Career')
                 }
               }}
               className={`w-full py-2 rounded-lg font-semibold text-lg mb-6 transition ${

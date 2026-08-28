@@ -1416,7 +1416,7 @@ export function Desktop() {
           defaultHeight = 650;
           break;
         case "App Store":
-          component = <AppStoreApp />;
+          component = <AppStoreApp openApplication={openApplication} />;
           title = "App Store";
           iconPath = "/icons/todo.png";
           defaultWidth = desktopRef.current
@@ -1425,6 +1425,14 @@ export function Desktop() {
           defaultHeight = desktopRef.current
             ? desktopRef.current.offsetHeight
             : window.innerHeight;
+          break;
+        case "Career":
+          const CareerApp = dynamic(() => import("./CareerApp").then(mod => mod.CareerApp), { ssr: false });
+          component = <CareerApp openApplication={openApplication} userContext={userContext} userId={userContext?.userId} />;
+          title = "Career Agent";
+          iconPath = "/icons/career.png";
+          defaultWidth = 1100;
+          defaultHeight = 750;
           break;
         default:
           console.warn(`Application "${appName}" not found.`);

@@ -3,11 +3,15 @@
  * 
  * AI endpoints for Career Agent
  * Handles job profile extraction, plan generation, etc.
+ * 
+ * CRITICAL: Uses persistent CareerSession for conversation state
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUserId } from '@/lib/auth/session';
 import { getAIService } from '@/lib/ai';
+import * as sessionRepo from '@/modules/career/careerSession.repository';
+import { CareerSessionManager } from '@/lib/career/CareerSessionManager';
 
 /**
  * POST /api/career/ai
@@ -29,7 +33,7 @@ export async function POST(req: NextRequest) {
     
     switch (task) {
       case 'conversation':
-        return await handleConversation(data);
+        return await handleConversation(userId, data);
       
       case 'extract_job_profile':
         return await extractJobProfile(data);
@@ -39,6 +43,18 @@ export async function POST(req: NextRequest) {
       
       case 'generate_questions':
         return await generateInterviewQuestions(data);
+      
+      case 'generate_calendar_events':
+        return await generateCalendarEvents(data);
+      
+      case 'generate_notes':
+        return await generateNotesContent(data);
+      
+      case 'generate_learning_plan':
+        return await generateLearningPlan(data);
+      
+      case 'generate_interview_session':
+        return await generateInterviewSession(data);
       
       default:
         return NextResponse.json(
@@ -57,69 +73,148 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * Extract Job Profile
+ * Extract Job Profile AND Compare with User Profile
  */
 async function extractJobProfile(data: {
   jobDescription: string;
   company: string;
   role: string;
+  userProfile?: any; // User's actual profile from database
 }) {
-  const { jobDescription, company, role } = data;
-  
-  // Use existing AI service
-  const aiService = await getAIService();
-  
-  const prompt = `Extract structured job profile from this job description for a ${role} position at ${company}.
+  try {
+    const { jobDescription, company, role, userProfile } = data;
+    
+    console.log('[extractJobProfile] Starting analysis:', {
+      company,
+      role,
+      hasJobDescription: !!jobDescription,
+      hasUserProfile: !!userProfile,
+      userSkillsCount: userProfile?.professional?.skills?.length || 0
+    });
+    
+    // Use existing AI service
+    const aiService = await getAIService();
+    
+    // Build user profile summary for AI prompt
+    const userProfileSummary = userProfile ? `
+USER PROFILE (from database):
+- Name: ${userProfile.personal?.fullName || 'Not provided'}
+- Headline: ${userProfile.personal?.headline || 'Not provided'}
+- Summary: ${userProfile.personal?.summary?.substring(0, 200) || 'Not provided'}...
+- Skills: ${userProfile.professional?.skills?.slice(0, 10).join(', ') || 'Not provided'}
+- Experience: ${userProfile.professional?.experience?.length || 0} positions
+- Education: ${userProfile.professional?.education?.length || 0} entries
+` : 'No user profile data available';
 
-Job Description:
-${jobDescription}
+    const prompt = `Analyze this job description and compare it with the user's profile.
+
+JOB DESCRIPTION:
+Company: ${company}
+Role: ${role}
+Description: ${jobDescription}
+
+${userProfileSummary}
+
+TASKS:
+1. Extract structured job profile from the job description
+2. Identify skill gaps between user's current skills and job requirements
+3. Suggest focus areas for interview preparation
 
 Return JSON with:
 {
-  "company": "${company}",
-  "role": "${role}",
-  "experienceLevel": "extract from JD",
-  "requiredSkills": ["array of required skills"],
-  "preferredSkills": ["array of preferred skills"],
-  "technologies": ["array of technologies mentioned"],
-  "responsibilities": ["array of key responsibilities"],
-  "interviewTopics": ["array of likely interview topics based on skills/responsibilities"],
-  "codingTopics": ["array of coding topics"],
-  "softSkills": ["array of soft skills mentioned"],
-  "jobDescription": "original JD text"
+  "jobProfile": {
+    "company": "${company}",
+    "role": "${role}",
+    "experienceLevel": "extract from JD",
+    "requiredSkills": ["array of required skills"],
+    "preferredSkills": ["array of preferred skills"],
+    "technologies": ["array of technologies mentioned"],
+    "responsibilities": ["array of key responsibilities"],
+    "interviewTopics": ["array of likely interview topics based on skills/responsibilities"],
+    "codingTopics": ["array of coding topics"],
+    "softSkills": ["array of soft skills mentioned"]
+  },
+  "userProfile": {
+    "strengths": ["skills user has that match job requirements"],
+    "weaknesses": ["skills user lacks for this role"],
+    "experience": ["array of relevant experience"],
+    "education": ["education details"]
+  },
+  "skillGaps": [
+    {
+      "skill": "skill name",
+      "status": "critical|moderate|nice-to-have",
+      "category": "technical|soft-skill|domain"
+    }
+  ],
+  "focusAreas": ["priority areas for interview prep"]
 }
 
 Only return valid JSON.`;
 
-  const response = await aiService.complete(prompt);
-  
-  try {
-    // Parse JSON from response
-    const jsonMatch = response.content.match(/\\{[\\s\\S]*\\}/);
-    if (jsonMatch) {
-      const jobProfile = JSON.parse(jsonMatch[0]);
-      jobProfile.extractedAt = new Date();
-      return NextResponse.json(jobProfile);
+    console.log('[extractJobProfile] Calling AI service...');
+    const response = await aiService.complete(prompt);
+    console.log('[extractJobProfile] AI response received');
+    
+    try {
+      // Parse JSON from response
+      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const result = JSON.parse(jsonMatch[0]);
+        result.jobProfile.extractedAt = new Date();
+        console.log('[extractJobProfile] Successfully parsed JSON result');
+        return NextResponse.json(result);
+      } else {
+        console.error('[extractJobProfile] No JSON found in response');
+      }
+    } catch (parseError) {
+      console.error('[extractJobProfile] JSON parse error:', parseError);
     }
-  } catch (parseError) {
-    console.error('JSON parse error:', parseError);
+    
+    // Fallback: Return basic structure with skill gaps
+    console.log('[extractJobProfile] Using fallback response');
+    const userSkills = userProfile?.professional?.skills || [];
+    const requiredSkills = ['React', 'TypeScript', 'System Design']; // Basic fallback
+    
+    const skillGaps = requiredSkills
+      .filter(skill => !userSkills.includes(skill))
+      .map(skill => ({
+        skill,
+        status: 'critical',
+        category: 'technical'
+      }));
+    
+    return NextResponse.json({
+      jobProfile: {
+        company,
+        role,
+        experienceLevel: 'Not specified',
+        requiredSkills,
+        preferredSkills: [],
+        technologies: [],
+        responsibilities: [],
+        interviewTopics: [],
+        codingTopics: [],
+        softSkills: [],
+        extractedAt: new Date()
+      },
+      userProfile: {
+        strengths: userSkills.slice(0, 3),
+        weaknesses: [],
+        experience: [],
+        education: []
+      },
+      skillGaps,
+      focusAreas: ['Interview preparation', 'Technical skills']
+    });
+  } catch (error: any) {
+    console.error('[extractJobProfile] Error:', error.message);
+    console.error('[extractJobProfile] Stack:', error.stack);
+    return NextResponse.json(
+      { error: 'Failed to extract job profile: ' + error.message },
+      { status: 500 }
+    );
   }
-  
-  // Fallback: Return basic structure
-  return NextResponse.json({
-    company,
-    role,
-    experienceLevel: 'Not specified',
-    requiredSkills: [],
-    preferredSkills: [],
-    technologies: [],
-    responsibilities: [],
-    interviewTopics: [],
-    codingTopics: [],
-    softSkills: [],
-    jobDescription,
-    extractedAt: new Date()
-  });
 }
 
 /**
@@ -211,170 +306,394 @@ async function generateInterviewQuestions(data: {
 }
 
 /**
- * Handle Conversational AI
- * Manages interactive dialogue to gather career mission data
+ * Generate Calendar Events - AI Powered
  */
-async function handleConversation(data: {
-  userInput: string;
-  currentState: string;
-  missionData: any;
-  userContext: any;
+async function generateCalendarEvents(data: {
+  company: string;
+  role: string;
+  jobProfile: any;
+  userProfile: any;
+  skillGaps: any[];
+  interviewDate: string;
+  startDate: string;
+  daysUntilInterview: number;
 }) {
-  const { userInput, currentState, missionData, userContext } = data;
+  const { company, role, jobProfile, userProfile, skillGaps, interviewDate, startDate, daysUntilInterview } = data;
   
   const aiService = await getAIService();
   
-  // Initialize missionData if empty
-  const currentMission = missionData || {};
-  
-  // CHECK IF USER IS CONFIRMING MISSION CREATION
-  if (currentState === 'confirming' || currentState === 'complete') {
-    const userConfirmed = userInput.toLowerCase().includes('yes') || 
-                          userInput.toLowerCase().includes('create') ||
-                          userInput.toLowerCase().includes('confirm') ||
-                          userInput.toLowerCase().includes('sure') ||
-                          userInput.toLowerCase().includes('go ahead');
-    
-    if (userConfirmed && currentMission.company && currentMission.role && currentMission.interviewDate) {
-      return NextResponse.json({
-        response: "Perfect! Creating your career mission now...",
-        nextState: {
-          stage: 'complete',
-          missionData: currentMission,
-          awaitingInput: null
-        },
-        shouldCreateMission: true
-      });
-    }
-  }
-  
-  // Extract information from user input
-  let updatedMissionData = { ...currentMission };
-  
-  // IMPROVED entity extraction - more flexible patterns
-  
-  // Company patterns (flexible)
-  const companyPatterns = [
-    /(?:at|with)\s+([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)(?:\s|$)/i, // "at Google" or "at Goldman Sachs"
-    /^([A-Z][A-Za-z]+)(?:\s|$)/i, // Just company name at start (e.g., "Google")
-    /company[:\s]+([A-Z][A-Za-z\s]+?)(?:\s|and|$)/i,
-    /interview(?:ing)?\s+(?:at|with)\s+([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)/i
-  ];
-  
-  for (const pattern of companyPatterns) {
-    const match = userInput.match(pattern);
-    if (match && match[1] && match[1].length > 2 && match[1].length < 30) {
-      updatedMissionData.company = match[1].trim();
-      break;
-    }
-  }
-  
-  // Role patterns (flexible)
-  const rolePatterns = [
-    /(?:role|position|title|job|as)\s+(?:a\s+)?([A-Za-z\s]+?)(?:\s+(?:at|for|with|in)|$)/i,
-    /(?:applying|apply|apply for|hired as)\s+(?:a\s+|for\s+)?([A-Za-z\s]+?)(?:\s+(?:at|for|with)|$)/i,
-    /^([A-Za-z\s]+?)\s+(?:role|position|developer|engineer|manager)/i
-  ];
-  
-  for (const pattern of rolePatterns) {
-    const match = userInput.match(pattern);
-    if (match && match[1] && match[1].length > 3) {
-      updatedMissionData.role = match[1].trim();
-      break;
-    }
-  }
-  
-  // Date patterns (flexible)
-  const datePatterns = [
-    /(?:in|within|after)\s+(\d+)\s+days?/i,
-    /(?:next|this|coming)\s+(\w+)/i,
-    /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/, // Date format MM/DD/YYYY
-    /(\w+\s+\d{1,2},?\s+\d{4})/i // Month Day, Year
-  ];
-  
-  for (const pattern of datePatterns) {
-    const match = userInput.match(pattern);
-    if (match) {
-      if (match[1] && match[1].match(/^\d+$/)) {
-        // "in 5 days" format
-        const days = parseInt(match[1]);
-        const interviewDate = new Date();
-        interviewDate.setDate(interviewDate.getDate() + days);
-        updatedMissionData.interviewDate = interviewDate.toISOString();
-      }
-      break;
-    }
-  }
-  
-  // Determine what's missing
-  const missing = [];
-  if (!updatedMissionData.company) missing.push('company');
-  if (!updatedMissionData.role) missing.push('role');
-  if (!updatedMissionData.interviewDate) missing.push('interview date');
-  
-  // Generate response based on what's missing
-  let response = '';
-  let nextState = 'gathering';
-  let shouldCreateMission = false;
-  
-  if (missing.length === 0) {
-    // All data collected
-    response = `Perfect! Let me confirm:\n\nCompany: ${updatedMissionData.company}\nRole: ${updatedMissionData.role}\nInterview: ${new Date(updatedMissionData.interviewDate).toLocaleDateString()}\n\nShould I create this career mission now?`;
-    nextState = 'confirming';
-  } else {
-    // Ask for missing information
-    const nextMissing = missing[0];
-    if (nextMissing === 'company') {
-      response = "Great! Which company are you interviewing with?";
-    } else if (nextMissing === 'role') {
-      response = `What role or position at ${updatedMissionData.company || 'the company'}?`;
-    } else if (nextMissing === 'interview date') {
-      response = "When is your interview? You can say something like 'in 5 days' or give a specific date.";
-    }
-  }
-  
-  const prompt = `You are a Career Mission SCHEDULER, NOT an interviewer.
+  const prompt = `Generate a ${daysUntilInterview}-day interview preparation calendar schedule for ${company} ${role}.
 
-Your ONLY job: Collect 3 pieces of information to schedule a career preparation mission:
-1. Company name
-2. Job role/title  
-3. Interview date
+User Profile:
+- Skills: ${userProfile?.skills?.join(', ') || 'Not provided'}
+- Experience: ${userProfile?.experience?.join(', ') || 'Not provided'}
+- Weaknesses: ${userProfile?.weaknesses?.join(', ') || 'Not provided'}
 
-User said: "${userInput}"
-Extracted data: Company="${updatedMissionData.company || 'unknown'}", Role="${updatedMissionData.role || 'unknown'}", Interview="${updatedMissionData.interviewDate || 'unknown'}"
-Still need: ${missing.join(', ') || 'nothing - all data collected'}
+Job Requirements:
+- Required Skills: ${jobProfile?.requiredSkills?.join(', ') || 'Not provided'}
+- Technologies: ${jobProfile?.technologies?.join(', ') || 'Not provided'}
+- Interview Topics: ${jobProfile?.interviewTopics?.join(', ') || 'Not provided'}
 
-CRITICAL RULES:
-- DO NOT ask technical questions (NO React, NO coding questions)
-- DO NOT conduct interviews
-- DO NOT ask about skills or experience
-- ONLY ask for missing info: company, role, or date
-- Be brief (max 15 words)
-- If all data collected, confirm: "Create mission for [Company] [Role] interview on [Date]?"
+Skill Gaps to Address:
+${skillGaps.map(g => `- ${g.skill}: ${g.status}`).join('\n')}
 
-Your response:`;
+Generate exactly 12 calendar events spread across the ${daysUntilInterview} days. Each event should be 1-2 hours long.
+
+Return JSON array:
+{
+  "events": [
+    {
+      "title": "Day 1 - Topic Name",
+      "date": "YYYY-MM-DD",
+      "startTime": "HH:MM",
+      "endTime": "HH:MM",
+      "description": "What to study/practice",
+      "location": "Online",
+      "reminder": 30
+    }
+  ]
+}
+
+Only return valid JSON.`;
+
+  const response = await aiService.complete(prompt);
   
-  const aiResponse = await aiService.complete(prompt);
-  
-  // Use AI response if available, otherwise use fallback
-  const finalResponse = aiResponse.content?.trim() || response;
-  
-  // If all data collected, check if we should create mission
-  if (missing.length === 0) {
-    shouldCreateMission = userInput.toLowerCase().includes('yes') || 
-                          userInput.toLowerCase().includes('create') ||
-                          userInput.toLowerCase().includes('confirm');
+  try {
+    const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const result = JSON.parse(jsonMatch[0]);
+      return NextResponse.json(result);
+    }
+  } catch (parseError) {
+    console.error('JSON parse error:', parseError);
   }
   
+  // Fallback: Basic events
   return NextResponse.json({
-    response: finalResponse,
-    nextState: {
-      stage: nextState,
-      missionData: updatedMissionData,
-      awaitingInput: missing[0] || null
-    },
-    shouldCreateMission: shouldCreateMission && missing.length === 0
+    events: generateBasicCalendarEvents(company, role, daysUntilInterview, new Date(startDate))
   });
+}
+
+/**
+ * Generate Notes Content - AI Powered
+ */
+async function generateNotesContent(data: {
+  company: string;
+  role: string;
+  jobProfile: any;
+  userProfile: any;
+  skillGaps: any[];
+}) {
+  const { company, role, jobProfile, userProfile, skillGaps } = data;
+  
+  const aiService = await getAIService();
+  
+  const prompt = `Generate comprehensive interview preparation notes for ${company} ${role} position.
+
+User Profile:
+- Skills: ${userProfile?.skills?.join(', ') || 'Not provided'}
+- Experience: ${userProfile?.experience?.join(', ') || 'Not provided'}
+
+Job Requirements:
+- Required Skills: ${jobProfile?.requiredSkills?.join(', ') || 'Not provided'}
+- Technologies: ${jobProfile?.technologies?.join(', ') || 'Not provided'}
+
+Generate 8 detailed notes covering:
+1. Company Research
+2. Role-specific Technical Topics
+3. Behavioral Questions
+4. System Design (if applicable)
+5. Coding Practice Topics
+6. Past Experience Talking Points
+7. Questions to Ask Interviewer
+8. Common Mistakes to Avoid
+
+Return JSON:
+{
+  "notes": [
+    {
+      "title": "Note Title",
+      "content": "Detailed markdown content...",
+      "category": "career",
+      "tags": ["tag1", "tag2"]
+    }
+  ]
+}
+
+Only return valid JSON.`;
+
+  const response = await aiService.complete(prompt);
+  
+  try {
+    const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const result = JSON.parse(jsonMatch[0]);
+      return NextResponse.json(result);
+    }
+  } catch (parseError) {
+    console.error('JSON parse error:', parseError);
+  }
+  
+  // Fallback
+  return NextResponse.json({
+    notes: [{
+      title: `${company} - ${role} Interview Preparation`,
+      content: `# Interview Preparation\n\nCompany: ${company}\nRole: ${role}\n\nGenerated by AI Career Agent`,
+      category: 'career',
+      tags: ['interview']
+    }]
+  });
+}
+
+/**
+ * Generate Learning Plan - AI Powered
+ */
+async function generateLearningPlan(data: {
+  company: string;
+  role: string;
+  jobProfile: any;
+  userProfile: any;
+  skillGaps: any[];
+  daysUntilInterview: number;
+}) {
+  const { company, role, jobProfile, userProfile, skillGaps, daysUntilInterview } = data;
+  
+  const aiService = await getAIService();
+  
+  const prompt = `Generate a ${daysUntilInterview}-day learning plan for ${company} ${role} interview.
+
+Skill Gaps to Address:
+${skillGaps.map(g => `- ${g.skill}: ${g.status}`).join('\n')}
+
+Topics to Master:
+${jobProfile?.interviewTopics?.join(', ') || 'General interview prep'}
+
+Generate 6 teacher lessons and 15 coding exercises.
+
+Return JSON:
+{
+  "lessons": [
+    {
+      "topic": "Lesson Topic",
+      "duration": 45,
+      "concepts": ["concept1", "concept2"],
+      "exercises": ["exercise1"]
+    }
+  ],
+  "codingExercises": [
+    {
+      "title": "Exercise Name",
+      "difficulty": "easy|medium|hard",
+      "topics": ["topic1"],
+      "description": "Brief description"
+    }
+  ],
+  "topics": ["React", "System Design"],
+  "courses": ["Course Name"],
+  "practiceProblems": ["Problem 1", "Problem 2"]
+}
+
+Only return valid JSON.`;
+
+  const response = await aiService.complete(prompt);
+  
+  try {
+    const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const result = JSON.parse(jsonMatch[0]);
+      return NextResponse.json(result);
+    }
+  } catch (parseError) {
+    console.error('JSON parse error:', parseError);
+  }
+  
+  // Fallback
+  return NextResponse.json({
+    lessons: [],
+    codingExercises: [],
+    topics: jobProfile?.interviewTopics || [],
+    courses: [],
+    practiceProblems: []
+  });
+}
+
+/**
+ * Generate Interview Session - AI Powered
+ */
+async function generateInterviewSession(data: {
+  company: string;
+  role: string;
+  jobProfile: any;
+  userProfile: any;
+}) {
+  const { company, role, jobProfile, userProfile } = data;
+  
+  const aiService = await getAIService();
+  
+  const prompt = `Generate interview questions for ${company} ${role} position.
+
+User Skills: ${userProfile?.skills?.join(', ') || 'Not provided'}
+Required Skills: ${jobProfile?.requiredSkills?.join(', ') || 'Not provided'}
+
+Generate 24 interview questions (8 technical, 8 behavioral, 8 coding).
+
+Return JSON:
+{
+  "questions": [
+    {
+      "type": "technical|behavioral|coding",
+      "question": "Question text",
+      "expectedAnswer": "Brief expected answer",
+      "difficulty": "easy|medium|hard",
+      "topic": "Topic category"
+    }
+  ]
+}
+
+Only return valid JSON.`;
+
+  const response = await aiService.complete(prompt);
+  
+  try {
+    const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const result = JSON.parse(jsonMatch[0]);
+      return NextResponse.json(result);
+    }
+  } catch (parseError) {
+    console.error('JSON parse error:', parseError);
+  }
+  
+  // Fallback
+  return NextResponse.json({
+    questions: [
+      { type: 'behavioral', question: 'Tell me about yourself', difficulty: 'easy', topic: 'general' },
+      { type: 'technical', question: 'Explain React component lifecycle', difficulty: 'medium', topic: 'react' }
+    ]
+  });
+}
+
+/**
+ * Helper: Generate Basic Calendar Events Fallback
+ */
+function generateBasicCalendarEvents(company: string, role: string, daysUntilInterview: number, startDate: Date): any[] {
+  const events = [];
+  
+  for (let day = 1; day <= Math.min(daysUntilInterview, 12); day++) {
+    const eventDate = new Date(startDate);
+    eventDate.setDate(eventDate.getDate() + day - 1);
+    
+    events.push({
+      title: `${company} Prep - Day ${day}`,
+      date: eventDate.toISOString().split('T')[0],
+      startTime: '10:00',
+      endTime: '12:00',
+      description: `${role} preparation session`,
+      location: 'Online',
+      reminder: 30
+    });
+  }
+  
+  return events;
+}
+
+/**
+ * Handle Conversational AI
+ * 
+ * CRITICAL: Uses persistent CareerSession from MongoDB
+ * Session survives between voice turns, page refreshes, etc.
+ * 
+ * ENHANCED: Properly captures job description and verifies all required fields
+ */
+async function handleConversation(
+  userId: string,
+  data: {
+    userInput: string;
+    currentState?: string;
+    missionData?: any;
+    userContext?: any;
+  }
+) {
+  const { userInput } = data;
+  
+  console.log('\n🎯 [CAREER API] ========== NEW CONVERSATION TURN ==========');
+  console.log(`[CAREER API] User: ${userId}`);
+  console.log(`[CAREER API] Input: "${userInput}"`);
+  
+  try {
+    // GET OR CREATE ACTIVE SESSION
+    const session = await sessionRepo.getOrCreateActiveSession(userId);
+    
+    console.log(`[CAREER API] Session: ${session.id}`);
+    console.log(`[CAREER API] State: ${session.state}`);
+    console.log(`[CAREER API] Draft: ${JSON.stringify(session.draft)}`);
+    
+    // USE SESSION MANAGER TO PROCESS RESPONSE
+    const manager = new CareerSessionManager(session);
+    const result = await manager.processUserResponse(userInput);
+    
+    console.log(`[CAREER API] ✓ Processed successfully`);
+    console.log(`[CAREER API] Next state: ${result.state}`);
+    console.log(`[CAREER API] Missing: ${result.nextField || 'None'}`);
+    console.log(`[CAREER API] Should create mission: ${result.shouldCreateMission}`);
+    
+    // ENHANCED: Validate all required fields before allowing mission creation
+    if (result.shouldCreateMission) {
+      const { company, role, interviewDate } = result.extracted;
+      
+      if (!company || !role || !interviewDate) {
+        console.log(`[CAREER API] ⚠️ Missing required fields - preventing mission creation`);
+        console.log(`[CAREER API] Company: ${company || 'MISSING'}`);
+        console.log(`[CAREER API] Role: ${role || 'MISSING'}`);
+        console.log(`[CAREER API] Interview Date: ${interviewDate || 'MISSING'}`);
+        
+        // Determine what's missing and ask for it
+        const missingFields = [];
+        if (!company) missingFields.push('company');
+        if (!role) missingFields.push('role');
+        if (!interviewDate) missingFields.push('interview date');
+        
+        return NextResponse.json({
+          response: `I need a bit more information before creating your mission. Please tell me your ${missingFields.join(' and ')}.`,
+          nextState: {
+            stage: result.state.toLowerCase(),
+            missionData: result.extracted,
+            awaitingInput: missingFields[0]
+          },
+          shouldCreateMission: false,
+          sessionId: session.id
+        });
+      }
+      
+      console.log(`[CAREER API] ✅ All required fields present - allowing mission creation`);
+      console.log(`[CAREER API] Company: ${company}`);
+      console.log(`[CAREER API] Role: ${role}`);
+      console.log(`[CAREER API] Interview Date: ${interviewDate}`);
+    }
+    
+    // Return structured response
+    return NextResponse.json({
+      response: result.message,
+      nextState: {
+        stage: result.state.toLowerCase(),
+        missionData: result.extracted,
+        awaitingInput: result.nextField
+      },
+      shouldCreateMission: result.shouldCreateMission,
+      sessionId: session.id
+    });
+    
+  } catch (error: any) {
+    console.error('[CAREER ERROR]', error);
+    
+    return NextResponse.json(
+      { 
+        error: 'Conversation processing failed',
+        details: error.message 
+      },
+      { status: 500 }
+    );
+  }
 }
 
 /**

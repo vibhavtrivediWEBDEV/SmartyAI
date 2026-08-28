@@ -57,6 +57,8 @@ export async function GET(req: NextRequest) {
 /**
  * POST /api/career/mission
  * Create new career mission
+ * 
+ * CRITICAL: Prevents duplicate missions and enforces one active mission per user
  */
 export async function POST(req: NextRequest) {
   try {
@@ -79,13 +81,45 @@ export async function POST(req: NextRequest) {
       );
     }
     
+    if (!interviewDate) {
+      return NextResponse.json(
+        { error: 'Interview date is required' },
+        { status: 400 }
+      );
+    }
+    
+    // Check for existing active missions
+    const activeMissions = await careerRepository.findActiveMissions(userId);
+    
+    // If there are active missions, check date overlap
+    const newInterviewDate = new Date(interviewDate);
+    const existingOverlap = activeMissions.find(mission => {
+      const missionDate = new Date(mission.interviewDate);
+      const timeDiff = Math.abs(missionDate.getTime() - newInterviewDate.getTime());
+      const daysDiff = timeDiff / (1000 * 60 * 60 * 24);
+      return daysDiff < 30; // Overlap if within 30 days
+    });
+    
+    if (existingOverlap) {
+      // Cancel existing mission and create new one
+      await careerRepository.updateMission(existingOverlap.id, { status: 'CANCELLED' });
+      console.log(`[CAREER API] Cancelled overlapping mission: ${existingOverlap.id}`);
+    }
+    
+    // Cancel all other active missions (only one active at a time)
+    await Promise.all(
+      activeMissions
+        .filter(m => m.id !== existingOverlap?.id && m.status !== 'CANCELLED')
+        .map(m => careerRepository.updateMission(m.id, { status: 'CANCELLED' }))
+    );
+    
     // Create mission using repository directly
     const missionId = await careerRepository.createCareerMission({
       userId,
       company,
       role,
       jobDescription,
-      interviewDate: interviewDate ? new Date(interviewDate) : undefined,
+      interviewDate: newInterviewDate,
       status: 'CREATED',
       priority: priority || 'medium',
       progress: 0
@@ -101,18 +135,16 @@ export async function POST(req: NextRequest) {
       );
     }
     
-    // Start Career Agent in background
-    // Don't await - let it run asynchronously
-    import('@/lib/career').then(({ startCareerAgent }) => {
-      startCareerAgent(missionId, userId).catch(err => {
-        console.error('Career Agent start failed:', err);
-      });
-    });
+    console.log(`[CAREER API] Mission created: ${missionId} for user ${userId}`);
+    console.log(`[CAREER API] Company: ${company}, Role: ${role}, Date: ${interviewDate}`);
+    
+    // Don't start Career Agent automatically - let user control flow
+    // Apps will be opened by the Career App UI
     
     return NextResponse.json({
       success: true,
       mission,
-      message: 'Career mission created. Agent starting...'
+      message: 'Career mission created successfully'
     });
     
   } catch (error: any) {
@@ -140,7 +172,7 @@ export async function PATCH(req: NextRequest) {
     }
     
     const body = await req.json();
-    const { missionId, updates } = body;
+    const { missionId, interviewDate, ...otherUpdates } = body;
     
     if (!missionId) {
       return NextResponse.json(
@@ -157,6 +189,12 @@ export async function PATCH(req: NextRequest) {
         { error: 'Mission not found' },
         { status: 404 }
       );
+    }
+    
+    // Prepare updates object
+    const updates: any = { ...otherUpdates };
+    if (interviewDate) {
+      updates.interviewDate = new Date(interviewDate);
     }
     
     // Update mission

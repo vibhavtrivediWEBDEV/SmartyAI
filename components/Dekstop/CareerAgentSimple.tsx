@@ -46,6 +46,11 @@ export function CareerAgentSimple({
   const [currentMission, setCurrentMission] = useState<any>(null);
   const [missionProgress, setMissionProgress] = useState<number>(0);
   const [missionStatus, setMissionStatus] = useState<string>('idle');
+  const [editingInterviewDate, setEditingInterviewDate] = useState(false);
+  const [newInterviewDate, setNewInterviewDate] = useState<string>('');
+  const [missionCreated, setMissionCreated] = useState(false); // Prevent duplicate creation
+  const [isLoadingMissions, setIsLoadingMissions] = useState(false); // Prevent concurrent loading
+  const hasLoadedMissionsRef = useRef(false); // Track if we've loaded missions on mount
   
   const {
     callStatus,
@@ -68,17 +73,22 @@ export function CareerAgentSimple({
     console.log(`🎯 [Career Agent] ${message}`);
   };
 
-  // Load existing missions on mount
+  // Load existing missions on mount only (no polling)
   useEffect(() => {
-    if (userId) {
+    // Only load once on mount when userId becomes available
+    if (userId && !hasLoadedMissionsRef.current) {
+      hasLoadedMissionsRef.current = true;
       loadActiveMissions();
-      // Poll for updates every 5 seconds
-      const interval = setInterval(loadActiveMissions, 5000);
-      return () => clearInterval(interval);
     }
-  }, [userId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]); // Only run when userId changes
 
-  const loadActiveMissions = async () => {
+  const loadActiveMissions = async (showLog = false) => {
+    // Prevent unnecessary calls
+    if (!userId || isLoadingMissions) return;
+    
+    setIsLoadingMissions(true);
+    
     try {
       const response = await fetch('/api/career/mission');
       if (response.ok) {
@@ -88,11 +98,28 @@ export function CareerAgentSimple({
           setCurrentMission(data.missions[0]);
           setMissionStatus(data.missions[0].status);
           setMissionProgress(data.missions[0].progress || 0);
-          addLog(`📊 Found ${data.missions.length} active mission(s)`);
+          
+          if (showLog) {
+            addLog(`📊 Found ${data.missions.length} active mission(s)`);
+          }
+          
+          // Check if interview date is in the past or seems incorrect
+          const missionDate = new Date(data.missions[0].interviewDate);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          if (missionDate < today || isNaN(missionDate.getTime())) {
+            if (showLog) {
+              addLog(`⚠️ Interview date seems incorrect: ${missionDate.toLocaleDateString()}`);
+              addLog(`💡 Click "Edit Date" to fix it`);
+            }
+          }
         }
       }
     } catch (error) {
       console.error('Failed to load missions:', error);
+    } finally {
+      setIsLoadingMissions(false);
     }
   };
 
@@ -139,6 +166,12 @@ export function CareerAgentSimple({
 
   // Process voice input with conversational AI
   useEffect(() => {
+    // Prevent processing if mission already created
+    if (missionCreated) {
+      addLog(`⚠️ Mission already created, ignoring voice input`);
+      return;
+    }
+    
     if (lastTranscript && conversation.stage !== 'idle') {
       addLog(`🎤 User said: "${lastTranscript}"`);
       handleConversationInput(lastTranscript);
@@ -149,7 +182,7 @@ export function CareerAgentSimple({
         initiateCareerConversation(lastTranscript);
       }
     }
-  }, [lastTranscript]);
+  }, [lastTranscript, missionCreated]);
 
   const initiateCareerConversation = async (initialInput: string) => {
     addLog("🤖 Career Agent activated - starting conversation...");
@@ -196,28 +229,57 @@ Would you like to continue with this mission, update it, or create a new one?`;
   };
 
   const handleConversationInput = async (userInput: string) => {
+    // Prevent duplicate mission creation
+    if (missionCreated) {
+      addLog(`⚠️ Mission already created, stopping conversation`);
+      return;
+    }
+    
     addLog(`👤 User: ${userInput}`);
     
-    // Process input with AI
+    // Process input with AI (only if we haven't created a mission yet)
     const result = await processWithAI(userInput, conversation);
     
+    addLog(`🎯 shouldCreateMission: ${result.shouldCreateMission}`);
+    
+    // Check if mission should be created
+    if (result.shouldCreateMission && !missionCreated) {
+      addLog(`✅ CONFIRMATION DETECTED - Creating mission NOW`);
+      addLog(`📊 Mission Data: ${JSON.stringify(result.nextState.missionData)}`);
+      
+      // Mark as created BEFORE API call to prevent duplicates
+      setMissionCreated(true);
+      
+      // Create mission immediately
+      await createCareerMissionWithData(result.nextState.missionData);
+      
+      // Set conversation to complete
+      setAiResponse(result.response);
+      setConversation({
+        stage: 'complete',
+        missionData: result.nextState.missionData,
+        awaitingInput: null
+      });
+      
+      addLog(`🤖 Agent: ${result.response}`);
+      addLog(`✅ ONBOARDING COMPLETE - No more questions`);
+      return;
+    }
+    
+    // Normal conversation flow
     setAiResponse(result.response);
     setConversation(result.nextState);
     addLog(`🤖 Agent: ${result.response}`);
-    
-    // If all data collected, create mission
-    if (result.shouldCreateMission) {
-      await createCareerMissionWithData(result.nextState.missionData);
-    }
-    
-    // Update current mission display
-    if (currentMission) {
-      loadActiveMissions(); // Refresh mission data
-    }
   };
 
   const createCareerMissionWithData = async (data: CareerMissionData) => {
-    addLog("🚀 Creating career mission with collected data...");
+    // Double-check we haven't already created a mission
+    if (missionCreated) {
+      addLog(`⚠️ Mission already created, skipping duplicate creation`);
+      return;
+    }
+    
+    addLog("🚀 Creating career mission with confirmed data...");
     addLog(`   Company: ${data.company || 'Not specified'}`);
     addLog(`   Role: ${data.role || 'Not specified'}`);
     addLog(`   Interview Date: ${data.interviewDate || 'Not specified'}`);
@@ -239,26 +301,73 @@ Would you like to continue with this mission, update it, or create a new one?`;
         body: JSON.stringify(missionPayload)
       });
       
-      if (!response.ok) throw new Error('Failed to create mission');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create mission');
+      }
       
       const result = await response.json();
-      addLog(`✅ Mission created! ID: ${result.mission._id.slice(0, 8)}...`);
+      addLog(`✅ Mission created! ID: ${result.mission.id.slice(0, 8)}...`);
+      addLog(`📊 Mission status: ${result.mission.status || 'CREATED'}`);
       
-      setAiResponse("Perfect! I've created your career mission. Let me now set up your preparation plan. This will take a moment...");
+      // Mark as created to prevent duplicates
+      setMissionCreated(true);
       
-      await executeCareerOrchestration(result.mission._id);
+      // Update mission state from response instead of reloading
+      setActiveMissions([result.mission]);
+      setCurrentMission(result.mission);
+      setMissionStatus(result.mission.status);
+      setMissionProgress(result.mission.progress || 0);
       
-      setConversation({
-        stage: 'complete',
-        missionData: data,
-        awaitingInput: null
-      });
+      addLog(`✅ MISSION CREATION COMPLETE`);
       
-      setAiResponse("🎉 All done! Your Career Agent is ready. I've scheduled your preparation tasks and you can check your notes for study materials. Good luck!");
+      // Execute career plan workflow (create notes, calendar, learning resources)
+      addLog(`🚀 Starting career plan execution...`);
+      executeCareerPlan(result.mission.id);
       
     } catch (error: any) {
       addLog(`❌ Error: ${error.message}`);
       setAiResponse(`I encountered an error: ${error.message}. Please try again or check if you're logged in.`);
+      setMissionCreated(false); // Reset on error
+    }
+  };
+
+  const executeCareerPlan = async (missionId: string) => {
+    addLog("📊 Executing career plan: Notes, Calendar, Learning...");
+    
+    try {
+      const executeResponse = await fetch('/api/career/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ missionId })
+      });
+      
+      if (!executeResponse.ok) {
+        const errorData = await executeResponse.json();
+        throw new Error(errorData.error || 'Failed to execute plan');
+      }
+      
+      const executionResult = await executeResponse.json();
+      addLog(`✅ Career plan execution completed`);
+      addLog(`📊 Progress: ${executionResult.plan?.overallProgress || 0}%`);
+      
+      executionResult.executionResults?.forEach((step: any) => {
+        if (step.status === 'completed') {
+          addLog(`  ✅ ${step.stepName}`);
+        } else if (step.status === 'failed') {
+          addLog(`  ❌ ${step.stepName}: ${step.error}`);
+        }
+      });
+      
+      // Update progress from execution result
+      if (executionResult.mission) {
+        setMissionProgress(executionResult.mission.progress || 0);
+        setMissionStatus(executionResult.mission.status);
+      }
+      
+    } catch (error: any) {
+      addLog(`❌ Execution error: ${error.message}`);
+      addLog(`💡 Career plan will be created when you refresh`);
     }
   };
 
@@ -360,6 +469,34 @@ Created by Career Agent on ${new Date().toLocaleDateString()}
     addLog(`Voice said: "${transcript}"`);
     addLog("💡 Try saying: 'I have an interview at Google in 5 days'");
   };
+  
+  const updateInterviewDate = async (missionId: string, newDate: string) => {
+    addLog(`📅 Updating interview date to: ${newDate}`);
+    
+    try {
+      const response = await fetch('/api/career/mission', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          missionId,
+          interviewDate: newDate
+        })
+      });
+      
+      if (response.ok) {
+        addLog(`✅ Interview date updated successfully`);
+        setEditingInterviewDate(false);
+        // Update local state instead of reloading
+        const updatedMission = { ...currentMission, interviewDate: newDate };
+        setCurrentMission(updatedMission);
+        setActiveMissions([updatedMission, ...activeMissions.slice(1)]);
+      } else {
+        addLog(`❌ Failed to update date`);
+      }
+    } catch (error: any) {
+      addLog(`❌ Error: ${error.message}`);
+    }
+  };
 
   return (
     <>
@@ -385,9 +522,11 @@ Created by Career Agent on ${new Date().toLocaleDateString()}
                   awaitingInput: null
                 });
                 setAiResponse('');
+                setMissionCreated(false); // Reset mission created flag
               }
             } else {
               startCall();
+              setMissionCreated(false); // Reset when starting new call
             }
           }}
           className="relative w-[100px] h-[100px] rounded-full shadow-2xl transition-all duration-300 flex flex-col items-center justify-center gap-1"
@@ -470,6 +609,61 @@ Created by Career Agent on ${new Date().toLocaleDateString()}
             style={{ background: '#3B82F6' }}
           >
             {conversation.stage.toUpperCase()}
+          </div>
+        )}
+        
+        {/* Mission info and date edit */}
+        {currentMission && !editingInterviewDate && (
+          <div 
+            className="absolute -bottom-20 left-1/2 transform -translate-x-1/2 px-3 py-2 rounded-lg text-xs text-white whitespace-nowrap"
+            style={{ background: 'rgba(0,0,0,0.8)' }}
+          >
+            <div className="flex items-center gap-2">
+              <span>🏢 {currentMission.company}</span>
+              <span>•</span>
+              <span>📅 {new Date(currentMission.interviewDate).toLocaleDateString()}</span>
+              <button
+                onClick={() => setEditingInterviewDate(true)}
+                className="px-2 py-1 bg-blue-500 hover:bg-blue-600 rounded text-xs"
+              >
+                Edit Date
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {/* Date editing modal */}
+        {editingInterviewDate && currentMission && (
+          <div 
+            className="absolute bottom-24 left-1/2 transform -translate-x-1/2 px-4 py-3 rounded-lg shadow-xl"
+            style={{ background: 'white', minWidth: '300px' }}
+          >
+            <div className="text-black font-bold mb-2">Edit Interview Date</div>
+            <input
+              type="date"
+              value={newInterviewDate}
+              onChange={(e) => setNewInterviewDate(e.target.value)}
+              className="w-full px-3 py-2 border rounded mb-3 text-black"
+              defaultValue={new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  if (newInterviewDate && currentMission) {
+                    updateInterviewDate(currentMission.id, newInterviewDate);
+                  }
+                }}
+                className="flex-1 px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded font-bold"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setEditingInterviewDate(false)}
+                className="flex-1 px-3 py-2 bg-gray-300 hover:bg-gray-400 text-black rounded font-bold"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         )}
         

@@ -13,11 +13,18 @@ export default function MacLockScreen({ goNext, isLocked }: MacLockScreenProps) 
   const [passwordInput, setPasswordInput] = useState("");
   const [isWrongPassword, setIsWrongPassword] = useState(false);
   const [isUnlocking, setIsUnlocking] = useState(false);
-  const [time, setTime] = useState(new Date());
+  const [time, setTime] = useState<Date | null>(null); // Initialize as null to avoid hydration mismatch
+  const [mounted, setMounted] = useState(false); // Track client-side mount
   const passwordInputRef = useRef<HTMLInputElement>(null);
 
   const username = typeof window !== 'undefined' ? localStorage.getItem("lock_username") || "User" : "User";
   const profilePhoto = typeof window !== 'undefined' ? localStorage.getItem("lock_profile_photo") || "" : "";
+
+  // Set mounted flag on client
+  useEffect(() => {
+    setMounted(true);
+    setTime(new Date());
+  }, []);
 
   useEffect(() => {
     if (isLocked) {
@@ -104,11 +111,11 @@ export default function MacLockScreen({ goNext, isLocked }: MacLockScreenProps) 
           >
             <div className="text-white text-opacity-90 text-[96px] font-light leading-none mb-2 tracking-tight"
                  style={{ textShadow: '0 2px 20px rgba(0,0,0,0.3)' }}>
-              {formatTime(time)}
+              {time ? formatTime(time) : '--:--'}
             </div>
             <div className="text-white text-opacity-80 text-[28px] font-light tracking-wide"
                  style={{ textShadow: '0 1px 10px rgba(0,0,0,0.3)' }}>
-              {formatDate(time)}
+              {time ? formatDate(time) : 'Loading...'}
             </div>
           </motion.div>
 
