@@ -6,17 +6,20 @@ import {
   deleteCalendar,
 } from "@/modules/calendar/calendar.repository";
 
+type Context = { params: Promise<{ id: string }> };
+
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: Context
 ) {
   try {
+    const { id } = await params;
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const calendar = await findCalendarById(params.id);
+    const calendar = await findCalendarById(id);
     if (!calendar) {
       return NextResponse.json({ error: "Calendar not found" }, { status: 404 });
     }
@@ -38,15 +41,16 @@ export async function GET(
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: Context
 ) {
   try {
+    const { id } = await params;
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const calendar = await findCalendarById(params.id);
+    const calendar = await findCalendarById(id);
     if (!calendar) {
       return NextResponse.json({ error: "Calendar not found" }, { status: 404 });
     }
@@ -56,7 +60,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const updated = await updateCalendar(params.id, body);
+    const updated = await updateCalendar(id, body);
 
     if (!updated) {
       return NextResponse.json(
@@ -77,15 +81,16 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: Context
 ) {
   try {
+    const { id } = await params;
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const calendar = await findCalendarById(params.id);
+    const calendar = await findCalendarById(id);
     if (!calendar) {
       return NextResponse.json({ error: "Calendar not found" }, { status: 404 });
     }
@@ -94,7 +99,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const deleted = await deleteCalendar(params.id);
+    const deleted = await deleteCalendar(id);
 
     if (!deleted) {
       return NextResponse.json(

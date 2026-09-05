@@ -1,7 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { ChevronLeft, ChevronRight, Plus, X, Trash2, Edit3, Calendar, Clock, MapPin, Bell, Repeat, Search } from "lucide-react";
+import { playById } from "@/lib/sound";
+import { BookOpen, BriefcaseBusiness, ChevronLeft, ChevronRight, Code2, Plus, X, Trash2, Edit3, Calendar, Clock, GraduationCap, MapPin, Bell, Repeat, Search, Mic2, NotebookPen, PlayCircle } from "lucide-react";
+import { CareerTaskMeta, useCareerClock } from "./CareerTaskMeta";
+import { careerTaskDateKey, findCareerTaskForCalendarEvent, getCareerTaskDestinations, getCareerTaskTiming, prepareCareerTaskLaunch, type CareerTaskItem } from "./careerTaskGroups";
 
 /* -------------------------------------------------------------------------
  * Enhanced Calendar App with MongoDB + Holiday Support
@@ -51,9 +54,21 @@ type CalendarType = {
 
 interface CalendarAppProps {
   userId?: string;
+  openApplication?: (appName: string, x?: number, y?: number, command?: string, arg?: any) => void;
 }
 
-export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
+const targetIcons = {
+  notes: NotebookPen,
+  'ai-book': BookOpen,
+  interview: Mic2,
+  vscode: Code2,
+  teacher: GraduationCap,
+  youtube: PlayCircle,
+  career: BriefcaseBusiness,
+};
+
+export default function EnhancedCalendarApp({ userId, openApplication }: CalendarAppProps) {
+  const playedTodayTaskSoundRef = useRef(false);
   // State
   const [cursor, setCursor] = useState(() => {
     const d = new Date();
@@ -62,6 +77,7 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
   const [selectedDate, setSelectedDate] = useState<string>(() => todayISO());
   const [calendars, setCalendars] = useState<CalendarType[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [careerTasks, setCareerTasks] = useState<CareerTaskItem[]>([]);
   const [view, setView] = useState<"month" | "week" | "day">("month");
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -80,6 +96,26 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
   const [eventCalendarId, setEventCalendarId] = useState("");
   const [eventReminder, setEventReminder] = useState<number>(0);
   const [saving, setSaving] = useState(false);
+  const now = useCareerClock();
+
+  const loadCareerTasks = useCallback(async () => {
+    const response = await fetch("/api/career/tasks");
+    if (!response.ok) return;
+    const data = await response.json();
+    const tasks = Array.isArray(data.tasks) ? data.tasks : [];
+    setCareerTasks(tasks);
+    if (!playedTodayTaskSoundRef.current && tasks.some((task: CareerTaskItem) => careerTaskDateKey(task.scheduledDate) === todayISO())) {
+      playedTodayTaskSoundRef.current = true;
+      void playById('ab-tu-gaya-beta-ab-dekh-tu-puneet').catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCareerTasks();
+    const handleProgress = () => void loadCareerTasks();
+    window.addEventListener("career-progress", handleProgress);
+    return () => window.removeEventListener("career-progress", handleProgress);
+  }, [loadCareerTasks]);
 
   // ✅ Expose state setters to window for automation (solves React controlled component issue)
   useEffect(() => {
@@ -243,11 +279,38 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
     for (const ev of filteredEvents) {
       const arr = map.get(ev.date) ?? [];
       arr.push(ev);
+      arr.sort((a, b) => (a.startTime || "24:00").localeCompare(b.startTime || "24:00"));
       map.set(ev.date, arr);
     }
 
     return map;
   }, [events, calendars, searchQuery]);
+
+  const careerSchedule = useMemo(() => {
+    const careerEvents = events
+      .filter((event) => event.source === "automation")
+      .sort((a, b) => `${a.date}T${a.startTime || "00:00"}`.localeCompare(`${b.date}T${b.startTime || "00:00"}`));
+    const nowKey = `${todayISO()}T${new Date().toTimeString().slice(0, 5)}`;
+    return {
+      total: careerEvents.length,
+      thisMonth: careerEvents.filter((event) => event.date.startsWith(`${cursor.year}-${pad(cursor.month + 1)}`)).length,
+      next: careerEvents.find((event) => `${event.date}T${event.startTime || "00:00"}` >= nowKey),
+    };
+  }, [events, cursor]);
+
+  const careerTasksByDate = useMemo(() => {
+    const grouped = new Map<string, CareerTaskItem[]>();
+    for (const task of careerTasks) {
+      const dateKey = careerTaskDateKey(task.scheduledDate);
+      grouped.set(dateKey, [...(grouped.get(dateKey) ?? []), task]);
+    }
+    return grouped;
+  }, [careerTasks]);
+
+  const taskForEvent = useCallback((event: CalendarEvent) => {
+    if (event.source !== "automation") return undefined;
+    return findCareerTaskForCalendarEvent(careerTasks, event);
+  }, [careerTasks]);
 
   // Navigation
   function goToday() {
@@ -313,7 +376,7 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
         allDay: eventAllDay,
         calendarId: eventCalendarId,
         reminder: eventReminder,
-        source: "user",
+        source: "user" as const,
       };
 
       if (editingEvent?._id) {
@@ -403,7 +466,7 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-[#1c1c1e]">
         <div className="text-center">
-          <Calendar className="w-12 h-12 mx-auto mb-3 text-blue-500 animate-pulse" />
+          <Calendar className="calendar-theme-text w-12 h-12 mx-auto mb-3 animate-pulse" />
           <p className="text-[#f2f2f7]">Loading calendar...</p>
         </div>
       </div>
@@ -475,7 +538,8 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
         <button
           id="calendar_add_event_button"
           onClick={() => openNewEvent(selectedDate)}
-          className="w-8 h-8 grid place-items-center rounded-full text-white shadow-sm active:scale-[0.92] transition-all bg-[#0A84FF] hover:bg-[#0A84FF]/90"
+          className="w-8 h-8 grid place-items-center rounded-full text-white shadow-sm active:scale-[0.92] transition-all hover:opacity-90"
+          style={{ background: "var(--theme-primary-color)" }}
           aria-label="Add event"
         >
           <Plus className="w-5 h-5" />
@@ -494,6 +558,37 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
             selectedDate={selectedDate}
             onDateSelect={setSelectedDate}
           />
+
+          {careerSchedule.total > 0 && (
+            <section className="border-y border-black/5 py-3 dark:border-white/10" aria-label="Career schedule summary">
+              <div className="flex items-center gap-2 px-2">
+                <span className="grid h-7 w-7 place-items-center rounded-md text-white" style={{ background: "var(--theme-primary-color)" }}>
+                  <BriefcaseBusiness className="h-4 w-4" />
+                </span>
+                <div>
+                  <p className="text-[12px] font-semibold">Career Schedule</p>
+                  <p className="text-[10px] text-black/45 dark:text-white/45">{careerSchedule.thisMonth} sessions this month</p>
+                </div>
+              </div>
+              {careerSchedule.next && (
+                <button
+                  onClick={() => {
+                    setSelectedDate(careerSchedule.next!.date);
+                    const [year, month] = careerSchedule.next!.date.split("-").map(Number);
+                    setCursor({ year, month: month - 1 });
+                  }}
+                  className="mt-2 w-full px-2 text-left"
+                >
+                  <span className="block text-[10px] font-semibold uppercase" style={{ color: "var(--theme-primary-color)" }}>Next study session</span>
+                  <span className="mt-0.5 block truncate text-[12px] font-medium">{careerSchedule.next.title}</span>
+                  <span className="block text-[10px] text-black/45 dark:text-white/45">
+                    {new Date(`${careerSchedule.next.date}T00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    {careerSchedule.next.startTime ? ` at ${careerSchedule.next.startTime}` : ""}
+                  </span>
+                </button>
+              )}
+            </section>
+          )}
 
           {/* Calendars List */}
           <div>
@@ -585,14 +680,14 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
                   onDoubleClick={() => openNewEvent(cell.iso)}
                   className={`relative border-b border-r border-black/5 dark:border-white/[0.06] p-2 flex flex-col cursor-pointer transition-colors ${
                     cell.inMonth ? "" : "opacity-40"
-                  } ${isSelected ? "bg-[#0A84FF]/10 dark:bg-[#0A84FF]/20" : "hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"}`}
+                  } ${isSelected ? "calendar-theme-soft" : "hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"}`}
                 >
                   {/* Day Number */}
                   <div className="flex justify-end mb-1">
                     <span
                       className={`w-7 h-7 grid place-items-center text-[14px] rounded-full transition-colors ${
                         cell.isToday
-                          ? "text-white font-semibold bg-[#0A84FF]"
+                          ? "calendar-theme-fill text-white font-semibold"
                           : "font-normal"
                       }`}
                     >
@@ -605,6 +700,8 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
                     {visibleEvents.map(ev => {
                       const cal = calendars.find(c => c._id === ev.calendarId);
                       const isHoliday = ev.source === "holiday";
+                      const isCareer = ev.source === "automation";
+                      const careerTask = taskForEvent(ev);
                       
                       return (
                         <button
@@ -616,7 +713,7 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
                           className={`text-left px-1.5 py-0.5 text-[11px] rounded-md truncate transition-colors ${
                             isHoliday 
                               ? "bg-gradient-to-r from-red-500/20 to-red-500/10 border-l-2 border-red-500 font-medium"
-                              : ""
+                              : isCareer ? "font-semibold" : ""
                           }`}
                           style={{
                             backgroundColor: isHoliday ? undefined : `${cal?.color || "#8E8E93"}20`,
@@ -628,7 +725,15 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
                               {ev.holidayCountry === "IN" ? "🇮🇳" : ev.holidayCountry === "US" ? "🇺🇸" : "🎉"}
                             </span>
                           )}
+                          {!ev.allDay && ev.startTime && (
+                            <span className="mr-1 font-mono text-[9px] opacity-65">{ev.startTime}</span>
+                          )}
                           {ev.title}
+                          {careerTask && (
+                            <span className="ml-1 font-mono text-[9px] tabular-nums opacity-65">
+                              · {getCareerTaskTiming(careerTask, now).label}
+                            </span>
+                          )}
                         </button>
                       );
                     })}
@@ -658,12 +763,14 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
           </div>
 
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            {(eventsByDate.get(selectedDate) ?? []).map(ev => (
-              <button
-                key={ev._id}
-                onClick={() => openEditEvent(ev)}
-                className="w-full text-left p-3 rounded-lg bg-white/60 dark:bg-white/5 hover:bg-white/80 dark:hover:bg-white/10 transition-colors"
-              >
+            {(eventsByDate.get(selectedDate) ?? []).map(ev => {
+              const careerTask = taskForEvent(ev);
+              const destinations = careerTask ? getCareerTaskDestinations(careerTask) : [];
+              return (
+                <div key={ev._id} className={`rounded-lg ${
+                    ev.source === "automation" ? "calendar-theme-panel" : "bg-white/60 dark:bg-white/5"
+                  }`}>
+                <button type="button" onClick={() => openEditEvent(ev)} className="w-full p-3 text-left transition-colors hover:bg-white/40 dark:hover:bg-white/5">
                 <div className="flex items-start gap-2">
                   <div
                     className="w-1 h-full min-h-[40px] rounded-full"
@@ -672,6 +779,14 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
                     }}
                   />
                   <div className="flex-1 min-w-0">
+                    {ev.source === "automation" && (
+                      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                        <span className="calendar-theme-text flex items-center gap-1 text-[10px] font-semibold uppercase">
+                          <BriefcaseBusiness className="h-3 w-3" /> Career study task
+                        </span>
+                        {careerTask && <CareerTaskMeta task={careerTask} now={now} />}
+                      </div>
+                    )}
                     <div className="font-medium text-[14px] truncate">
                       {ev.source === "holiday" && (
                         <span className="mr-1">
@@ -695,17 +810,59 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
                         {ev.location}
                       </div>
                     )}
+                    {ev.description && (
+                      <p className="mt-2 line-clamp-3 text-[12px] leading-relaxed text-black/55 dark:text-white/55">
+                        {ev.description}
+                      </p>
+                    )}
+                    {careerTask && (
+                      <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
+                        <span className="rounded border border-black/10 px-1.5 py-0.5 font-semibold uppercase text-black/50 dark:border-white/10 dark:text-white/50">{careerTask.type || 'career'}</span>
+                        {careerTask.topic && careerTask.topic !== careerTask.title && <span className="truncate text-black/45 dark:text-white/45">{careerTask.topic}</span>}
+                      </div>
+                    )}
+                    {typeof ev.reminder === "number" && ev.reminder > 0 && (
+                      <div className="mt-2 flex items-center gap-1 text-[11px] text-black/45 dark:text-white/45">
+                        <Bell className="h-3 w-3" /> Reminder {ev.reminder} minutes before
+                      </div>
+                    )}
                   </div>
                 </div>
-              </button>
-            ))}
+                </button>
+                {careerTask && destinations.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 border-t border-black/5 p-2 dark:border-white/10">
+                    {destinations.map((destination) => {
+                      const TargetIcon = targetIcons[destination.id];
+                      const ready = destination.id !== 'interview' || Boolean(careerTask.result?.interviewId);
+                      return (
+                        <button key={destination.id} type="button" disabled={!ready} onClick={async () => {
+                          try {
+                            const launchArgs = await prepareCareerTaskLaunch(careerTask);
+                            if (destination.id === 'notes') {
+                              window.dispatchEvent(new CustomEvent('career-notes:open', { detail: launchArgs }));
+                            }
+                            if (destination.id === 'vscode') void playById('are-baap-re-yaad-aya').catch(() => {});
+                            openApplication?.(destination.app, 80, 60, undefined, launchArgs);
+                          } catch (launchError) {
+                            console.error('Unable to open career task', launchError);
+                          }
+                        }} className="calendar-theme-soft flex h-7 items-center gap-1.5 rounded-md border px-2 text-[10px] font-semibold disabled:cursor-not-allowed disabled:opacity-40">
+                          <TargetIcon size={12} />{ready ? destination.label : 'Preparing'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                </div>
+              );
+            })}
 
             {eventsByDate.has(selectedDate) === false && (
               <div className="text-center text-black/40 dark:text-white/40 text-[13px] py-8">
                 No events
                 <button
                   onClick={() => openNewEvent(selectedDate)}
-                  className="block mx-auto mt-2 text-[#0A84FF] hover:underline"
+                  className="calendar-theme-text block mx-auto mt-2 hover:underline"
                 >
                   Add event
                 </button>
@@ -909,7 +1066,7 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
                 id="calendar_event_save_button"
                 onClick={handleSaveEvent}
                 disabled={!eventTitle.trim() || saving}
-                className="px-6 h-9 rounded-lg bg-[#0A84FF] text-white hover:bg-[#0A84FF]/90 disabled:opacity-50 text-[14px] font-medium transition-colors"
+                className="calendar-theme-fill px-6 h-9 rounded-lg text-white disabled:opacity-50 text-[14px] font-medium transition-opacity hover:opacity-90"
               >
                 {saving ? "Saving..." : "Save"}
               </button>
@@ -917,6 +1074,21 @@ export default function EnhancedCalendarApp({ userId }: CalendarAppProps) {
           </div>
         </div>
       )}
+      <style jsx global>{`
+        .calendar-theme-fill {
+          background: var(--theme-primary-color);
+        }
+        .calendar-theme-text {
+          color: var(--theme-primary-color);
+        }
+        .calendar-theme-soft {
+          background: var(--theme-primary-soft);
+        }
+        .calendar-theme-panel {
+          background: var(--theme-primary-soft);
+          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-primary-color) 24%, transparent);
+        }
+      `}</style>
     </div>
   );
 }
@@ -936,7 +1108,7 @@ function MiniMonthNav({
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDayOfWeek = new Date(year, month, 1).getDay();
   
-  const days: JSX.Element[] = [];
+  const days: React.ReactElement[] = [];
   
   // Blank cells
   for (let i = 0; i < firstDayOfWeek; i++) {
@@ -955,9 +1127,9 @@ function MiniMonthNav({
         onClick={() => onDateSelect(iso)}
         className={`w-5 h-5 text-[10px] rounded-full transition-colors ${
           isSelected
-            ? "bg-[#0A84FF] text-white"
+            ? "calendar-theme-fill text-white"
             : isToday
-              ? "font-semibold text-[#0A84FF]"
+              ? "calendar-theme-text font-semibold"
               : "hover:bg-black/5 dark:hover:bg-white/10"
         }`}
       >

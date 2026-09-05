@@ -36,6 +36,8 @@ export type TaskType =
   | 'mail'
   | 'resume';
 
+export type CareerTaskOpenTarget = 'notes' | 'ai-book' | 'interview' | 'vscode' | 'teacher' | 'youtube' | 'career';
+
 export interface JobProfile {
   company: string;
   role: string;
@@ -98,8 +100,10 @@ export interface CareerMission {
 export interface PreparationTask {
   id: string;
   missionId: string;
+  userId: string;
   
   type: TaskType;
+  openIn?: CareerTaskOpenTarget[];
   title: string;
   description?: string;
   

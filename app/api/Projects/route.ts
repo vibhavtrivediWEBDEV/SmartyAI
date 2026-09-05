@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireFinderSubscription } from "@/lib/auth/finder-access";
-import { createFinderNode, ensureSystemFinderNodes, listFinderNodes, trashFinderNodes } from "@/modules/finder/finder.repository";
+import { createFinderNode, listFinderNodes, trashFinderNodes } from "@/modules/finder/finder.repository";
 import { commitReservedStorage, releaseReservedStorage, reserveStorage } from "@/modules/storage/storage.repository";
 
 const createSchema = z.object({
@@ -18,7 +18,6 @@ export async function GET(request: Request) {
   if (access.response) return access.response;
   const user = access.user!;
   const includeTrash = new URL(request.url).searchParams.get("trash") === "true";
-  await ensureSystemFinderNodes(user.id);
   return NextResponse.json({ data: await listFinderNodes(user.id, includeTrash) });
 }
 

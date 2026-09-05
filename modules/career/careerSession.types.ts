@@ -78,6 +78,7 @@ export interface StructuredCareerResponse {
   };
   nextField: string | null;
   shouldCreateMission: boolean;
+  missionId?: string;
   state: CareerSessionState;
 }
 

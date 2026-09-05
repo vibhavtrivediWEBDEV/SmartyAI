@@ -232,8 +232,15 @@ export async function getTelegramConnectionByChatId(
   chatId: number
 ): Promise<TelegramConnection | null> {
   const db = await getDatabase()
-  
-  return db.collection<TelegramConnection>(COLLECTIONS.CONNECTIONS).findOne({ chatId })
+  const connections = db.collection<TelegramConnection>(COLLECTIONS.CONNECTIONS)
+
+  return connections.findOne(
+    {
+      status: 'active',
+      $or: [{ chatId }, { telegramChatId: chatId }],
+    } as any,
+    { sort: { linkedAt: -1, createdAt: -1, updatedAt: -1, _id: -1 } }
+  )
 }
 
 /**

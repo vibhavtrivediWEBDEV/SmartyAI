@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import { Phone, MessageSquare, Video, Mail, Search, ChevronRight, Plus, ArrowUpRight, ArrowDownLeft, ChevronDown, Grid, Delete, X } from 'lucide-react'
+import { useTelegramAccount } from '@/hooks/useTelegramAccount'
 
 interface Contact {
   id: string
@@ -12,6 +13,7 @@ interface Contact {
   device: string
   time: string
   isFavorite?: boolean
+  source?: 'local' | 'telegram'
 }
 
 // Helper for avatar background colors
@@ -29,6 +31,7 @@ const getAvatarBg = (contact: Contact) => {
 }
 
 export default function PhoneApp() {
+  const telegram = useTelegramAccount()
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [showDialer, setShowDialer] = useState(false)
@@ -46,6 +49,17 @@ export default function PhoneApp() {
     { id: '7', name: 'Emma Davis', avatar: '👩‍🎨', phone: '+1 (555) 789-0123', type: 'incoming', device: 'iPhone', time: 'Sunday' },
     { id: '8', name: 'John Brown', avatar: '💼', phone: '+1 (555) 890-1234', type: 'incoming', device: 'mobile', time: 'Saturday' },
   ])
+  const telegramContacts: Contact[] = telegram.contacts.map((contact) => ({
+    id: `telegram:${contact.telegramUserId}`,
+    name: contact.displayName,
+    avatar: contact.firstName?.[0] || 'T',
+    phone: contact.phone || (contact.username ? `@${contact.username}` : 'Telegram'),
+    type: 'incoming',
+    device: 'Telegram',
+    time: '',
+    source: 'telegram',
+  }))
+  const visibleContacts = activeTab === 'contacts' ? telegramContacts : recentContacts
 
   // Favorites
   const favorites = recentContacts.filter(c => c.isFavorite)
@@ -73,6 +87,11 @@ export default function PhoneApp() {
     c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.phone.includes(searchQuery)
   )
+  const filteredContacts = visibleContacts.filter((contact) =>
+    contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    contact.phone.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+  const selectedContact = [...recentContacts, ...telegramContacts].find((contact) => contact.id === selectedContactId)
 
   const DialPad = () => {
     const buttons = [
@@ -212,11 +231,26 @@ export default function PhoneApp() {
             )
           })}
 
-          {activeTab === 'contacts' && (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
-              <p className="text-[13px]">Contacts list coming soon</p>
+          {activeTab === 'contacts' && (telegram.loading ? (
+            <div className="flex h-full items-center justify-center text-[13px] text-gray-500">Loading contacts...</div>
+          ) : filteredContacts.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center px-6 text-center text-gray-500 dark:text-gray-400">
+              <p className="text-[13px]">No Telegram contacts</p>
+              <p className="mt-1 text-[10px]">Connect and sync Telegram from Messages.</p>
             </div>
-          )}
+          ) : filteredContacts.map((contact) => {
+            const isSelected = selectedContactId === contact.id
+            return (
+              <button key={contact.id} type="button" onClick={() => handleSelectContact(contact)} className={`mb-0.5 flex w-full items-center gap-3 rounded-xl px-3.5 py-2 text-left transition ${isSelected ? 'bg-black/[0.08] dark:bg-white/[0.12]' : 'hover:bg-black/[0.03] dark:hover:bg-white/5'}`}>
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${getAvatarBg(contact)}`}>{contact.avatar}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13.5px] font-semibold">{contact.name}</span>
+                  <span className="block truncate text-[10.5px] text-[#168b6b]">{contact.device}</span>
+                </span>
+                <ChevronRight size={13} className="text-gray-400" />
+              </button>
+            )
+          }))}
 
           {activeTab === 'voicemail' && (
             <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
@@ -294,7 +328,7 @@ export default function PhoneApp() {
               <div className="w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4 bg-gray-100 dark:bg-white/10">
                 {selectedContactId ? (
                   <span className="text-[48px]">
-                    {recentContacts.find(c => c.id === selectedContactId)?.avatar}
+                    {selectedContact?.avatar}
                   </span>
                 ) : (
                   <Phone size={40} className="text-gray-400" />
@@ -304,10 +338,10 @@ export default function PhoneApp() {
               {selectedContactId ? (
                 <>
                   <h2 className="text-[18px] font-semibold mb-2">
-                    {recentContacts.find(c => c.id === selectedContactId)?.name}
+                    {selectedContact?.name}
                   </h2>
                   <p className="text-[13px] text-gray-500 dark:text-gray-400 mb-4">
-                    {recentContacts.find(c => c.id === selectedContactId)?.phone}
+                    {selectedContact?.phone}
                   </p>
                   
                   <div className="flex items-center gap-4 justify-center">

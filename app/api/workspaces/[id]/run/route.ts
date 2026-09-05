@@ -1,10 +1,20 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 import { requireFinderSubscription } from "@/lib/auth/finder-access";
 import { getWorkspace } from "@/modules/workspace/workspace.repository";
 import { runWorkspace } from "@/lib/workspace/runner";
 
 type Context = { params: Promise<{ id: string }> };
+
+const runSchema = z.object({
+  entryPoint: z.string().max(500).nullable().optional(),
+  files: z.array(z.object({
+    path: z.string().min(1).max(500),
+    content: z.string().max(1_000_000),
+    language: z.string().max(100),
+  })).max(200).optional(),
+});
 
 /**
  * POST /api/workspaces/[id]/run
@@ -30,11 +40,25 @@ export async function POST(
     );
   }
 
+  const parsed = runSchema.safeParse(await request.json().catch(() => ({})));
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Invalid run request", details: parsed.error.flatten().fieldErrors },
+      { status: 400 }
+    );
+  }
+
+  const files = parsed.data.files ?? workspace.files;
+  const settings = {
+    ...workspace.settings,
+    entryPoint: parsed.data.entryPoint || workspace.settings.entryPoint,
+  };
+
   // Run workspace
-  const result = await runWorkspace(workspace.files, workspace.settings);
+  const result = await runWorkspace(files, settings);
 
   return NextResponse.json({
-    success: true,
+    success: !result.error,
     preview: result.preview,
     logs: result.logs,
     error: result.error,

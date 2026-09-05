@@ -153,6 +153,17 @@ export class CareerSessionManager {
         state: 'COLLECTING_COMPANY'
       };
     }
+
+    if (this.session.missionId) {
+      return {
+        message: "Your career mission is already created. I'm preparing your workspace now.",
+        extracted: this.session.draft,
+        nextField: null,
+        shouldCreateMission: true,
+        missionId: this.session.missionId,
+        state: 'CREATE_MISSION'
+      };
+    }
     
     console.log(`[CAREER MANAGER] ✓ User confirmed - validating draft`);
     
@@ -202,19 +213,18 @@ export class CareerSessionManager {
     }
     
     console.log(`[CAREER MANAGER] ✓ Mission created: ${mission}`);
-    console.log(`[CAREER MANAGER] ✓ Setting shouldCreateMission: TRUE`);
+    console.log(`[CAREER MANAGER] ✓ Returning created mission for execution`);
     console.log(`[CAREER MANAGER] ✓ Onboarding COMPLETE`);
     
     const message = `Done! Your career mission is created:\n\n${this.session.draft.company}\n${this.session.draft.role}\n${new Date(this.session.draft.interviewDate).toLocaleDateString()}\n\nI'll prepare your workspace around this interview.`;
     await sessionRepo.addConversationTurn(this.session.id, 'assistant', message);
     
-    // CRITICAL: Return shouldCreateMission: true
-    // Frontend must handle this by calling /api/career/mission
     return {
       message,
       extracted: this.session.draft,
       nextField: null,
-      shouldCreateMission: true, // THIS IS THE KEY
+      shouldCreateMission: true,
+      missionId: mission,
       state: 'CREATE_MISSION'
     };
   }
@@ -361,11 +371,30 @@ Role:`;
     const response = await aiService.complete(prompt);
     const role = response.content.trim();
     
-    if (role && role !== 'UNKNOWN' && role.length >= 2) {
+    if (role && role !== 'UNKNOWN' && this.isPlausibleRole(role)) {
       return role;
     }
     
     return undefined; // DON'T default to whole input
+  }
+
+  private isPlausibleRole(role: unknown): role is string {
+    if (typeof role !== 'string') return false;
+
+    const normalized = role.trim().toLowerCase();
+    if (normalized.length < 3 || normalized.split(/\s+/).length > 6) return false;
+
+    return !/\b(what|which|when|where|who|why|how|interview for|not sure|don't know|do not know)\b/i.test(normalized);
+  }
+
+  private isValidInterviewDate(value: unknown): boolean {
+    const interviewDate = value instanceof Date ? value : new Date(value as string);
+    if (Number.isNaN(interviewDate.getTime())) return false;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    interviewDate.setHours(0, 0, 0, 0);
+    return interviewDate >= today;
   }
   
   /**
@@ -398,7 +427,7 @@ Role:`;
       const match = userInput.match(pattern);
       if (match) {
         const parsed = new Date(userInput);
-        if (!isNaN(parsed.getTime())) {
+        if (!isNaN(parsed.getTime()) && this.isValidInterviewDate(parsed)) {
           return parsed;
         }
       }
@@ -419,7 +448,7 @@ Return ONLY the date in ISO format (YYYY-MM-DD), nothing else. If no date mentio
     
     if (dateStr && dateStr !== 'UNKNOWN') {
       const parsed = new Date(dateStr);
-      if (!isNaN(parsed.getTime())) {
+      if (!isNaN(parsed.getTime()) && this.isValidInterviewDate(parsed)) {
         return parsed;
       }
     }
@@ -435,8 +464,8 @@ Return ONLY the date in ISO format (YYYY-MM-DD), nothing else. If no date mentio
     
     // Check if all required fields are present
     const hasCompany = !!draft.company;
-    const hasRole = !!draft.role;
-    const hasInterviewDate = !!draft.interviewDate;
+    const hasRole = this.isPlausibleRole(draft.role);
+    const hasInterviewDate = this.isValidInterviewDate(draft.interviewDate);
     
     console.log(`[CAREER STATE CHECK] Company: ${hasCompany}, Role: ${hasRole}, Date: ${hasInterviewDate}`);
     
@@ -455,8 +484,8 @@ Return ONLY the date in ISO format (YYYY-MM-DD), nothing else. If no date mentio
     const missing: string[] = [];
     
     if (!draft.company) missing.push('company');
-    if (!draft.role) missing.push('role');
-    if (!draft.interviewDate) missing.push('interviewDate');
+    if (!this.isPlausibleRole(draft.role)) missing.push('role');
+    if (!this.isValidInterviewDate(draft.interviewDate)) missing.push('interviewDate');
     
     return missing;
   }
@@ -518,8 +547,8 @@ Return ONLY the date in ISO format (YYYY-MM-DD), nothing else. If no date mentio
     const missing: string[] = [];
     
     if (!draft.company) missing.push('company');
-    if (!draft.role) missing.push('role');
-    if (!draft.interviewDate) missing.push('interviewDate');
+    if (!this.isPlausibleRole(draft.role)) missing.push('role');
+    if (!this.isValidInterviewDate(draft.interviewDate)) missing.push('interviewDate');
     
     return {
       isValid: missing.length === 0,
@@ -550,6 +579,11 @@ Return ONLY the date in ISO format (YYYY-MM-DD), nothing else. If no date mentio
         "Practice interview questions",
         "Prepare technical answers"
       ];
+
+      const activeMissions = await missionRepo.findActiveMissions(this.session.userId);
+      await Promise.all(
+        activeMissions.map((mission) => missionRepo.updateMission(mission.id, { status: 'CANCELLED' }))
+      );
       
       // Create mission
       const missionId = await missionRepo.createCareerMission({

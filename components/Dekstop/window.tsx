@@ -83,13 +83,13 @@ export function Window({
   
   // Sync window position/size when parent updates (e.g., after snap)
   useEffect(() => {
-    if (!isDragging && !isResizing) {
+    if (!isDragging && !isResizing && !isMaximized) {
       if (initialX !== x) setX(initialX)
       if (initialY !== y) setY(initialY)
       if (initialWidth !== width) setWidth(initialWidth)
       if (initialHeight !== height) setHeight(initialHeight)
     }
-  }, [initialX, initialY, initialWidth, initialHeight, isDragging, isResizing])
+  }, [initialX, initialY, initialWidth, initialHeight, isDragging, isResizing, isMobile, isMaximized])
 
   // Detect mobile viewport
   useEffect(() => {
@@ -173,6 +173,9 @@ export function Window({
           ease: "power3.out",
           onComplete: () => {
             gsap.set(element, { clearProps: "transform,opacity,clipPath,filter,willChange" })
+            isTransitioningRef.current = false
+          },
+          onInterrupt: () => {
             isTransitioningRef.current = false
           },
         },
@@ -414,7 +417,9 @@ export function Window({
   // Maximize
   const handleMaximize = useCallback(() => {
     const element = windowRef.current
-    if (!desktopRef.current || !element || isTransitioningRef.current) return
+    if (!desktopRef.current || !element) return
+    gsap.killTweensOf(element)
+    isTransitioningRef.current = false
 
     const desktopRect = desktopRef.current.getBoundingClientRect()
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -448,7 +453,6 @@ export function Window({
     }
 
     isTransitioningRef.current = true
-    gsap.killTweensOf(element)
     gsap.to(element, {
       left: target.x,
       top: target.y,
@@ -459,6 +463,9 @@ export function Window({
       ease: "power3.inOut",
       willChange: "left, top, width, height, border-radius",
       onComplete: commitBounds,
+      onInterrupt: () => {
+        isTransitioningRef.current = false
+      },
     })
   }, [isMaximized, x, y, width, height, desktopRef, prevBounds, isMobile])
 
@@ -504,18 +511,17 @@ export function Window({
         ...(isMobile
           ? {
             left: 0,
-            top: 0,
+            top: TOP_BAR_HEIGHT,
             right: 0,
             bottom: 0,
             width: "100vw",
-            height: "100vh",
+            height: `calc(100vh - ${TOP_BAR_HEIGHT}px)`,
           }
           : {
             left: x,
             top: y,
             width,
             height,
-            transition: isDragging || isResizing ? 'none' : 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1), top 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1), height 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           }),
         zIndex,
         transformOrigin: "center center",
@@ -590,7 +596,7 @@ export function Window({
       
       {/* Window Title - Center */}
       <div
-        className={`flex items-center justify-center cursor-grab active:cursor-grabbing select-none flex-shrink-0 backdrop-blur-xl ${
+        className={`flex items-center justify-center cursor-grab active:cursor-grabbing select-none shrink-0 backdrop-blur-xl ${
           isMobile ? "py-3 h-14" : "py-2.5 h-11"
         }`}
         style={{

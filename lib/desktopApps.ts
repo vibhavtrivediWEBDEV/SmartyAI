@@ -33,6 +33,7 @@ export const DESKTOP_APPS: DesktopAppDefinition[] = [
   { name: 'PDF Viewer', displayName: 'Preview', description: 'Read PDF files and learning material.', category: 'Productivity', icon: '/assets/pdfIcon.png' },
   { name: 'Science Book', displayName: 'Science Book', description: 'Explore interactive NCERT science content.', category: 'Productivity', icon: '/app.svg' },
   { name: 'AI Book', displayName: 'AI Book', description: 'Study with the interactive AI science book. Terminal command: ai-book.', category: 'Productivity', icon: '/app.svg' },
+  { name: 'Library', displayName: 'Library', description: 'Discover free interview learning books published by the community.', category: 'Productivity', icon: '/app.svg' },
   { name: 'Resume PDF', displayName: 'Resume', description: 'View or upload your professional resume.', category: 'Productivity', icon: '/assets/pdfIcon.png' },
   { name: 'About Me', displayName: 'About Me', description: 'View the profile and professional summary.', category: 'Productivity', icon: '/profile.svg' },
   { name: 'Projects', displayName: 'Projects', description: 'Browse portfolio projects and links.', category: 'Productivity', icon: '/app.svg' },
@@ -42,7 +43,8 @@ export const DESKTOP_APPS: DesktopAppDefinition[] = [
   { name: 'Photos', displayName: 'Photos', description: 'View images in an immersive gallery.', category: 'Creativity', icon: 'https://framerusercontent.com/images/ogWIDEJmWxA8SVRZpEe7gk35FcM.png' },
   { name: 'website', displayName: 'Portfolio', description: 'Open the interactive portfolio website.', category: 'Creativity', icon: '/globe.svg' },
   { name: 'Music', displayName: 'Music', description: 'Listen to music with a beautiful player interface.', category: 'Entertainment', icon: '/icons/music.svg' },
-  { name: 'Messages', displayName: 'Messages', description: 'Send and receive messages with contacts.', category: 'Productivity', icon: '/icons/messages.svg' },
+  { name: 'Messages', displayName: 'WhatsApp', description: 'Chat with WhatsApp contacts from your linked account.', category: 'Productivity', icon: 'https://cdn.simpleicons.org/whatsapp/25D366' },
+  { name: 'Telegram', displayName: 'Telegram', description: 'Chat with Telegram contacts and control Smarty automation.', category: 'Productivity', icon: 'https://cdn.simpleicons.org/telegram/26A5E4' },
   { name: 'Phone', displayName: 'Phone', description: 'Make calls and manage contacts.', category: 'Productivity', icon: '/icons/phone.svg' },
   { name: 'Youtube', displayName: 'YouTube', description: 'Watch videos and discover channels.', category: 'Entertainment', icon: 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/youtube.svg' },
   { name: 'TV', displayName: 'Apple TV', description: 'Browse visual news and entertainment.', category: 'Entertainment', icon: 'https://framerusercontent.com/images/1pORyCnfgAxpXWyCa1l7s8IJeK0.png' },
@@ -52,6 +54,16 @@ export const DESKTOP_APPS: DesktopAppDefinition[] = [
 ]
 
 export const DEFAULT_DOCK_APPS = [
+  'Finder',
+  'Calendar',
+  'Notes',
+  'vscode',
+  'Youtube',
+  'Career',
+  'App Store',
+]
+
+const LEGACY_DEFAULT_DOCK_APPS = [
   'Finder',
   'Safari',
   'Maps',
@@ -66,6 +78,28 @@ export const DEFAULT_DOCK_APPS = [
   'App Store',
   'Settings',
 ]
+
+export const APP_STORE_ONLY_APPS = new Set([
+  'Safari',
+  'Maps',
+  'FaceTime',
+  'Messages',
+  'Telegram',
+])
+
+export function canPinDesktopApp(name: string) {
+  return !APP_STORE_ONLY_APPS.has(name)
+}
+
+export function migratePinnedDockApps(apps: string[] | undefined) {
+  if (!apps) return [...DEFAULT_DOCK_APPS]
+
+  const isLegacyDefault = apps.length === LEGACY_DEFAULT_DOCK_APPS.length
+    && LEGACY_DEFAULT_DOCK_APPS.every((name) => apps.includes(name))
+
+  if (isLegacyDefault) return [...DEFAULT_DOCK_APPS]
+  return apps.filter(canPinDesktopApp)
+}
 
 export function getDesktopAppSlug(app: Pick<DesktopAppDefinition, 'displayName'>) {
   return app.displayName

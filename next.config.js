@@ -1,4 +1,7 @@
 /** @type {import('next').NextConfig} */const nextConfig = {
+  distDir: process.env.NODE_ENV === 'production'
+    ? '.next'
+    : `.next-${process.env.PORT || '3001'}`,
    eslint: {
     ignoreDuringBuilds: true,
   },

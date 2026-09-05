@@ -110,7 +110,14 @@ NEXT_PUBLIC_FIREBASE_APP_ID=
 FIREBASE_PROJECT_ID=
 FIREBASE_CLIENT_EMAIL=
 FIREBASE_PRIVATE_KEY=
+
+# Telegram personal account (server-only; never prefix with NEXT_PUBLIC_)
+TELEGRAM_API_ID=
+TELEGRAM_API_HASH=
+TELEGRAM_SESSION_ENCRYPTION_KEY=
 ```
+
+Create `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` for the application at [my.telegram.org](https://my.telegram.org). `TELEGRAM_SESSION_ENCRYPTION_KEY` must be a private random value containing at least 32 characters. Rotate it only with a migration plan because existing encrypted Telegram sessions cannot be decrypted with a replacement key.
 
 
 **Running the Project**

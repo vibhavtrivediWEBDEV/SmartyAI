@@ -1,6 +1,6 @@
 import { Db, MongoClient } from "mongodb";
 
-const uri = process.env.MONGODB_URI;
+const uri = process.env.MONGODB_URI ?? "";
 const databaseName = process.env.MONGODB_DB || "hrms";
 
 if (!uri) {
@@ -12,17 +12,32 @@ declare global {
   var __smartyMongoClientPromise: Promise<MongoClient> | undefined;
 }
 
-const client = new MongoClient(uri);
-const clientPromise = global.__smartyMongoClientPromise ?? client.connect();
+let clientPromise = global.__smartyMongoClientPromise;
 
-if (process.env.NODE_ENV !== "production") {
-  global.__smartyMongoClientPromise = clientPromise;
-}
+function getClientPromise(): Promise<MongoClient> {
+  if (!clientPromise) {
+    const connection = new MongoClient(uri).connect();
+    clientPromise = connection;
 
-export async function getMongoClient(): Promise<MongoClient> {
+    if (process.env.NODE_ENV !== "production") {
+      global.__smartyMongoClientPromise = connection;
+    }
+
+    void connection.catch(() => {
+      if (clientPromise === connection) clientPromise = undefined;
+      if (global.__smartyMongoClientPromise === connection) {
+        global.__smartyMongoClientPromise = undefined;
+      }
+    });
+  }
+
   return clientPromise;
 }
 
+export async function getMongoClient(): Promise<MongoClient> {
+  return getClientPromise();
+}
+
 export async function getDatabase(): Promise<Db> {
-  return (await clientPromise).db(databaseName);
+  return (await getClientPromise()).db(databaseName);
 }

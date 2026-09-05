@@ -680,6 +680,7 @@ async function handleConversation(
         awaitingInput: result.nextField
       },
       shouldCreateMission: result.shouldCreateMission,
+      missionId: result.missionId,
       sessionId: session.id
     });
     

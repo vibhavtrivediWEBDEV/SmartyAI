@@ -33,41 +33,22 @@ const APP_ALIASES: Record<string, string> = {
   'terminal': 'terminal',
   'safari': 'safari',
   'mail': 'mail',
+  'whatsapp': 'whatsapp',
+  'telegram': 'telegram',
   'calendar': 'calendar',
   'photos': 'photos',
   'photo': 'photos',
   'notes': 'notes',
   'note': 'notes',
   'finder': 'finder',
-  'facetime': 'facetime',
   'messages': 'messages',
   'message': 'messages',
-  'appstore': 'app store',
-  'app store': 'app store',
+  'appstore': 'appstore',
+  'app store': 'appstore',
   'resume': 'resume',
   'portfolio': 'website',
   'projects': 'projects',
   'project': 'projects',
-};
-
-/**
- * Normalize app names
- */
-const APP_NAME_MAP: Record<string, string> = {
-  ...APP_ALIASES,
-  'youtube': 'Youtube',
-  'maps': 'Maps',
-  'map': 'Maps',
-  'chrome': 'chrome',
-  'settings': 'Settings',
-  'terminal': 'Terminal',
-  'spotify': 'Spotify',
-  'photos': 'Photos',
-  'photo': 'Photos',
-  'notes': 'Notes',
-  'note': 'Notes',
-  'messages': 'Messages',
-  'message': 'Messages',
 };
 
 /**
@@ -446,10 +427,23 @@ export async function resolveUserIntent(
   // Open patterns
   const openMatch = input.match(/^open\s+(.+)$/i) || input.match(/^(.+)\s+kholo$/i);
   if (openMatch) {
-    let appName = openMatch[1].trim().toLowerCase();
-    appName = APP_NAME_MAP[appName] || appName;
+    const appName = openMatch[1].trim().toLowerCase();
+    const appKey = APP_ALIASES[appName];
+    if (!appKey) {
+      return {
+        intent: 'system.unknown_app',
+        parameters: {
+          appName,
+          action: 'open',
+          message: 'Aayein (What?)',
+          reactionSound: 'aayein-meme'
+        },
+        confidence: 'high',
+        source: 'pattern'
+      };
+    }
     return {
-      intent: `${appName}.open`,
+      intent: `${appKey}.open`,
       parameters: {},
       confidence: 'high',
       source: 'pattern'
@@ -459,10 +453,23 @@ export async function resolveUserIntent(
   // Close patterns
   const closeMatch = input.match(/^close\s+(.+)$/i) || input.match(/^(.+)\s+band\s+kar$/i);
   if (closeMatch) {
-    let appName = closeMatch[1].trim().toLowerCase();
-    appName = APP_NAME_MAP[appName] || appName;
+    const appName = closeMatch[1].trim().toLowerCase();
+    const appKey = APP_ALIASES[appName];
+    if (!appKey) {
+      return {
+        intent: 'system.unknown_app',
+        parameters: {
+          appName,
+          action: 'close',
+          message: 'Aayein (What?)',
+          reactionSound: 'aayein-meme'
+        },
+        confidence: 'high',
+        source: 'pattern'
+      };
+    }
     return {
-      intent: `${appName}.close`,
+      intent: `${appKey}.close`,
       parameters: {},
       confidence: 'high',
       source: 'pattern'

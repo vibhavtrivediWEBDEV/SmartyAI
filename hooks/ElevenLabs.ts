@@ -7,12 +7,20 @@ export function useElevenTTS() {
     const audioUrlRef = useRef<string | null>(null);
 
     // Browser TTS fallback function - never throws
-    const fallbackToBrowserTTS = useCallback((text: string) => {
+    const fallbackToBrowserTTS = useCallback((text: string, onEnd?: () => void) => {
+        let finished = false;
+        const finish = () => {
+            if (finished) return;
+            finished = true;
+            onEnd?.();
+        };
+
         try {
             console.log('🔊 Using browser TTS fallback');
             
             if (!('speechSynthesis' in window)) {
                 console.warn('⚠️ Web Speech API not supported, voice feedback disabled');
+                finish();
                 return;
             }
 
@@ -57,13 +65,16 @@ export function useElevenTTS() {
             // Handle speech synthesis errors gracefully
             utterance.onerror = (event) => {
                 console.warn('⚠️ Speech synthesis error:', event.error);
+                finish();
                 // Don't throw - just log and continue
             };
+            utterance.onend = finish;
             
             window.speechSynthesis.speak(utterance);
             console.log('🔊 Web Speech API: Speaking');
         } catch (fallbackErr) {
             console.warn('⚠️ Browser TTS fallback failed:', fallbackErr);
+            finish();
             // Don't throw - user will just not hear audio
         }
     }, []);
@@ -138,5 +149,5 @@ export function useElevenTTS() {
         }
     }, []);
 
-    return { speak, cleanup };
+    return { speak, speakWithBrowserTTS: fallbackToBrowserTTS, cleanup };
 }

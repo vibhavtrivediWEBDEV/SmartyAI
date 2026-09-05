@@ -10,23 +10,21 @@ export default function NewTeachingSessionPage() {
   const [topic, setTopic] = useState<string>("");
   const [difficulty, setDifficulty] = useState<string>("Intermediate");
   const [isCreating, setIsCreating] = useState(false);
+  const [creationError, setCreationError] = useState("");
   
   const handleCreateSession = async () => {
     if (!subject || !topic) return;
     
     setIsCreating(true);
+    setCreationError("");
     
     try {
-      // Replace with your actual user ID or authentication method
-      const userId = "your-user-id";
-      
       const response = await fetch("/api/teaching/create", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId,
           subject,
           topic,
           difficulty,
@@ -36,15 +34,14 @@ export default function NewTeachingSessionPage() {
       const data = await response.json();
       
       if (data.success && data.sessionId) {
-        // Redirect to the teaching session page
         router.push(`/teaching/session/${data.sessionId}`);
       } else {
-        alert("Failed to create teaching session. Please try again.");
+        setCreationError(data.error || `Failed to create teaching session (${response.status})`);
         setIsCreating(false);
       }
     } catch (error) {
       console.error("Error creating session:", error);
-      alert("An error occurred. Please try again.");
+      setCreationError("Could not reach the teaching service. Please try again.");
       setIsCreating(false);
     }
   };
@@ -107,6 +104,12 @@ export default function NewTeachingSessionPage() {
         >
           {isCreating ? "Creating..." : "Create Session"}
         </button>
+
+        {creationError && (
+          <p role="alert" className="mt-3 text-sm text-red-600">
+            {creationError === "Unauthorized" ? "Please sign in before creating a teaching session." : creationError}
+          </p>
+        )}
       </div>
     </div>
   );

@@ -27,11 +27,20 @@ export interface SerializedFinderNode {
 }
 
 const TEXT_EXTENSIONS = new Set(["txt", "md", "json", "js", "ts", "jsx", "tsx", "html", "css", "py", "csv", "xml", "yaml", "yml"]);
+let nodesCollectionPromise: Promise<Collection<FileNodeDocument>> | null = null;
 
 async function nodes(): Promise<Collection<FileNodeDocument>> {
-  const collection = (await getDatabase()).collection<FileNodeDocument>("fileNodes");
-  await collection.createIndex({ ownerId: 1, parentId: 1, isTrashed: 1, name: 1 }, { name: "finder_directory_listing" });
-  return collection;
+  if (!nodesCollectionPromise) {
+    nodesCollectionPromise = getDatabase().then(async (database) => {
+      const collection = database.collection<FileNodeDocument>("fileNodes");
+      await collection.createIndex({ ownerId: 1, parentId: 1, isTrashed: 1, name: 1 }, { name: "finder_directory_listing" });
+      return collection;
+    }).catch((error) => {
+      nodesCollectionPromise = null;
+      throw error;
+    });
+  }
+  return nodesCollectionPromise;
 }
 
 function objectId(value?: string | null): ObjectId | null {

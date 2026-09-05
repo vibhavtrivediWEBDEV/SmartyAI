@@ -221,7 +221,7 @@ export function inferCapabilitiesForIntent(intentKey: string, params: Record<str
     caps.add('mail.send');
   }
 
-  if (intentKey.startsWith('calendar') || intentKey.includes('calendar')) {
+  if ((intentKey.startsWith('calendar') || intentKey.includes('calendar')) && intentKey !== 'calendar.open') {
     caps.add('calendar.write');
   }
 
@@ -565,10 +565,11 @@ export function cancelOperation(id: string) {
 
 // --- Grant / Deny (these would be invoked by local UI after user decision) ---
 export function grantCapability(capability: Capability, persistent = false) {
-  // mark pending entries as granted
-  pendingQueue.forEach(p => {
-    if (p.capability === capability) p.status = 'granted';
-  });
+  for (let i = pendingQueue.length - 1; i >= 0; i--) {
+    if (pendingQueue[i].capability === capability) {
+      pendingQueue.splice(i, 1);
+    }
+  }
 
   if (persistent) {
     grantedPermissions.add(capability);

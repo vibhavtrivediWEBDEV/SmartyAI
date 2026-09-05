@@ -1,6 +1,11 @@
 "use client";
 
-import { Desktop } from "@/components/Dekstop/deskstop";
+import dynamic from "next/dynamic";
+
+const Desktop = dynamic(
+  () => import("@/components/Dekstop/deskstop").then((module) => module.Desktop),
+  { ssr: false },
+);
 
 export default function DesktopPage() {
   return (

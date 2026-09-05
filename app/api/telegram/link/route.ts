@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/actions/auth.action'
-import { createLinkingToken } from '@/lib/telegram/repository'
+import { createLinkingToken, deactivateTelegramConnection } from '@/lib/telegram/repository'
 import { getTelegramBot } from '@/lib/telegram/bot'
 
 export const runtime = 'nodejs'
@@ -35,28 +35,31 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Get bot username
     const bot = getTelegramBot()
     const botInfo = await bot.getMe()
+    const configuredWebhookUrl = process.env.TELEGRAM_WEBHOOK_URL
+      || (request.nextUrl.protocol === 'https:' ? `${request.nextUrl.origin}/api/telegram/webhook` : '')
+
+    if (!configuredWebhookUrl) {
+      return NextResponse.json(
+        { error: 'Telegram webhook URL is not configured' },
+        { status: 503 }
+      )
+    }
+
+    const webhookInfo = await bot.getWebhookInfo()
+    if (webhookInfo.url !== configuredWebhookUrl) {
+      const webhookConfigured = await bot.setWebhook(
+        configuredWebhookUrl,
+        process.env.TELEGRAM_WEBHOOK_SECRET || process.env.TELEGRAM_SECRET_TOKEN
+      )
+      if (!webhookConfigured) throw new Error('Telegram rejected the webhook URL')
+      console.log(`[Telegram Link] Webhook configured: ${configuredWebhookUrl}`)
+    }
     
     // Create deep link URL
     const telegramUrl = `https://t.me/${botInfo.username}?start=${token.token}`
     
     console.log(`[Telegram Link] Token generated: ${token.token}`)
     console.log(`[Telegram Link] Deep link: ${telegramUrl}`)
-    
-    // Send notification to user's Telegram chat if already connected
-    if (process.env.TELEGRAM_CHAT_ID) {
-      try {
-        await bot.sendMessage(
-          parseInt(process.env.TELEGRAM_CHAT_ID),
-          `🔗 *New Login Request*\n\n` +
-          `User: ${user.name || 'Unknown'}\n` +
-          `Email: ${user.email || 'Unknown'}\n\n` +
-          `Click the link below to connect:`,
-          { parse_mode: 'Markdown' }
-        )
-      } catch (error) {
-        console.error('[Telegram Link] Failed to send notification:', error)
-      }
-    }
     
     return NextResponse.json({
       success: true,
@@ -73,6 +76,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { error: 'Failed to generate linking token' },
       { status: 500 }
     )
+  }
+}
+
+/**
+ * DELETE /api/telegram/link
+ * Disconnect Telegram for the current user.
+ */
+export async function DELETE(): Promise<NextResponse> {
+  try {
+    const user = await getCurrentUser()
+    if (!user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    await deactivateTelegramConnection(user.id)
+    return NextResponse.json({ success: true, connected: false })
+  } catch (error) {
+    console.error('[Telegram Link] Disconnect error:', error)
+    return NextResponse.json({ error: 'Failed to disconnect Telegram' }, { status: 500 })
   }
 }
 

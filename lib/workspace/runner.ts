@@ -3,8 +3,8 @@
  * Handles React/HTML bundling with console capture
  */
 
-import type { WorkspaceFile, WorkspaceSettings, ConsoleLogEntry } from "@/lib/types/workspace";
-import { bundleReact } from "@/lib/utils/reactBundler";
+import type { WorkspaceFile, WorkspaceSettings, ConsoleLogEntry } from "../types/workspace";
+import { bundleReact } from "../utils/reactBundler";
 import { executePython, executeJava, executeNode } from "./backendRunner";
 
 /**
@@ -12,6 +12,19 @@ import { executePython, executeJava, executeNode } from "./backendRunner";
  */
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+function backendResult(logs: ConsoleLogEntry[]): {
+  preview: string;
+  logs: ConsoleLogEntry[];
+  error?: string;
+} {
+  const failure = logs.find(log => log.type === 'error');
+  return {
+    preview: '',
+    logs,
+    ...(failure ? { error: failure.message } : {}),
+  };
 }
 
 /**
@@ -29,7 +42,8 @@ export async function runWorkspace(
   const logs: ConsoleLogEntry[] = [];
 
   try {
-    switch (settings.runtime) {
+    const runtime = resolveRuntime(files, settings);
+    switch (runtime) {
       case "react":
       case "react-ts":
         return await runReact(files, settings);
@@ -37,9 +51,10 @@ export async function runWorkspace(
       case "html":
         return await runHTML(files);
 
-      case "node": {
+      case "node":
+      case "typescript": {
         // Node.js execution
-        const mainFile = files.find(f => f.path.endsWith(".js") || f.path.endsWith(".ts"));
+        const mainFile = findEntryFile(files, settings.entryPoint, [".js", ".mjs", ".cjs", ".ts"]);
         if (!mainFile) {
           return {
             preview: "",
@@ -47,16 +62,13 @@ export async function runWorkspace(
             error: "No JavaScript/TypeScript file found",
           };
         }
-        const nodeLogs = await executeNode(mainFile.content);
-        return {
-          preview: "",
-          logs: nodeLogs,
-        };
+        const nodeLogs = await executeNode(mainFile.content, mainFile.path.endsWith(".ts"));
+        return backendResult(nodeLogs);
       }
 
       case "python": {
         // Python execution
-        const mainFile = files.find(f => f.path.endsWith(".py"));
+        const mainFile = findEntryFile(files, settings.entryPoint, [".py"]);
         if (!mainFile) {
           return {
             preview: "",
@@ -65,15 +77,12 @@ export async function runWorkspace(
           };
         }
         const pythonLogs = await executePython(mainFile.content);
-        return {
-          preview: "",
-          logs: pythonLogs,
-        };
+        return backendResult(pythonLogs);
       }
 
       case "java": {
         // Java execution
-        const mainFile = files.find(f => f.path.endsWith(".java"));
+        const mainFile = findEntryFile(files, settings.entryPoint, [".java"]);
         if (!mainFile) {
           return {
             preview: "",
@@ -82,11 +91,14 @@ export async function runWorkspace(
           };
         }
         const javaLogs = await executeJava(mainFile.content);
-        return {
-          preview: "",
-          logs: javaLogs,
-        };
+        return backendResult(javaLogs);
       }
+
+      case "sql":
+        return runSQL(findEntryFile(files, settings.entryPoint, [".sql"]));
+
+      case "mongodb":
+        return runMongoPipeline(findEntryFile(files, settings.entryPoint, [".mongodb", ".mongo", ".json"]));
 
       default:
         return {
@@ -111,6 +123,94 @@ export async function runWorkspace(
   }
 }
 
+function findEntryFile(files: WorkspaceFile[], entryPoint: string, extensions: string[]): WorkspaceFile | undefined {
+  const selected = files.find(file => file.path === entryPoint);
+  if (selected && extensions.some(extension => selected.path.toLowerCase().endsWith(extension))) {
+    return selected;
+  }
+  return files.find(file => extensions.some(extension => file.path.toLowerCase().endsWith(extension)));
+}
+
+function resolveRuntime(files: WorkspaceFile[], settings: WorkspaceSettings): WorkspaceSettings["runtime"] {
+  const selected = files.find(file => file.path === settings.entryPoint);
+  const extension = selected?.path.split('.').pop()?.toLowerCase();
+
+  if (extension === 'jsx' || extension === 'tsx') return extension === 'tsx' ? 'react-ts' : 'react';
+  if (extension === 'html' || extension === 'htm') return 'html';
+  if (extension === 'py') return 'python';
+  if (extension === 'java') return 'java';
+  if (extension === 'sql') return 'sql';
+  if (extension === 'mongo' || extension === 'mongodb') return 'mongodb';
+  if (extension === 'ts') return 'typescript';
+  if (extension === 'js' || extension === 'mjs' || extension === 'cjs') {
+    if (settings.runtime === 'react' || settings.runtime === 'react-ts' || settings.runtime === 'html') {
+      return settings.runtime;
+    }
+    return 'node';
+  }
+
+  return settings.runtime;
+}
+
+function runSQL(file?: WorkspaceFile): { preview: string; logs: ConsoleLogEntry[]; error?: string } {
+  const sql = file?.content.trim() || '';
+  const statements = sql
+    .split(';')
+    .map(statement => statement.replace(/--.*$/gm, '').trim())
+    .filter(Boolean);
+  const supportedStart = /^(select|insert|update|delete|create|alter|drop|with|explain|show|use)\b/i;
+  const invalid = statements.find(statement => !supportedStart.test(statement));
+
+  if (!file || statements.length === 0 || invalid) {
+    const error = !file ? 'No SQL file found' : statements.length === 0 ? 'No SQL statement found' : `Unsupported SQL statement: ${invalid}`;
+    return {
+      preview: '',
+      logs: [{ id: generateId(), type: 'error', message: error, timestamp: new Date().toISOString() }],
+      error,
+    };
+  }
+
+  return {
+    preview: '',
+    logs: [{
+      id: generateId(),
+      type: 'success',
+      message: `SQL validated: ${statements.length} statement${statements.length === 1 ? '' : 's'} ready to run against a database.`,
+      timestamp: new Date().toISOString(),
+    }],
+  };
+}
+
+function runMongoPipeline(file?: WorkspaceFile): { preview: string; logs: ConsoleLogEntry[]; error?: string } {
+  try {
+    if (!file) throw new Error('No MongoDB pipeline file found');
+    const pipeline = JSON.parse(file.content);
+    if (!Array.isArray(pipeline)) throw new Error('Aggregation pipeline must be a JSON array');
+    const invalidStage = pipeline.find(stage =>
+      !stage || typeof stage !== 'object' || Array.isArray(stage) ||
+      Object.keys(stage).length !== 1 || !Object.keys(stage)[0].startsWith('$')
+    );
+    if (invalidStage) throw new Error('Each aggregation stage must contain exactly one $ operator');
+
+    return {
+      preview: '',
+      logs: [{
+        id: generateId(),
+        type: 'success',
+        message: `MongoDB aggregation validated: ${pipeline.length} stage${pipeline.length === 1 ? '' : 's'} ready.`,
+        timestamp: new Date().toISOString(),
+      }],
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Invalid MongoDB aggregation pipeline';
+    return {
+      preview: '',
+      logs: [{ id: generateId(), type: 'error', message, timestamp: new Date().toISOString() }],
+      error: message,
+    };
+  }
+}
+
 /**
  * Run React workspace
  */
@@ -121,7 +221,10 @@ async function runReact(
   preview: string;
   logs: ConsoleLogEntry[];
 }> {
-  const entryPoint = settings.entryPoint || "App.jsx";
+  const selectedEntry = files.find(file => file.path === settings.entryPoint);
+  const entryPoint = selectedEntry && /\.(jsx|tsx|js)$/.test(selectedEntry.path)
+    ? selectedEntry.path
+    : findEntryFile(files, settings.entryPoint, [".jsx", ".tsx", ".js"])?.path || "App.jsx";
   const entryFile = files.find(f => f.path === entryPoint);
 
   if (!entryFile) {
@@ -143,7 +246,8 @@ async function runReact(
     .join("\n");
 
   // Convert WorkspaceFile[] to format expected by bundler
-  const bundlerFiles = files.map(f => ({
+  const reactFiles = entryPoint.startsWith('exercises/') ? [entryFile] : files;
+  const bundlerFiles = reactFiles.map(f => ({
     name: f.path,
     content: f.content
   }));

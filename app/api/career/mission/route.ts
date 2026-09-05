@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
     
     const url = new URL(req.url);
     const missionId = url.searchParams.get('id');
+    const status = url.searchParams.get('status');
     
     if (missionId) {
       // Get single mission
@@ -39,8 +40,9 @@ export async function GET(req: NextRequest) {
       
       return NextResponse.json({ mission });
     } else {
-      // Get all missions for user
-      const missions = await careerRepository.findMissionsByUserId(userId);
+      const missions = status === 'active'
+        ? (await careerRepository.findActiveMissions(userId)).slice(0, 1)
+        : await careerRepository.findMissionsByUserId(userId);
       
       return NextResponse.json({ missions });
     }

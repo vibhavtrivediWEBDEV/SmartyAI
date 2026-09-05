@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSettings } from "@/app/context/settingContext";
+import { useAuth } from "@/hooks/useAuth";
 import { 
   FiMonitor, 
   FiSettings, 
@@ -99,6 +100,7 @@ export default function AppleTopBar({
 }: AppleTopBarProps) {
   // 🔄 Use darkMode boolean from settings (synced with Control Center)
   const isDarkMode = settings?.darkMode ?? true;
+  const { signOut } = useAuth();
   const [time, setTime] = useState(getTime());
 
   useEffect(() => {
@@ -234,7 +236,10 @@ export default function AppleTopBar({
               <span className="text-xs opacity-50 font-normal">⌃⌘Q</span>
             </DropdownMenuItem>
 
-            <DropdownMenuItem className={`flex items-center justify-between px-3 py-1.5 text-[13.5px] rounded-lg transition-colors focus:bg-[#007aff] focus:text-white cursor-default ${isDarkMode ? 'text-white/90' : 'text-gray-900'}`}>
+            <DropdownMenuItem
+              onSelect={signOut}
+              className={`flex items-center justify-between px-3 py-1.5 text-[13.5px] rounded-lg transition-colors focus:bg-[#007aff] focus:text-white cursor-pointer ${isDarkMode ? 'text-white/90' : 'text-gray-900'}`}
+            >
               <div className="flex items-center gap-2.5">
                 <FiUser className="w-4 h-4 opacity-75" />
                 <span>Log Out {userContext?.macName || 'User'}...</span>

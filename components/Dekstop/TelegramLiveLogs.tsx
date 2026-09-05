@@ -7,6 +7,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Activity, MessageCircle, Send, Settings, Wifi, WifiOff } from 'lucide-react'
 
 interface TelegramLog {
   _id: string
@@ -28,11 +29,13 @@ interface TelegramLog {
   metadata?: {
     confidence?: number
     processingTime?: number
+    author?: 'user' | 'assistant' | 'system'
   }
 }
 
-export function TelegramLiveLogs({ maxLogs = 20, userId }: { maxLogs?: number; userId?: string | null }) {
+export function TelegramLiveLogs({ maxLogs = 20 }: { maxLogs?: number }) {
   const [logs, setLogs] = useState<TelegramLog[]>([])
+  const [view, setView] = useState<'chat' | 'activity'>('chat')
   const [autoScroll, setAutoScroll] = useState(true)
   const [messageInput, setMessageInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -68,12 +71,7 @@ export function TelegramLiveLogs({ maxLogs = 20, userId }: { maxLogs?: number; u
   useEffect(() => {
     const fetchLogs = async () => {
       try {
-        // Add userId to query if available
-        const url = userId 
-          ? `/api/telegram/logs?limit=${maxLogs}&userId=${userId}`
-          : `/api/telegram/logs?limit=${maxLogs}`
-        
-        const response = await fetch(url)
+        const response = await fetch(`/api/telegram/logs?limit=${maxLogs}`, { cache: 'no-store' })
         const data = await response.json()
         
         if (data.success && data.logs) {
@@ -84,14 +82,21 @@ export function TelegramLiveLogs({ maxLogs = 20, userId }: { maxLogs?: number; u
       }
     }
 
-    // Initial fetch
-    fetchLogs()
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void fetchLogs()
+    }
 
-    // Poll every 1 second for live updates
-    const interval = setInterval(fetchLogs, 1000)
+    void fetchLogs()
+    window.addEventListener('smarty:telegram-log-updated', fetchLogs)
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
 
-    return () => clearInterval(interval)
-  }, [maxLogs, userId])
+    return () => {
+      window.removeEventListener('smarty:telegram-log-updated', fetchLogs)
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [maxLogs])
   
   // Send message to Telegram
   const sendMessageToTelegram = async () => {
@@ -102,7 +107,7 @@ export function TelegramLiveLogs({ maxLogs = 20, userId }: { maxLogs?: number; u
       const response = await fetch('/api/telegram/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: messageInput.trim(), userId })
+        body: JSON.stringify({ message: messageInput.trim() })
       })
       
       const data = await response.json()
@@ -187,6 +192,15 @@ export function TelegramLiveLogs({ maxLogs = 20, userId }: { maxLogs?: number; u
     })
   }
 
+  const isUserAuthored = (log: TelegramLog) => {
+    if (log.metadata?.author) return log.metadata.author === 'user'
+    return log.direction === 'incoming' || log.message.startsWith('🖥️ ')
+  }
+
+  const formatChatMessage = (log: TelegramLog) => log.message.replace(/^🖥️\s*/, '')
+
+  const chatLogs = logs.filter((log) => log.source === 'telegram')
+
   const formatLogEntry = (log: TelegramLog) => {
     const lines: JSX.Element[] = []
     
@@ -239,87 +253,67 @@ export function TelegramLiveLogs({ maxLogs = 20, userId }: { maxLogs?: number; u
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-950 rounded-lg overflow-hidden">
-      {/* Connection Status Banner */}
-      {connectionStatus === 'checking' && (
-        <div className="px-3 py-2 bg-yellow-900/30 border-b border-yellow-700 text-yellow-300 text-xs font-mono flex items-center gap-2">
-          <span className="animate-pulse">🟡</span>
-          <span>Checking Telegram connection...</span>
-        </div>
-      )}
-      
-      {connectionStatus === 'connected' && (
-        <div className="px-3 py-2 bg-green-900/30 border-b border-green-700 text-green-300 text-xs font-mono flex items-center gap-2">
-          <span>🟢</span>
-          <span>Telegram connected</span>
-        </div>
-      )}
-      
-      {connectionStatus === 'disconnected' && (
-        <div className="px-3 py-2 bg-red-900/30 border-b border-red-700 text-xs font-mono">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-red-300">
-              <span>🔴</span>
-              <span>Telegram is not connected</span>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white text-gray-900 dark:bg-[#1e1e1e] dark:text-white">
+      <header className="flex h-16 shrink-0 items-center justify-between border-b border-black/10 px-5 dark:border-white/10">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#229ED9] text-white shadow-sm">
+            <MessageCircle size={20} />
+          </div>
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold">Telegram</h2>
+            <div className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+              {connectionStatus === 'connected' ? <Wifi size={11} className="text-emerald-500" /> : <WifiOff size={11} className="text-red-500" />}
+              <span>{connectionStatus === 'connected' ? 'Connected and live' : connectionStatus === 'checking' ? 'Checking connection' : connectionError || 'Not connected'}</span>
             </div>
-            <button
-              onClick={() => window.location.href = '/desktop?app=settings'}
-              className="px-2 py-1 bg-red-700 hover:bg-red-600 text-white rounded text-xs font-medium"
-            >
-              Connect Telegram
-            </button>
-          </div>
-          <div className="mt-1 text-red-400">
-            Connect your Telegram account to send messages
           </div>
         </div>
-      )}
-      
-      {connectionStatus === 'error' && (
-        <div className="px-3 py-2 bg-orange-900/30 border-b border-orange-700 text-xs font-mono">
-          <div className="flex items-center gap-2 text-orange-300">
-            <span>⚠️</span>
-            <span>Connection error: {connectionError}</span>
-          </div>
+        <div className="flex rounded-lg bg-black/5 p-0.5 dark:bg-white/8" aria-label="Telegram view">
+          <button type="button" onClick={() => setView('chat')} className={`flex h-7 items-center gap-1.5 rounded-md px-3 text-[11px] font-semibold ${view === 'chat' ? 'bg-white text-[#007AFF] shadow-sm dark:bg-white/15 dark:text-sky-400' : 'text-gray-500'}`}>
+            <MessageCircle size={13} /> Chat
+          </button>
+          <button type="button" onClick={() => setView('activity')} className={`flex h-7 items-center gap-1.5 rounded-md px-3 text-[11px] font-semibold ${view === 'activity' ? 'bg-white text-[#007AFF] shadow-sm dark:bg-white/15 dark:text-sky-400' : 'text-gray-500'}`}>
+            <Activity size={13} /> Activity
+          </button>
         </div>
-      )}
-      
-      {/* Header */}
-      <div className="flex items-center justify-between p-3 bg-gray-900 border-b border-gray-800">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-gray-300 font-mono text-sm font-semibold">
-            Telegram Live Logs
-          </span>
-          <span className="text-gray-600 text-xs">({logs.length} entries)</span>
-        </div>
-        <label className="flex items-center gap-2 text-gray-400 text-xs">
-          <input
-            type="checkbox"
-            checked={autoScroll}
-            onChange={(e) => setAutoScroll(e.target.checked)}
-            className="rounded"
-          />
-          Auto-scroll
-        </label>
-      </div>
+      </header>
 
-      {/* Logs */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2 font-mono">
+      {(connectionStatus === 'disconnected' || connectionStatus === 'error') && (
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+          <span>Connect Telegram in Settings to send messages and receive commands.</span>
+          <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('smarty:open-app', { detail: { name: 'Settings' } }))} className="flex shrink-0 items-center gap-1.5 rounded-md bg-amber-900 px-2.5 py-1.5 font-semibold text-white dark:bg-amber-500 dark:text-black">
+            <Settings size={12} /> Settings
+          </button>
+        </div>
+      )}
+
+      <div className={`flex-1 overflow-y-auto ${view === 'activity' ? 'bg-[#111214] p-4 font-mono' : 'space-y-3 bg-white px-5 py-4 dark:bg-[#1e1e1e]'}`} style={{ scrollbarWidth: 'none' }}>
         <AnimatePresence initial={false}>
           {logs.length === 0 ? (
-            <div className="text-gray-500 text-center py-8">
-              No logs yet. Send a message from Telegram!
+            <div className={`grid h-full place-items-center text-center ${view === 'activity' ? 'text-gray-500' : 'text-gray-400'}`}>
+              <div><MessageCircle size={28} className="mx-auto mb-2 opacity-50" /><p className="text-xs">No Telegram activity yet</p></div>
             </div>
+          ) : view === 'chat' ? (
+            chatLogs.map((log) => {
+              const isUser = isUserAuthored(log)
+              return (
+                <motion.div key={log._id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                  <div className="max-w-[74%]">
+                    <div className={`px-3 py-2 text-[13px] leading-relaxed shadow-sm ${isUser ? 'rounded-2xl rounded-br-md bg-[#007AFF] text-white' : 'rounded-2xl rounded-bl-md bg-gray-100 text-gray-900 dark:bg-white/10 dark:text-white'} ${!log.success ? 'ring-1 ring-red-500/50' : ''}`}>
+                      <p className="whitespace-pre-wrap break-words">{formatChatMessage(log)}</p>
+                    </div>
+                    <div className={`mt-1 flex items-center gap-1 text-[9px] text-gray-400 ${isUser ? 'justify-end' : 'justify-start'}`}>
+                      <span>{formatTime(log.timestamp)}</span>
+                      <span>·</span>
+                      <span className="capitalize">{log.messageType}</span>
+                      {log.websocket.received && <span className="text-emerald-500">Delivered</span>}
+                    </div>
+                  </div>
+                </motion.div>
+              )
+            })
           ) : (
             logs.map((log) => (
-              <motion.div
-                key={log._id}
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="border-b border-gray-800 pb-2"
-              >
+              <motion.div key={log._id} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="border-b border-white/8 py-2">
                 {formatLogEntry(log)}
               </motion.div>
             ))
@@ -327,40 +321,25 @@ export function TelegramLiveLogs({ maxLogs = 20, userId }: { maxLogs?: number; u
         </AnimatePresence>
         <div ref={logsEndRef} />
       </div>
-      
-      {/* Send Message Input */}
-      <div className="p-3 bg-gray-900 border-t border-gray-800">
-        <div className="flex gap-2">
+
+      <div className="shrink-0 border-t border-black/10 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#1e1e1e]">
+        <div className="flex items-center gap-2">
           <input
             type="text"
             value={messageInput}
-            onChange={(e) => setMessageInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && sendMessageToTelegram()}
-            placeholder="Send message to Telegram..."
-            className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500"
-            disabled={sending}
+            onChange={(event) => setMessageInput(event.target.value)}
+            onKeyDown={(event) => event.key === 'Enter' && void sendMessageToTelegram()}
+            placeholder={connectionStatus === 'connected' ? 'Message Telegram' : 'Connect Telegram to send'}
+            className="h-9 min-w-0 flex-1 rounded-full bg-gray-100 px-4 text-[13px] outline-none ring-[#007AFF]/40 focus:ring-2 dark:bg-white/8"
+            disabled={sending || connectionStatus !== 'connected'}
           />
-          <button
-            onClick={sendMessageToTelegram}
-            disabled={sending || !messageInput.trim()}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded text-sm font-medium transition-colors"
-          >
-            {sending ? '⏳' : '📤'}
+          <button type="button" onClick={() => void sendMessageToTelegram()} disabled={sending || connectionStatus !== 'connected' || !messageInput.trim()} aria-label="Send to Telegram" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#007AFF] text-white transition hover:bg-blue-600 disabled:bg-gray-200 disabled:text-gray-400 dark:disabled:bg-white/10">
+            <Send size={15} />
           </button>
         </div>
-      </div>
-
-      {/* Footer */}
-      <div className="flex items-center justify-between p-2 bg-gray-900 border-t border-gray-800 text-xs text-gray-500">
-        <div className="flex items-center gap-4">
-          <span>📩 Incoming</span>
-          <span>📤 Outgoing</span>
-          <span>⚡ Commands</span>
-          <span>🤖 Automation</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          <span>Live • Updated every 1s</span>
+        <div className="mt-1.5 flex items-center justify-between px-1 text-[9px] text-gray-400">
+          <span>{logs.length} recent events</span>
+          <label className="flex items-center gap-1.5"><input type="checkbox" checked={autoScroll} onChange={(event) => setAutoScroll(event.target.checked)} /> Follow live activity</label>
         </div>
       </div>
     </div>

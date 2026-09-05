@@ -37,6 +37,11 @@ export async function GET(request: NextRequest) {
     
     // Get plan for this mission
     const plan = await careerPlanRepo.findPlanByMission(missionId);
+    const preparationTasks = await careerMissionRepo.findTasksByMission(missionId);
+    const completedTasks = preparationTasks.filter((task) => task.status === 'completed').length;
+    const learnerProgress = preparationTasks.length > 0
+      ? Math.round((completedTasks / preparationTasks.length) * 100)
+      : 0;
     
     if (!plan) {
       // No plan yet - return initial state
@@ -59,6 +64,8 @@ export async function GET(request: NextRequest) {
       generatedNotes: plan.generatedNotes,
       calendarEvents: plan.calendarEvents,
       learningResources: plan.learningResources,
+      preparationTasks,
+      learnerProgress,
       createdAt: plan.createdAt,
       updatedAt: plan.updatedAt
     });

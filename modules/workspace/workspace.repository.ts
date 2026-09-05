@@ -66,6 +66,9 @@ function inferLanguage(path: string): string {
     tsx: "typescript",
     py: "python",
     java: "java",
+    sql: "sql",
+    mongo: "json",
+    mongodb: "json",
     html: "html",
     css: "css",
     json: "json",
@@ -84,8 +87,11 @@ function inferEntryPoint(template: string): string {
     'react-ts': 'src/App.tsx',
     'html': 'index.html',
     'node': 'index.js',
+    'typescript': 'index.ts',
     'python': 'main.py',
-    'java': 'src/Main.java'
+    'java': 'src/Main.java',
+    'sql': 'query.sql',
+    'mongodb': 'pipeline.mongodb'
   };
   return entryPoints[template] || 'index.js';
 }
@@ -168,29 +174,64 @@ function generateTemplateFiles(template: string, projectName: string): Workspace
           content: JSON.stringify({
             name: projectName.toLowerCase().replace(/\s+/g, '-'),
             version: "1.0.0",
-            description: "Node.js Express server",
+            description: "Node.js coding playground",
             main: "index.js",
             scripts: {
-              start: "node index.js",
-              dev: "nodemon index.js"
-            },
-            dependencies: {
-              express: "^4.18.2"
-            },
-            devDependencies: {
-              nodemon: "^3.0.0"
+              start: "node index.js"
             }
           }, null, 2),
           language: "json",
         },
         {
           path: "index.js",
-          content: `const express = require('express');\nconst app = express();\nconst PORT = process.env.PORT || 3000;\n\napp.use(express.json());\n\napp.get('/', (req, res) => {\n  res.json({ message: 'Hello from Express!' });\n});\n\napp.listen(PORT, () => {\n  console.log('Server running on port ' + PORT);\n});`,
+          content: `function solve(values) {\n  return values.reduce((total, value) => total + value, 0);\n}\n\nconst answer = solve([1, 2, 3, 4]);\nconsole.log('Answer:', answer);`,
           language: "javascript",
         },
         {
           path: "README.md",
-          content: `# ${projectName}\n\nNode.js Express server.\n\n## Setup\n\n\`\`\`bash\nnpm install\nnpm start\n\`\`\`\n\nServer will run on http://localhost:3000`,
+          content: `# ${projectName}\n\nJavaScript coding playground. Edit index.js and click Run.`,
+          language: "markdown",
+        },
+      ];
+
+    case 'typescript':
+      return [
+        {
+          path: "index.ts",
+          content: `type Score = { name: string; points: number };\n\nfunction highestScore(scores: Score[]): Score | undefined {\n  return scores.reduce<Score | undefined>((best, score) =>\n    !best || score.points > best.points ? score : best, undefined);\n}\n\nconsole.log(highestScore([\n  { name: 'Ada', points: 92 },\n  { name: 'Grace', points: 98 },\n]));`,
+          language: "typescript",
+        },
+        {
+          path: "README.md",
+          content: `# ${projectName}\n\nTypeScript coding playground. Edit index.ts and click Run.`,
+          language: "markdown",
+        },
+      ];
+
+    case 'sql':
+      return [
+        {
+          path: "query.sql",
+          content: `-- SQL playground\nSELECT department, COUNT(*) AS employee_count\nFROM employees\nGROUP BY department\nORDER BY employee_count DESC;`,
+          language: "sql",
+        },
+        {
+          path: "README.md",
+          content: `# ${projectName}\n\nWrite one or more SQL statements in query.sql and click Run to validate them.`,
+          language: "markdown",
+        },
+      ];
+
+    case 'mongodb':
+      return [
+        {
+          path: "pipeline.mongodb",
+          content: `[\n  { "$match": { "status": "active" } },\n  { "$group": { "_id": "$department", "total": { "$sum": 1 } } },\n  { "$sort": { "total": -1 } }\n]`,
+          language: "json",
+        },
+        {
+          path: "README.md",
+          content: `# ${projectName}\n\nEdit pipeline.mongodb as a JSON aggregation pipeline and click Run to validate it.`,
           language: "markdown",
         },
       ];
@@ -689,6 +730,60 @@ export async function listWorkspaces(
   return workspaces.map(serialize);
 }
 
+export interface WorkspaceSummary {
+  id: string;
+  name: string;
+  fileCount: number;
+  lastAccessedAt: string;
+}
+
+/**
+ * List lightweight workspace metadata without transferring file contents.
+ */
+export async function listWorkspaceSummaries(
+  userId: string,
+  options?: {
+    limit?: number;
+    skip?: number;
+    includePublic?: boolean;
+    includeTemplates?: boolean;
+  }
+): Promise<WorkspaceSummary[]> {
+  const collection = await getCollection();
+  const orConditions: any[] = [{ ownerId: new ObjectId(userId) }];
+
+  if (options?.includePublic) orConditions.push({ isPublic: true });
+  if (options?.includeTemplates !== false) orConditions.push({ isTemplate: true });
+
+  const workspaces = await collection
+    .aggregate<{
+      _id: ObjectId;
+      name: string;
+      fileCount: number;
+      lastAccessedAt: Date;
+    }>([
+      { $match: { $or: orConditions } },
+      { $sort: { lastAccessedAt: -1 } },
+      { $skip: options?.skip || 0 },
+      { $limit: options?.limit || 50 },
+      {
+        $project: {
+          name: 1,
+          fileCount: { $size: { $ifNull: ['$files', []] } },
+          lastAccessedAt: 1,
+        },
+      },
+    ])
+    .toArray();
+
+  return workspaces.map(workspace => ({
+    id: workspace._id.toHexString(),
+    name: workspace.name,
+    fileCount: workspace.fileCount,
+    lastAccessedAt: workspace.lastAccessedAt.toISOString(),
+  }));
+}
+
 /**
  * Update workspace
  */
@@ -843,6 +938,56 @@ export async function updateFile(
   } catch (error) {
     console.error('[updateFile] Error:', error);
     return false;
+  }
+}
+
+/**
+ * Update multiple file buffers with one workspace read and one database write.
+ */
+export async function updateFiles(
+  userId: string,
+  workspaceId: string,
+  updates: Array<{ path: string; content: string }>
+): Promise<Array<{ path: string; success: boolean }>> {
+  if (updates.length === 0) return [];
+
+  try {
+    const collection = await getCollection();
+    const workspace = await collection.findOne({
+      _id: new ObjectId(workspaceId),
+      ownerId: new ObjectId(userId),
+    });
+    if (!workspace) return updates.map(({ path }) => ({ path, success: false }));
+
+    const updateMap = new Map(updates.map(file => [file.path, file.content]));
+    const now = new Date();
+    const existingFiles = Array.isArray(workspace.files) ? workspace.files : [];
+    const existingPaths = new Set(existingFiles.map(file => file.path));
+    const files = existingFiles.map(file => updateMap.has(file.path)
+      ? { ...file, content: updateMap.get(file.path)!, lastModified: now }
+      : file
+    );
+
+    for (const file of updates) {
+      if (!existingPaths.has(file.path)) {
+        files.push({
+          path: file.path,
+          content: file.content,
+          language: inferLanguage(file.path),
+          lastModified: now,
+        });
+      }
+    }
+
+    const result = await collection.updateOne(
+      { _id: workspace._id, ownerId: new ObjectId(userId) },
+      { $set: { files, updatedAt: now } }
+    );
+    const success = result.matchedCount === 1;
+    return updates.map(({ path }) => ({ path, success }));
+  } catch (error) {
+    console.error('[updateFiles] Error:', error);
+    return updates.map(({ path }) => ({ path, success: false }));
   }
 }
 

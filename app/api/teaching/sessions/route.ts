@@ -87,13 +87,14 @@ export async function GET(request: NextRequest) {
     const sessionsSnapshot = await db
       .collection("teachingSessions")
       .where("userId", "==", user.id)
-      .orderBy("createdAt", "desc")
       .get();
 
     const sessions = sessionsSnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
-    }));
+    })).sort((first: any, second: any) =>
+      String(second.createdAt || "").localeCompare(String(first.createdAt || ""))
+    );
 
     return NextResponse.json({
       success: true,

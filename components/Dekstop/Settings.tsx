@@ -75,10 +75,11 @@ function Select({ value, onChange, options }: { value: string; onChange: (value:
 
 interface SettingsModalProps {
   isSocketConnected?: boolean
+  socketError?: string | null
   onReconnect?: () => void
 }
 
-export default function SettingsModal({ isSocketConnected = false, onReconnect }: SettingsModalProps) {
+export default function SettingsModal({ isSocketConnected = false, socketError, onReconnect }: SettingsModalProps) {
   const { settings, updateSettings, resetSettings, wallpapers, loadWallpapers, updateWallpaperQuery } = useSettings()
   const [activeTab, setActiveTab] = useState<SettingTab>('appearance')
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -123,11 +124,7 @@ export default function SettingsModal({ isSocketConnected = false, onReconnect }
               setTelegramConnected(true)
               setTelegramLinking(false)
               setTelegramLinkUrl('')
-              setTelegramStatus('✅ Successfully connected! Redirecting...')
-              // Redirect to desktop after 2 seconds
-              setTimeout(() => {
-                window.location.href = '/desktop'
-              }, 2000)
+              setTelegramStatus('Successfully connected. Telegram is ready in Messages.')
             }
           }
         } catch (error) {
@@ -163,10 +160,9 @@ export default function SettingsModal({ isSocketConnected = false, onReconnect }
       setTelegramLinkUrl(data.telegramUrl || '')
       setTelegramStatus('Click the button below to open Telegram and connect. This page will automatically update when connected.')
     } catch (error) {
+      setTelegramLinking(false)
       setTelegramStatus('Failed to generate connection link. Please try again.')
       console.error('Telegram link error:', error)
-    } finally {
-      setTelegramLinking(false)
     }
   }
 
@@ -175,9 +171,17 @@ export default function SettingsModal({ isSocketConnected = false, onReconnect }
       return
     }
     setTelegramStatus('Disconnecting...')
-    // TODO: Implement disconnect API
-    setTelegramConnected(false)
-    setTelegramStatus('Telegram disconnected')
+    try {
+      const response = await fetch('/api/telegram/link', { method: 'DELETE' })
+      if (!response.ok) throw new Error('Disconnect failed')
+      setTelegramConnected(false)
+      setTelegramLinking(false)
+      setTelegramLinkUrl('')
+      setTelegramStatus('Telegram disconnected')
+    } catch (error) {
+      console.error('Telegram disconnect error:', error)
+      setTelegramStatus('Could not disconnect Telegram. Please try again.')
+    }
   }
 
   const allItems = useMemo(() => groups.flat(), [])
@@ -304,23 +308,18 @@ export default function SettingsModal({ isSocketConnected = false, onReconnect }
                 <div>
                   <h3 className="text-sm font-semibold">WebSocket Connection</h3>
                   <p className="text-[10px]" style={{ color: 'var(--macos-secondary)' }}>
-                    {isSocketConnected ? '✅ Connected to server' : '❌ Disconnected - Automation disabled'}
+                    {isSocketConnected ? 'Connected to server' : socketError || 'Disconnected - automation disabled'}
                   </p>
                 </div>
               </div>
               {!isSocketConnected && (
                 <button
-                  onClick={() => {
-                    if (onReconnect) {
-                      onReconnect()
-                    } else {
-                      window.location.reload()
-                    }
-                  }}
+                  onClick={onReconnect}
+                  disabled={!onReconnect}
                   className="rounded-lg border px-3 py-1.5 text-xs font-medium"
                   style={{ background: 'var(--theme-primary-color)', borderColor: 'var(--theme-primary-color)', color: 'white' }}
                 >
-                  🔄 Reconnect
+                  Reconnect
                 </button>
               )}
             </div>

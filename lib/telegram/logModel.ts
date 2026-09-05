@@ -55,6 +55,10 @@ const COLLECTION_NAME = 'telegramLogs'
 let client: MongoClient | null = null
 let collection: Collection<TelegramLog> | null = null
 
+function notifyTelegramLogUpdated(userId: string): void {
+  global.socketIO?.to(`user:${userId}`).emit('telegram-log-updated', { userId })
+}
+
 async function getCollection(): Promise<Collection<TelegramLog>> {
   if (collection) return collection
   
@@ -106,6 +110,7 @@ export async function logTelegramIncoming(
   
   const result = await col.insertOne(log)
   log._id = result.insertedId
+  notifyTelegramLogUpdated(userId)
   
   console.log(`[TelegramLog] 📩 Incoming: ${message.substring(0, 50)}...`)
   
@@ -145,6 +150,7 @@ export async function logWebSocketCommand(
   
   const result = await col.insertOne(log)
   log._id = result.insertedId
+  notifyTelegramLogUpdated(userId)
   
   console.log(`[TelegramLog] 🔌 WebSocket sent: ${command} (${commandId})`)
   
@@ -175,6 +181,9 @@ export async function logWebSocketResult(
       }
     }
   )
+
+  const commandLog = await col.findOne({ commandId })
+  if (commandLog) notifyTelegramLogUpdated(commandLog.userId)
   
   console.log(`[TelegramLog] 🎯 WebSocket result: ${success ? '✅' : '❌'} ${message} (${latency}ms)`)
 }
@@ -187,7 +196,8 @@ export async function logTelegramOutgoing(
   chatId: number,
   message: string,
   success: boolean,
-  commandId?: string
+  commandId?: string,
+  author: 'user' | 'assistant' | 'system' = 'assistant'
 ): Promise<TelegramLog> {
   const col = await getCollection()
   
@@ -206,11 +216,13 @@ export async function logTelegramOutgoing(
     },
     success,
     timestamp: new Date(),
-    createdAt: new Date()
+    createdAt: new Date(),
+    metadata: { author }
   }
   
   const result = await col.insertOne(log)
   log._id = result.insertedId
+  notifyTelegramLogUpdated(userId)
   
   console.log(`[TelegramLog] 📤 Outgoing: ${message.substring(0, 50)}...`)
   

@@ -16,6 +16,7 @@ import {
   Trash2
 } from "lucide-react"
 import { useSettings } from "@/app/context/settingContext"
+import { useTelegramAccount } from "@/hooks/useTelegramAccount"
 
 interface Contact {
   _id?: string
@@ -29,6 +30,8 @@ interface Contact {
   notes?: string
   gradient?: string
   avatar?: string
+  source?: "local" | "telegram"
+  telegramUserId?: string
 }
 
 interface ContactsProps {
@@ -39,6 +42,7 @@ const DEFAULT_AVATAR = "https://api.dicebear.com/7.x/avataaars/svg?seed="
 
 export default function ContactsApp({ userId }: ContactsProps) {
   const { settings } = useSettings()
+  const telegram = useTelegramAccount()
   const isDarkMode = settings?.darkMode ?? false
   
   const [contacts, setContacts] = useState<Contact[]>([])
@@ -82,7 +86,7 @@ export default function ContactsApp({ userId }: ContactsProps) {
       const response = await fetch('/api/contacts')
       if (response.ok) {
         const data = await response.json()
-        setContacts(data.contacts || [])
+        setContacts((data.contacts || []).map((contact: Contact) => ({ ...contact, source: "local" })))
       }
     } catch (error) {
       console.error('Error fetching contacts:', error)
@@ -91,8 +95,29 @@ export default function ContactsApp({ userId }: ContactsProps) {
     }
   }
 
+  const contactIdentity = (contact: Contact) => (
+    contact.phone?.replace(/\D/g, '') || `${contact.firstName} ${contact.lastName}`.trim().toLowerCase()
+  )
+  const localIdentities = new Set(contacts.map(contactIdentity))
+  const mergedContacts: Contact[] = [
+    ...contacts,
+    ...telegram.contacts
+      .filter((contact) => !localIdentities.has(contact.phone?.replace(/\D/g, '') || contact.displayName.toLowerCase()))
+      .map((contact) => ({
+        _id: `telegram:${contact.telegramUserId}`,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        phone: contact.phone,
+        notes: contact.username ? `Telegram @${contact.username}` : 'Telegram contact',
+        avatar: contact.avatar,
+        source: 'telegram' as const,
+        telegramUserId: contact.telegramUserId,
+        gradient: 'from-[#168b6b] to-[#39a98a]',
+      })),
+  ]
+
   // Filtered contacts based on search
-  const filteredContacts = contacts.filter(contact => {
+  const filteredContacts = mergedContacts.filter(contact => {
     if (!searchQuery) return true
     const fullName = `${contact.firstName} ${contact.lastName}`.toLowerCase()
     return (
@@ -119,7 +144,7 @@ export default function ContactsApp({ userId }: ContactsProps) {
 
   // Open edit modal
   const handleEditContact = () => {
-    if (!activeContact) return
+    if (!activeContact || activeContact.source === 'telegram') return
     setModalMode("edit")
     setFirstName(activeContact.firstName)
     setLastName(activeContact.lastName)
@@ -249,7 +274,11 @@ export default function ContactsApp({ userId }: ContactsProps) {
                   <div className="text-sm font-semibold">
                     {contact.firstName} {contact.lastName}
                   </div>
-                  {contact.phone && (
+                  {contact.source === 'telegram' ? (
+                    <div className={`text-xs ${isDarkMode ? "text-emerald-400" : "text-emerald-700"}`}>
+                      Telegram
+                    </div>
+                  ) : contact.phone && (
                     <div className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
                       {contact.phone}
                     </div>
@@ -306,7 +335,7 @@ export default function ContactsApp({ userId }: ContactsProps) {
                 <button className="w-10 h-10 rounded-full bg-black/10 hover:bg-black/15 dark:bg-white/15 dark:hover:bg-white/25 backdrop-blur-md text-slate-800 dark:text-white flex items-center justify-center transition shadow-md active:scale-95" title="Email">
                   <Mail size={16} />
                 </button>
-                <button
+                {activeContact.source !== 'telegram' && <button
                   onClick={handleEditContact}
                   className="w-10 h-10 rounded-full bg-blue-500/20 hover:bg-blue-500/30 text-blue-600 dark:text-blue-400 flex items-center justify-center transition shadow-md active:scale-95"
                   title="Edit"
@@ -315,7 +344,7 @@ export default function ContactsApp({ userId }: ContactsProps) {
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                   </svg>
-                </button>
+                </button>}
               </div>
             </div>
 

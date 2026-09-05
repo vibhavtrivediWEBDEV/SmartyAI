@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  distDir: process.env.NODE_ENV === "production"
+    ? ".next"
+    : `.next-${process.env.PORT || "3001"}`,
   /* config options here */
   // images: {
   //   remotePatterns: [

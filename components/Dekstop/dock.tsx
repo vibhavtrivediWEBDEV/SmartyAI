@@ -51,7 +51,7 @@ const lucideIconMap: Record<string, string> = {
   Music: "/icons/music.svg",
   FaceTime: "/icons/facetime.svg",
   Phone: "/icons/phone.svg",
-  Messages: "/icons/messages.svg",
+  Messages: "/covers/telegram.png",
   Contacts: "/icons/contacts.svg",
   Terminal: "https://cdn2.iconfinder.com/data/icons/web-application-icons-part-i/100/Artboard_18-512.png",
   Trash: "https://framerusercontent.com/images/XYN0Nl9HILu4c0bzhEPmjha0Cg.png",

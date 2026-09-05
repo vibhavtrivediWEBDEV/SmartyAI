@@ -17,8 +17,8 @@ import type {
 // COLLECTION INTERFACES
 // ============================================
 
-interface CareerMissionDocument extends Omit<CareerMission, 'id' | 'createdAt' | 'updatedAt' | 'completedAt' | 'interviewDate' | 'applicationDeadline'> {
-  _id: ObjectId;
+interface CareerMissionDocument extends Omit<CareerMission, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'completedAt' | 'interviewDate' | 'applicationDeadline'> {
+  _id?: ObjectId;
   userId: ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -27,8 +27,10 @@ interface CareerMissionDocument extends Omit<CareerMission, 'id' | 'createdAt' |
   applicationDeadline?: Date;
 }
 
-interface PreparationTaskDocument extends Omit<PreparationTask, 'id' | 'createdAt' | 'updatedAt' | 'scheduledDate' | 'startedAt' | 'completedAt' | 'failedAt'> {
-  _id: ObjectId;
+interface PreparationTaskDocument extends Omit<PreparationTask, 'id' | 'missionId' | 'userId' | 'createdAt' | 'updatedAt' | 'scheduledDate' | 'startedAt' | 'completedAt' | 'failedAt'> {
+  _id?: ObjectId;
+  missionId: ObjectId;
+  userId: ObjectId;
   createdAt: Date;
   updatedAt: Date;
   scheduledDate: Date;
@@ -37,7 +39,7 @@ interface PreparationTaskDocument extends Omit<PreparationTask, 'id' | 'createdA
   failedAt?: Date;
 }
 
-interface PreparationPlanDocument extends Omit<PreparationPlan, 'createdAt' | 'updatedAt' | 'dailySchedule'> {
+interface PreparationPlanDocument extends Omit<PreparationPlan, 'missionId' | 'createdAt' | 'updatedAt' | 'dailySchedule'> {
   _id?: ObjectId;
   missionId: ObjectId;
   createdAt: Date;
@@ -45,8 +47,8 @@ interface PreparationPlanDocument extends Omit<PreparationPlan, 'createdAt' | 'u
   dailySchedule: any[];
 }
 
-interface CareerAgentLogDocument extends Omit<CareerAgentLog, 'id' | 'timestamp'> {
-  _id: ObjectId;
+interface CareerAgentLogDocument extends Omit<CareerAgentLog, 'id' | 'missionId' | 'userId' | 'timestamp'> {
+  _id?: ObjectId;
   missionId: ObjectId;
   userId: ObjectId;
   timestamp: Date;
@@ -79,7 +81,9 @@ const serializeMission = (doc: WithId<CareerMissionDocument>): CareerMission => 
 const serializeTask = (doc: WithId<PreparationTaskDocument>): PreparationTask => ({
   id: doc._id.toHexString(),
   missionId: doc.missionId.toHexString(),
+  userId: doc.userId.toHexString(),
   type: doc.type,
+  openIn: doc.openIn,
   title: doc.title,
   description: doc.description,
   scheduledDate: doc.scheduledDate,
@@ -201,15 +205,19 @@ export async function findActiveMissions(userId: string): Promise<CareerMission[
 
 export async function updateMission(
   id: string,
-  updates: Partial<Omit<CareerMission, 'id' | 'userId' | 'createdAt'>>
+  updates: Partial<Omit<CareerMission, 'id' | 'userId' | 'createdAt' | 'completedAt'>> & { completedAt?: Date | null }
 ): Promise<boolean> {
   const { missions } = await getCollections();
   
   if (!ObjectId.isValid(id)) return false;
   
+  const { completedAt, ...fields } = updates;
   const result = await missions.updateOne(
     { _id: new ObjectId(id) },
-    { $set: { ...updates, updatedAt: new Date() } }
+    {
+      $set: { ...fields, ...(completedAt ? { completedAt } : {}), updatedAt: new Date() },
+      ...(completedAt === null ? { $unset: { completedAt: '' } } : {})
+    }
   );
   
   return result.modifiedCount > 0;
@@ -248,6 +256,7 @@ export async function createTask(
   const result = await tasks.insertOne({
     ...input,
     missionId: new ObjectId(input.missionId),
+    userId: new ObjectId(input.userId),
     createdAt: now,
     updatedAt: now
   });
@@ -266,6 +275,19 @@ export async function findTasksByMission(missionId: string): Promise<Preparation
   return docs.map(serializeTask);
 }
 
+export async function findTasksByUserId(userId: string): Promise<PreparationTask[]> {
+  const { tasks } = await getCollections();
+
+  if (!ObjectId.isValid(userId)) return [];
+
+  const docs = await tasks
+    .find({ userId: new ObjectId(userId) })
+    .sort({ scheduledDate: 1 })
+    .toArray();
+
+  return docs.map(serializeTask);
+}
+
 export async function findTasksByDate(userId: string, date: Date): Promise<PreparationTask[]> {
   const { tasks } = await getCollections();
   
@@ -277,7 +299,7 @@ export async function findTasksByDate(userId: string, date: Date): Promise<Prepa
   
   const docs = await tasks
     .find({
-      userId,
+      userId: new ObjectId(userId),
       scheduledDate: { $gte: startOfDay, $lte: endOfDay }
     })
     .sort({ scheduledDate: 1 })
@@ -288,15 +310,19 @@ export async function findTasksByDate(userId: string, date: Date): Promise<Prepa
 
 export async function updateTask(
   id: string,
-  updates: Partial<Omit<PreparationTask, 'id' | 'missionId' | 'createdAt'>>
+  updates: Partial<Omit<PreparationTask, 'id' | 'missionId' | 'userId' | 'createdAt' | 'completedAt'>> & { completedAt?: Date | null }
 ): Promise<boolean> {
   const { tasks } = await getCollections();
   
   if (!ObjectId.isValid(id)) return false;
   
+  const { completedAt, ...fields } = updates;
   const result = await tasks.updateOne(
     { _id: new ObjectId(id) },
-    { $set: { ...updates, updatedAt: new Date() } }
+    {
+      $set: { ...fields, ...(completedAt ? { completedAt } : {}), updatedAt: new Date() },
+      ...(completedAt === null ? { $unset: { completedAt: '' } } : {})
+    }
   );
   
   return result.modifiedCount > 0;
@@ -309,7 +335,7 @@ export async function findPendingTasks(userId: string): Promise<PreparationTask[
   
   const docs = await tasks
     .find({
-      userId,
+      userId: new ObjectId(userId),
       status: { $in: pendingStatuses }
     })
     .sort({ scheduledDate: 1 })

@@ -14,6 +14,7 @@ export const lessonContextSchema = z.object({
   language: z.string().trim().min(2).max(60).default("English"),
   difficulty: z.enum(["Beginner", "Intermediate", "Advanced"]).default("Intermediate"),
   interests: z.array(z.string().trim().max(80)).max(20).default([]),
+  sourceMaterial: z.string().trim().max(24000).optional(),
 });
 
 export type LessonContext = z.infer<typeof lessonContextSchema>;

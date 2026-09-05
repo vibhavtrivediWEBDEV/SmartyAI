@@ -6,6 +6,8 @@ import { createFeedback, reviewCodeSubmission } from "@/lib/actions/general.acti
 import { Question, QuestionHandler } from "@/lib/services/QuestionHandler";
 import { useTerminal } from "@/app/context/terminalContext";
 import { useElevenTTS } from "./ElevenLabs";
+import { getVoiceMode, setVoiceMode } from "@/lib/voiceMode";
+import { getVoiceErrorMessage } from "@/lib/helper/voiceAppIntent";
 
 export enum CallStatus {
   INACTIVE = "INACTIVE",
@@ -62,7 +64,7 @@ export function useCallManager({
   const [currentCodingQuestion, setCurrentCodingQuestion] = useState<string | null>(null);
 
   // 🎙️ ElevenLabs TTS for premium voice
-  const { speak: speakWithElevenLabs } = useElevenTTS();
+  const { speak: speakWithElevenLabs, speakWithBrowserTTS } = useElevenTTS();
 
   const { runCommandInTerminal } = useTerminal();
 
@@ -70,6 +72,38 @@ export function useCallManager({
   const messagesHistory = useRef<{role: "user" | "assistant", content: string}[]>([]);
   const isProcessing = useRef(false);
   const currentQuestionIndexRef = useRef(0);
+  const systemFallbackStartedRef = useRef(false);
+  const startSystemInterviewRef = useRef<() => Promise<void>>(async () => {});
+
+  const activateSystemSpeechFallback = (error: unknown) => {
+    if (systemFallbackStartedRef.current) return;
+
+    systemFallbackStartedRef.current = true;
+    setVoiceMode("interview");
+    setUseCustomPipeline(true);
+    setCallStatus(CallStatus.CONNECTING);
+
+    const detail = getVoiceErrorMessage(error);
+    console.warn("Vapi interview unavailable; switching to system speech:", detail);
+
+    const fallbackMessage: SavedMessage = {
+      role: "system",
+      content: "Vapi is unavailable. The interview has switched to your Mac system voice.",
+    };
+    setMessages((prev) => [...prev, fallbackMessage]);
+    setLastMessage(fallbackMessage.content);
+
+    try {
+      vapi.stop();
+    } catch {
+      // The Vapi call may already be closed.
+    }
+
+    speakWithBrowserTTS(
+      "Vapi is unavailable. I switched to the Mac system voice. Your interview will continue now.",
+      () => void startSystemInterviewRef.current(),
+    );
+  };
 
   // 🎯 Detect which pipeline to use based on USE_AI_PROVIDER
   useEffect(() => {
@@ -84,6 +118,10 @@ export function useCallManager({
     return () => {
       if (recognitionRef.current) {
         recognitionRef.current.stop();
+      }
+      window.speechSynthesis?.cancel();
+      if (getVoiceMode() === "interview") {
+        setVoiceMode("inactive");
       }
     };
   }, []);
@@ -150,6 +188,8 @@ export function useCallManager({
   // Event listeners for vapi
   useEffect(() => {
     const onCallStart = () => {
+      systemFallbackStartedRef.current = false;
+      setVoiceMode("interview");
       setCallStatus(CallStatus.ACTIVE);
 
       // Add greeting message when call starts
@@ -167,6 +207,11 @@ export function useCallManager({
     };
 
     const onCallEnd = () => {
+      if (systemFallbackStartedRef.current) return;
+
+      if (getVoiceMode() === "interview") {
+        setVoiceMode("inactive");
+      }
       // Only set call as finished if we're not in the middle of reviewing
       if (!isReviewingAnswer && !isCoding) {
         setCallStatus(CallStatus.FINISHED);
@@ -223,15 +268,8 @@ export function useCallManager({
       setIsSpeaking(false);
     };
 
-    const onError = (error: Error) => {
-      console.log("Error:", error);
-
-      // Add an error message to the transcript
-      const errorMessage: SavedMessage = {
-        role: "system",
-        content: "There was a technical issue. Please try speaking again or refresh the page if the problem persists.",
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+    const onError = (error: unknown) => {
+      activateSystemSpeechFallback(error);
     };
 
     vapi.on("call-start", onCallStart);
@@ -334,11 +372,16 @@ export function useCallManager({
     setIsSpeaking(true);
     setLastMessage(text);
     
-    // Use ElevenLabs for premium voice
     try {
-      await speakWithElevenLabs(text);
+      if (systemFallbackStartedRef.current) {
+        await new Promise<void>((resolve) => {
+          speakWithBrowserTTS(text, resolve);
+        });
+      } else {
+        await speakWithElevenLabs(text);
+      }
     } catch (error) {
-      console.error("ElevenLabs TTS error:", error);
+      console.error("Interview TTS error:", error);
     }
     
     setIsSpeaking(false);
@@ -356,6 +399,7 @@ export function useCallManager({
       // Request microphone
       await navigator.mediaDevices.getUserMedia({ audio: true });
       
+      setVoiceMode("interview");
       setCallStatus(CallStatus.ACTIVE);
       
       // Send greeting
@@ -457,37 +501,52 @@ export function useCallManager({
       recognitionRef.current.start();
     } catch (error) {
       console.error("Custom interview error:", error);
-      // Fallback to Vapi
-      if (useCustomPipeline) setUseCustomPipeline(false);
+      if (systemFallbackStartedRef.current) {
+        const unavailableMessage = "System speech is unavailable. Please allow microphone access and try again.";
+        setMessages(prev => [...prev, { role: "system", content: unavailableMessage }]);
+        setLastMessage(unavailableMessage);
+        setCallStatus(CallStatus.INACTIVE);
+        speakWithBrowserTTS(unavailableMessage);
+      } else if (useCustomPipeline) {
+        setUseCustomPipeline(false);
+      }
     }
   };
+
+  startSystemInterviewRef.current = startCustomInterview;
 
   // Start the call (Vapi or Custom pipeline)
   const handleCall = async () => {
     setCallStatus(CallStatus.CONNECTING);
+    setVoiceMode("interview");
+    systemFallbackStartedRef.current = false;
     
     if (useCustomPipeline) {
       await startCustomInterview();
     } else {
-      if (type === "generate") {
-        await vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!, {
-          variableValues: {
-            username: userName,
-            userid: userId,
-          },
-        });
-      } else {
-        let formattedQuestions = "";
+      try {
+        if (type === "generate") {
+          await vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!, {
+            variableValues: {
+              username: userName,
+              userid: userId,
+            },
+          });
+        } else {
+          let formattedQuestions = "";
 
-        if (processedQuestions.length) {
-          formattedQuestions = QuestionHandler.formatQuestionsForAPI(processedQuestions);
+          if (processedQuestions.length) {
+            formattedQuestions = QuestionHandler.formatQuestionsForAPI(processedQuestions);
+          }
+
+          await vapi.start(interviewer, {
+            variableValues: {
+              questions: formattedQuestions,
+            },
+          });
         }
-
-        await vapi.start(interviewer, {
-          variableValues: {
-            questions: formattedQuestions,
-          },
-        });
+      } catch (error) {
+        activateSystemSpeechFallback(error);
       }
     }
   };
@@ -495,11 +554,16 @@ export function useCallManager({
   // End the call
   const handleDisconnect = () => {
     setCallStatus(CallStatus.FINISHED);
+    systemFallbackStartedRef.current = false;
+    if (getVoiceMode() === "interview") {
+      setVoiceMode("inactive");
+    }
     
     if (useCustomPipeline) {
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
+      window.speechSynthesis?.cancel();
     } else {
       vapi.stop();
     }

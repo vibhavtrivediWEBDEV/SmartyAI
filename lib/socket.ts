@@ -46,6 +46,7 @@ declare global {
   // eslint-disable-next-line no-var
   var desktopSessions: Map<string, {
     socketId: string
+    socketIds?: Set<string>
     userId: string
     connectedAt: number
     lastActivity: number
@@ -66,9 +67,9 @@ export function getDesktopSession(userId: string) {
 
 export function getAllActiveDesktops() {
   const now = Date.now()
-  return Array.from(desktopSessions.entries())
+  return Array.from(global.desktopSessions?.entries() || [])
     .filter(([userId, session]) => session.status === 'online' && (now - session.lastActivity) < 60000)
-    .map(([userId, session]) => ({ userId, ...session }))
+    .map(([userId, session]) => ({ ...session, userId }))
 }
 
 export function isDesktopOnline(userId: string): boolean {
@@ -271,15 +272,15 @@ export function getSocketIO(): SocketIOServer | null {
  * Send automation command to specific user's desktop
  */
 export function sendAutomationCommand(userId: string, command: AutomationCommand) {
-  if (!io) {
+  const socketIO = io || global.socketIO
+  const desktopSession = getDesktopSession(userId)
+  if (!socketIO || !desktopSession?.socketId || !socketIO.sockets.sockets.has(desktopSession.socketId)) {
     console.error('[Socket.io] Server not initialized')
     return false
   }
 
   console.log(`[Socket.io] Sending automation command to user:${userId}`, command)
-  
-  // Emit to user's personal room
-  io.to(`user:${userId}`).emit('automation-command', command)
+  socketIO.to(desktopSession.socketId).emit('automation-command', command)
   
   return true
 }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { FiSend, FiMic, FiMicOff, FiRefreshCw, FiSquare } from "react-icons/fi"
+import { BookOpenText, FileText, Presentation } from "lucide-react"
 import { vapi } from "@/lib/vapi.sdk"
 import { smartyAssistant } from "@/constants"
 import TranscriptDisplay from "./TranscriptDisplay"
@@ -10,6 +11,9 @@ import { EquationBoard } from "@/components/teacher/EquationBoard"
 import { TextbookPanel } from "@/components/teacher/TextbookPanel"
 import { STANDARDS, type LessonContext } from "@/modules/teaching/lesson.schema"
 import type { BoardItem, TeacherResponse } from "@/modules/teaching/teacher-response"
+import { containsSpeakableCodeOrSyntax, getTeacherViewAction, sanitizeTeacherSpeech } from "@/modules/teaching/teacher-runtime"
+import { getVoiceMode, setVoiceMode } from "@/lib/voiceMode"
+import { getVoiceErrorMessage } from "@/lib/helper/voiceAppIntent"
 
 // Possible states of the conversation
 enum ConversationStatus {
@@ -51,6 +55,10 @@ export default function SmartyAIAgent({
   const startInFlightRef = useRef(false)
   const intentionalStopRef = useRef(false)
   const mountedRef = useRef(false)
+  const systemFallbackRef = useRef(false)
+  const systemRecognitionRef = useRef<any>(null)
+  const systemMicEnabledRef = useRef(false)
+  const systemProcessingRef = useRef(false)
 
   // Component state
   const [conversationStatus, setConversationStatus] = useState<ConversationStatus>(ConversationStatus.NOT_STARTED)
@@ -61,9 +69,161 @@ export default function SmartyAIAgent({
   const [isLoadingVisual, setIsLoadingVisual] = useState(false)
   const [visualImage, setVisualImage] = useState<{ url: string; topic: string } | null>(null)
   const [boardItems, setBoardItems] = useState<BoardItem[]>([])
+  const [activeBoardIndex, setActiveBoardIndex] = useState<number | null>(null)
+  const [bookFocusRequest, setBookFocusRequest] = useState(0)
   const [documentReference, setDocumentReference] = useState<TeacherResponse["documentReference"]>(null)
   const [activeView, setActiveView] = useState<"book" | "board" | "document">("book")
   const [editingContext, setEditingContext] = useState(false)
+
+  const startSystemRecognition = () => {
+    if (!systemFallbackRef.current || !systemMicEnabledRef.current || systemProcessingRef.current) return
+    try {
+      systemRecognitionRef.current?.start()
+    } catch {
+      // Recognition may already be listening.
+    }
+  }
+
+  const speakWithSystemVoice = (text: string, resumeListening = true) => {
+    if (!("speechSynthesis" in window)) {
+      if (resumeListening) startSystemRecognition()
+      return
+    }
+
+    try { systemRecognitionRef.current?.stop() } catch { /* Recognition may already be stopped. */ }
+    window.speechSynthesis.cancel()
+    const safeSpeech = sanitizeTeacherSpeech(text)
+    if (!safeSpeech) {
+      if (resumeListening) startSystemRecognition()
+      return
+    }
+    const utterance = new SpeechSynthesisUtterance(safeSpeech)
+    utterance.lang = contextRef.current.language.toLowerCase().includes("hindi") ? "hi-IN" : "en-IN"
+    utterance.rate = 0.9
+    utterance.pitch = 1
+    const voices = window.speechSynthesis.getVoices()
+    utterance.voice = voices.find((voice) => voice.lang === utterance.lang)
+      || voices.find((voice) => voice.lang.startsWith(utterance.lang.slice(0, 2)))
+      || voices[0]
+      || null
+    const finish = () => {
+      setIsTyping(false)
+      if (resumeListening) startSystemRecognition()
+    }
+    utterance.onend = finish
+    utterance.onerror = finish
+    setIsTyping(true)
+    window.speechSynthesis.speak(utterance)
+  }
+
+  const executeTeacherViewAction = (text: string) => {
+    const action = getTeacherViewAction(text)
+    if (!action) return
+    setActiveView(action.view)
+    if (action.view === "book") setBookFocusRequest((request) => request + 1)
+  }
+
+  const appendBoardItems = (items: BoardItem[]) => {
+    if (!items.length) return
+    setBoardItems((previous) => {
+      setActiveBoardIndex(previous.length)
+      return [...previous, ...items]
+    })
+    setActiveView("board")
+  }
+
+  const speakControlledAnswer = (text: string) => {
+    const safeSpeech = sanitizeTeacherSpeech(text)
+    executeTeacherViewAction(text)
+    if (!safeSpeech) return
+    if (systemFallbackRef.current || !callActiveRef.current) {
+      speakWithSystemVoice(safeSpeech)
+      return
+    }
+    vapi.send({ type: "control", control: "unmute-assistant" })
+    vapi.say(safeSpeech, false, true, true)
+  }
+
+  const processSystemQuestion = async (question: string) => {
+    if (!question.trim() || systemProcessingRef.current) return
+    systemProcessingRef.current = true
+    setIsTyping(true)
+    const nextMessages: Message[] = [...messagesRef.current, { role: "user", content: question.trim() }]
+    messagesRef.current = nextMessages
+    setMessages(nextMessages)
+
+    try {
+      const response = await fetch("/api/teaching/respond", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ context: contextRef.current, messages: nextMessages }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || "Teacher could not answer")
+
+      const answer = data.spokenAnswer || data.bookAnswer || data.answer
+      const answeredMessages: Message[] = [...nextMessages, { role: "assistant", content: data.bookAnswer || data.answer || answer }]
+      messagesRef.current = answeredMessages
+      setMessages(answeredMessages)
+      if (Array.isArray(data.boardItems)) appendBoardItems(data.boardItems)
+      if (data.documentReference) setDocumentReference(data.documentReference)
+      systemProcessingRef.current = false
+      speakControlledAnswer(answer)
+    } catch (error) {
+      systemProcessingRef.current = false
+      const message = error instanceof Error ? error.message : "Teacher could not answer."
+      setMessages((previous) => [...previous, { role: "system", content: message }])
+      speakWithSystemVoice("I could not answer that right now. Please ask again.")
+    }
+  }
+
+  const activateSystemSpeechFallback = (error: unknown) => {
+    if (systemFallbackRef.current) return
+    systemFallbackRef.current = true
+    systemMicEnabledRef.current = true
+    setVoiceMode("teacher")
+    callActiveRef.current = true
+    setConversationStatus(ConversationStatus.ACTIVE)
+    setIsMicActive(true)
+
+    intentionalStopRef.current = true
+    void Promise.resolve(vapi.stop()).catch(() => undefined).finally(() => {
+      intentionalStopRef.current = false
+    })
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition()
+      recognition.continuous = false
+      recognition.interimResults = false
+      recognition.lang = contextRef.current.language.toLowerCase().includes("hindi") ? "hi-IN" : "en-IN"
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[event.results.length - 1]?.[0]?.transcript?.trim()
+        if (transcript) void processSystemQuestion(transcript)
+      }
+      recognition.onerror = (event: any) => {
+        if (event.error !== "aborted" && event.error !== "no-speech") {
+          setMessages((previous) => [...previous, { role: "system", content: `System microphone: ${event.error}. Typed questions still work.` }])
+        }
+      }
+      recognition.onend = () => {
+        if (systemFallbackRef.current && systemMicEnabledRef.current && !systemProcessingRef.current) {
+          window.setTimeout(startSystemRecognition, 250)
+        }
+      }
+      systemRecognitionRef.current = recognition
+    }
+
+    const detail = getVoiceErrorMessage(error)
+    console.warn("Teacher Vapi unavailable; using system speech:", detail)
+    setMessages((previous) => [...previous, {
+      role: "system",
+      content: "Vapi is unavailable. Smarty Teacher switched to your Mac system voice; the lesson can continue.",
+    }])
+    speakWithSystemVoice(
+      `Vapi is unavailable. I switched to the Mac system voice. We can continue learning ${contextRef.current.topic || contextRef.current.subject}.`,
+    )
+  }
   
   // const askSmartyAI = async (question: string) => {
   //   setIsTyping(true)
@@ -115,6 +275,11 @@ export default function SmartyAIAgent({
   const startNewSession = async () => {
     if (startInFlightRef.current) return
     startInFlightRef.current = true
+    systemFallbackRef.current = false
+    systemMicEnabledRef.current = false
+    systemRecognitionRef.current?.stop()
+    window.speechSynthesis?.cancel()
+    setVoiceMode("teacher")
     setConversationStatus(ConversationStatus.LOADING)
     if (!activeSessionIdRef.current) activeSessionIdRef.current = sessionId || crypto.randomUUID()
     if (callActiveRef.current) {
@@ -126,7 +291,7 @@ export default function SmartyAIAgent({
       const connect = async (attempt: number): Promise<void> => {
         if (!mountedRef.current) return
         try {
-          await vapi.start(smartyAssistant, { variableValues: { userName, subject: context.subject, topic: context.topic, standard: context.standard || "", language: context.language } })
+          await vapi.start(smartyAssistant, { variableValues: { userName, subject: context.subject, topic: context.topic, standard: context.standard || "", language: context.language, sourceMaterial: context.sourceMaterial || "No source notes were provided." } })
           setMessages((previous) => previous.some((message) => message.content === "Connecting to Smarty...") ? previous : [...previous, { role: "system", content: "Connecting to Smarty..." }])
         } catch (error) {
           const message = error instanceof Error ? error.message : "Voice connection failed"
@@ -136,8 +301,7 @@ export default function SmartyAIAgent({
             if (!mountedRef.current) return
             return connect(1)
           }
-          setConversationStatus(ConversationStatus.NOT_STARTED)
-          setMessages((prev) => [...prev, { role: "system", content: /meeting (?:has )?ended/i.test(message) ? "The voice provider closed the room. Press Restart; your board and notes are safe." : `Voice could not start: ${message}` }])
+          activateSystemSpeechFallback(error)
         }
       }
       await connect(0)
@@ -175,6 +339,11 @@ export default function SmartyAIAgent({
       void Promise.resolve(vapi.stop()).catch(() => undefined)
       callActiveRef.current = false
     }
+    systemFallbackRef.current = false
+    systemMicEnabledRef.current = false
+    try { systemRecognitionRef.current?.stop() } catch { /* Recognition may already be stopped. */ }
+    window.speechSynthesis?.cancel()
+    if (getVoiceMode() === "teacher") setVoiceMode("inactive")
   }, [])
 
   const enrichVoiceQuestion = async (question: string) => {
@@ -187,10 +356,10 @@ export default function SmartyAIAgent({
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || "Visual teaching aids are temporarily unavailable.")
       if (Array.isArray(data.boardItems) && data.boardItems.length) {
-        setBoardItems((previous) => [...previous, ...data.boardItems])
-        setActiveView("board")
+        appendBoardItems(data.boardItems)
       }
       if (data.documentReference) setDocumentReference(data.documentReference)
+      speakControlledAnswer(data.spokenAnswer || data.bookAnswer || data.answer || "")
     } catch (error) {
       setMessages((previous) => [...previous, { role: "system", content: error instanceof Error ? error.message : "Visual teaching aids are temporarily unavailable." }])
     }
@@ -204,29 +373,41 @@ export default function SmartyAIAgent({
     }
     
     const onCallStart = () => {
+      systemFallbackRef.current = false
+      setVoiceMode("teacher")
       callActiveRef.current = true
       intentionalStopRef.current = false
       setConversationStatus(ConversationStatus.ACTIVE)
-      setTimeout(
-        () =>
-          setMessages((prev) => [
-            ...prev,
-            { role: "assistant", content: `Hello ${userName}! We are learning ${context.topic || context.subject}${context.standard ? ` for ${context.standard}` : ""}. What would you like to understand first?` },
-          ]),
-        500
-      )
+      setIsMicActive(true)
+      vapi.setMuted(false)
     }
     
     const onCallEnd = () => {
+      if (systemFallbackRef.current) return
       callActiveRef.current = false
       setIsMicActive(false)
       setConversationStatus(ConversationStatus.COMPLETED)
+      if (getVoiceMode() === "teacher") setVoiceMode("inactive")
     }
     
     const onMessage = (message: any) => {
+      if (message.type === "speech-update" && message.role === "user" && message.status === "started") {
+        window.speechSynthesis?.cancel()
+        vapi.send({ type: "control", control: "mute-assistant" })
+        setIsTyping(false)
+        return
+      }
+
+      if (message.type === "transcript" && message.role === "assistant" && message.transcriptType === "partial" && containsSpeakableCodeOrSyntax(message.transcript || "")) {
+        vapi.send({ type: "control", control: "mute-assistant" })
+        setActiveView("board")
+        return
+      }
+
       if (message.type === "transcript" && message.transcriptType === "final") {
         const text = message.transcript.trim()
-        const msg: Message = { role: message.role === "assistant" ? "assistant" : "user", content: text }
+        const displayText = message.role === "assistant" ? sanitizeTeacherSpeech(text) : text
+        const msg: Message = { role: message.role === "assistant" ? "assistant" : "user", content: displayText }
         
         setMessages((prev) => {
           const last = prev[prev.length - 1]
@@ -244,6 +425,7 @@ export default function SmartyAIAgent({
           // supplies safe board items and official document references.
           void enrichVoiceQuestion(text)
         } else if (message.role === "assistant") {
+          executeTeacherViewAction(text)
           // Check if assistant is giving an example or using visual trigger words
           const triggerWords = ["example", "visually", "visual", "smjhao", "image", "diagram", "picture", "illustration", "dekho"];
           const containsTriggerWord = triggerWords.some(word => 
@@ -279,10 +461,10 @@ export default function SmartyAIAgent({
     
     const onSpeechStart = () => setIsTyping(true)
     const onSpeechEnd = () => setIsTyping(false)
-    const onError = (error: Error) => {
-      const message = error?.message || String(error)
+    const onError = (error: unknown) => {
+      const message = getVoiceErrorMessage(error)
       if (intentionalStopRef.current && /meeting (?:has )?ended/i.test(message)) return
-      setMessages((prev) => [...prev, { role: "system", content: /meeting (?:has )?ended/i.test(message) ? "Voice call ended. Your board, transcript, and notes are still available." : "Voice connection had a technical issue. Typed questions still work." }])
+      activateSystemSpeechFallback(error)
     }
 
     vapi.on("call-start", onCallStart)
@@ -305,33 +487,29 @@ export default function SmartyAIAgent({
   // Manual send
   const sendQuestion = async () => {
     const question = userQuestion.trim()
-    if (!question || isTyping) return
-    const nextMessages: Message[] = [...messages, { role: "user", content: question }]
-    setMessages(nextMessages)
+    if (!question) return
     setUserQuestion("")
-    setIsTyping(true)
-    try {
-      const response = await fetch("/api/teaching/respond", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ context, messages: nextMessages }),
-      })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error || "Teacher could not answer")
-      setMessages((previous) => [...previous, { role: "assistant", content: data.bookAnswer || data.answer }])
-      if (Array.isArray(data.boardItems)) setBoardItems((previous) => [...previous, ...data.boardItems])
-      if (Array.isArray(data.boardItems) && data.boardItems.length) setActiveView("board")
-      if (data.documentReference) setDocumentReference(data.documentReference)
-    } catch (error) {
-      setMessages((previous) => [...previous, { role: "system", content: error instanceof Error ? error.message : "Teacher could not answer." }])
-    } finally {
-      setIsTyping(false)
+    window.speechSynthesis?.cancel()
+    if (callActiveRef.current && !systemFallbackRef.current) {
+      vapi.send({ type: "control", control: "mute-assistant" })
+      vapi.send({ type: "add-message", message: { role: "user", content: question }, triggerResponseEnabled: false })
     }
+    void processSystemQuestion(question)
   }
 
   // Mic toggle
   const toggleMic = () => {
     const nextMuted = isMicActive
+    if (systemFallbackRef.current) {
+      systemMicEnabledRef.current = !nextMuted
+      setIsMicActive(!nextMuted)
+      if (nextMuted) {
+        startSystemRecognition()
+      } else {
+        try { systemRecognitionRef.current?.stop() } catch { /* Recognition may already be stopped. */ }
+      }
+      return
+    }
     vapi.setMuted(nextMuted)
     setIsMicActive(!nextMuted)
   }
@@ -340,6 +518,11 @@ export default function SmartyAIAgent({
     if (startTimerRef.current) clearTimeout(startTimerRef.current)
     setConversationStatus(ConversationStatus.COMPLETED)
     setIsMicActive(false)
+    systemFallbackRef.current = false
+    systemMicEnabledRef.current = false
+    try { systemRecognitionRef.current?.stop() } catch { /* Recognition may already be stopped. */ }
+    window.speechSynthesis?.cancel()
+    if (getVoiceMode() === "teacher") setVoiceMode("inactive")
     intentionalStopRef.current = true
     try { await vapi.stop() } catch {
       setMessages((previous) => [...previous, { role: "system", content: "The voice call ended locally. Your lesson is still saved." }])
@@ -376,7 +559,7 @@ export default function SmartyAIAgent({
   const isSessionActive = conversationStatus === ConversationStatus.ACTIVE
 
   return (
-    <div className="min-h-full w-full bg-[radial-gradient(circle_at_10%_0%,rgba(94,92,230,.18),transparent_28%),#15161b] text-white">
+    <div className="min-h-full w-full bg-[#101214] text-white">
       <div className="w-full overflow-hidden bg-white/[.035] backdrop-blur-2xl">
         <header className="flex min-h-14 items-center justify-between border-b border-white/10 bg-black/15 px-4 sm:px-5">
           <div className="flex items-center gap-4">
@@ -403,16 +586,20 @@ export default function SmartyAIAgent({
 
         <div className="grid min-h-[72vh] lg:grid-cols-[minmax(0,1fr)_340px]">
           <main className="flex min-w-0 flex-col border-white/10 lg:border-r">
-            <div className="flex gap-1 border-b border-white/10 bg-black/10 p-2">
-              {(["book", "board"] as const).map((view) => <button key={view} onClick={() => setActiveView(view)} className={`rounded-lg px-3 py-1.5 text-xs capitalize ${activeView === view ? "bg-white/15 text-white" : "text-white/40 hover:bg-white/[.07]"}`}>{view === "book" ? "Live book" : `Board${boardItems.length ? ` (${boardItems.length})` : ""}`}</button>)}
-              {documentReference && <button onClick={() => setActiveView("document")} className={`rounded-lg px-3 py-1.5 text-xs ${activeView === "document" ? "bg-white/15 text-white" : "text-white/40 hover:bg-white/[.07]"}`}>Official textbook</button>}
-            </div>
-            <div className="min-h-[360px] flex-1 overflow-y-auto bg-black/20 shadow-inner">
+            <div className="grid min-h-90 flex-1 grid-cols-[72px_minmax(0,1fr)] overflow-hidden">
+              <nav aria-label="Lesson tools" className="flex flex-col items-center gap-2 border-r border-white/10 bg-[#151719] px-2 py-4">
+                <button title="AI Book" aria-label="AI Book" onClick={() => setActiveView("book")} className={`flex size-12 flex-col items-center justify-center gap-1 rounded-md border text-[8px] font-semibold uppercase tracking-[.08em] transition ${activeView === "book" ? "border-[#d8b45b]/35 bg-[#d8b45b]/12 text-[#f2d98f]" : "border-transparent text-white/35 hover:bg-white/5 hover:text-white/65"}`}><BookOpenText className="size-4.5" />Book</button>
+                <button title="Blackboard" aria-label="Blackboard" onClick={() => setActiveView("board")} className={`relative flex size-12 flex-col items-center justify-center gap-1 rounded-md border text-[8px] font-semibold uppercase tracking-[.08em] transition ${activeView === "board" ? "border-[#63e6be]/30 bg-[#63e6be]/10 text-[#8af0d1]" : "border-transparent text-white/35 hover:bg-white/5 hover:text-white/65"}`}><Presentation className="size-4.5" />Board{boardItems.length > 0 && <span className="absolute right-1 top-1 flex size-3.5 items-center justify-center rounded-full bg-[#63e6be] text-[8px] text-[#10201b]">{Math.min(boardItems.length, 9)}</span>}</button>
+                {documentReference && <button title="Official textbook" aria-label="Official textbook" onClick={() => setActiveView("document")} className={`flex size-12 flex-col items-center justify-center gap-1 rounded-md border text-[8px] font-semibold uppercase tracking-[.08em] transition ${activeView === "document" ? "border-[#70b7ff]/30 bg-[#70b7ff]/10 text-[#9fceff]" : "border-transparent text-white/35 hover:bg-white/5 hover:text-white/65"}`}><FileText className="size-4.5" />Text</button>}
+                <div className="mt-auto h-12 w-px bg-[linear-gradient(transparent,rgba(216,180,91,.45))]" />
+              </nav>
+              <div className="min-h-90 overflow-y-auto bg-black/20 shadow-inner">
                 <div className="h-full text-center text-white/70">
-                  {activeView === "book" && <ScienceBook name={userName} subject={`${context.subject}${context.topic ? `: ${context.topic}` : ""}`} context={context} messages={messages} callStart={isSessionActive} status={conversationStatus} sessionId={activeSessionIdRef.current} />}
-                  {activeView === "board" && <EquationBoard items={boardItems} subject={context.subject} topic={context.topic} visual={visualImage} isLoadingVisual={isLoadingVisual} />}
+                  {activeView === "book" && <ScienceBook name={userName} subject={`${context.subject}${context.topic ? `: ${context.topic}` : ""}`} context={context} messages={messages} callStart={isSessionActive} status={conversationStatus} sessionId={activeSessionIdRef.current} focusRequest={bookFocusRequest} />}
+                  {activeView === "board" && <EquationBoard items={boardItems} activeItemIndex={activeBoardIndex} subject={context.subject} topic={context.topic} visual={visualImage} isLoadingVisual={isLoadingVisual} />}
                   {activeView === "document" && documentReference && <TextbookPanel reference={documentReference} />}
                 </div>
+              </div>
             </div>
 
             <div className="flex gap-2 border-t border-white/10 bg-black/10 p-3 sm:p-4">
@@ -428,7 +615,7 @@ export default function SmartyAIAgent({
             }
             onKeyDown={(e) => e.key === "Enter" && void sendQuestion()}
           />
-          <button
+            <button
             onClick={() => void sendQuestion()}
             disabled={
               !userQuestion.trim() || conversationStatus === ConversationStatus.LOADING
@@ -440,14 +627,14 @@ export default function SmartyAIAgent({
           <button
             onClick={toggleMic}
             disabled={conversationStatus === ConversationStatus.LOADING}
-            className={`flex size-11 shrink-0 items-center justify-center rounded-xl text-white transition active:scale-[.96] ${isMicActive ? "bg-[#ff453a] shadow-[0_8px_20px_rgba(255,69,58,.2)]" : "border border-white/10 bg-white/[.08] hover:bg-white/15"}`}
+            className={`flex size-11 shrink-0 items-center justify-center rounded-xl text-white transition active:scale-[.96] ${isMicActive ? "bg-[#ff453a] shadow-[0_8px_20px_rgba(255,69,58,.2)]" : "border border-white/10 bg-white/8 hover:bg-white/15"}`}
           >
             {isMicActive ? <FiMicOff size={20} /> : <FiMic size={20} />}
           </button>
             </div>
           </main>
 
-          <aside className="flex min-h-[360px] flex-col bg-black/10 p-4 sm:p-5">
+          <aside className="flex min-h-90 flex-col bg-black/10 p-4 sm:p-5">
             <div className="mb-4 flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-[.12em] text-[#64d2ff]">Live transcript</p><h2 className="mt-1 text-lg font-semibold tracking-tight">Conversation</h2></div><span className="rounded-full bg-white/[.07] px-2.5 py-1 text-[11px] text-white/40">{messages.length} messages</span></div>
             <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-3">
         <TranscriptDisplay

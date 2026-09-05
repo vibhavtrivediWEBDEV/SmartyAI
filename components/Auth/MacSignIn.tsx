@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, User, Mail, Lock, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import { signIn } from "@/lib/actions/auth.action";
 
 interface MacSignInProps {
   goNext: () => void;
@@ -38,7 +37,12 @@ export default function MacSignIn({ goNext, goBack }: MacSignInProps) {
     setErrorMessage('');
 
     try {
-      const result = await signIn({ email, password });
+      const response = await fetch("/api/auth/sign-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const result = await response.json();
       
       if (!result.success) {
         setErrorMessage(result.message);

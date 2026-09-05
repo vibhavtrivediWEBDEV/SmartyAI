@@ -36,11 +36,13 @@ import PremiumNotes from '@/components/Dekstop/notesapp'
 import { AutomationControlPanel } from '@/components/Dekstop/AutomationControlPannel'
 import { ATSResumeBuilder } from '@/components/Dekstop/ATSResumeBuilder'
 import ContactsApp from '@/components/Dekstop/Contacts'
-import MessagesApp from '@/components/Dekstop/MessagesApp'
+import TelegramApp from '@/components/Dekstop/TelegramApp'
+import WhatsAppApp from '@/components/Dekstop/WhatsAppApp'
 import PhoneApp from '@/components/Dekstop/PhoneApp'
 import SmartyInterviewComponent from '@/app/components/terminal/smartyInterview'
 import StartInterviewComponent from '@/app/components/terminal/StartInterview'
 import FeedbackInterviewComponent from '@/app/components/terminal/feedbackInterview'
+import LibraryApp from '@/components/Dekstop/LibraryApp'
 
 /**
  * App Configuration Interface
@@ -378,9 +380,22 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
 
   Messages: {
     name: 'Messages',
-    displayName: 'Messages',
-    icon: '/icons/messages.svg',
-    component: MessagesApp,
+    displayName: 'WhatsApp',
+    icon: 'https://cdn.simpleicons.org/whatsapp/25D366',
+    component: WhatsAppApp,
+    defaultWidth: 900,
+    defaultHeight: 650,
+    minWidth: 700,
+    minHeight: 500,
+    automatable: true,
+    category: 'productivity'
+  },
+
+  Telegram: {
+    name: 'Telegram',
+    displayName: 'Telegram',
+    icon: 'https://cdn.simpleicons.org/telegram/26A5E4',
+    component: TelegramApp,
     defaultWidth: 900,
     defaultHeight: 650,
     minWidth: 700,
@@ -506,6 +521,20 @@ export const APP_REGISTRY: Record<string, AppConfig> = {
     component: React.lazy(() => import('@/app/components/terminal/ai-book').then(m => ({ default: m.ScienceBook }))),
     defaultWidth: 700,
     defaultHeight: 600,
+    automatable: true,
+    category: 'productivity'
+  },
+
+  Library: {
+    name: 'Library',
+    displayName: 'Library',
+    icon: '/icons/book.png',
+    component: LibraryApp,
+    defaultProps: { openApplication: () => undefined },
+    defaultWidth: 1040,
+    defaultHeight: 720,
+    minWidth: 600,
+    minHeight: 480,
     automatable: true,
     category: 'productivity'
   },

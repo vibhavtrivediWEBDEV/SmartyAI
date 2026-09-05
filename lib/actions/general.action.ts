@@ -11,6 +11,7 @@ import { getCurrentUser } from "@/lib/actions/auth.action";
 import {
   findFeedback,
   findInterviewById,
+  findOwnedInterviewById,
   findInterviewsByUserId,
   findLatestInterviews,
   saveCodeSubmission,
@@ -170,6 +171,13 @@ Please score the candidate from 0 to 100 in the following areas. Do not add cate
 
 export async function getInterviewById(id: string): Promise<Interview | null> {
   return findInterviewById(id);
+}
+
+export async function getOwnedInterviewById(
+  id: string,
+  userId: string
+): Promise<Interview | null> {
+  return findOwnedInterviewById(id, userId);
 }
 
 export async function getSessionBySessionId(id: string): Promise<TeachingSession | null> {

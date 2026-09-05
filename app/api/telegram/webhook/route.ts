@@ -15,7 +15,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 // Initialize queue on first request
-let queueInitialized = false
+const queueInitialized = false
 
 /**
  * POST /api/telegram/webhook
@@ -124,12 +124,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // We return 200 immediately so Telegram knows we received it
     
     console.log('\n' + '🔥'.repeat(80))
-    console.log('[WEBHOOK ROUE] 📨 CALLING processTelegramUpdate()')
+    console.log('[WEBHOOK ROUTE] 📨 CALLING processTelegramUpdate()')
     console.log(`   Update ID: ${update.update_id}`)
     console.log(`   Message: ${JSON.stringify(update.message?.text || update.message?.document || 'N/A')}`)
     console.log('🔥'.repeat(80) + '\n')
     
-    processTelegramUpdate(update)
+    const processing = processTelegramUpdate(update)
       .then(async () => {
         console.log('\n' + '✅'.repeat(80))
         console.log(`[WEBHOOK] ✅ Update ${update.update_id} PROCESSED SUCCESSFULLY`)
@@ -161,6 +161,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           console.error('[Telegram Webhook] Failed to update error status:', dbError)
         }
       })
+
+    // Linking must finish before a serverless invocation can be suspended.
+    // Telegram retries on timeout, while the token guard prevents duplicate links.
+    if (message?.text?.startsWith('/start ')) {
+      await processing
+    }
     
     // Return success
     return NextResponse.json({ ok: true })

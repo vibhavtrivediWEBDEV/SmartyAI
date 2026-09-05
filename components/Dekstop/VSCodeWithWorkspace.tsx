@@ -12,7 +12,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import {
   FileText,
@@ -29,10 +29,23 @@ import {
   Monitor,
   ChevronDown,
   Settings,
+  ListTodo,
+  CheckCircle2,
+  Sparkles,
+  BookOpen,
+  Wrench,
+  WandSparkles,
+  Check,
+  Bot,
+  GitBranch,
+  PanelBottom,
 } from 'lucide-react';
 import FileTree from './FileTree';
+import { CareerTaskMeta, useCareerClock } from '../Desktop/CareerTaskMeta';
+import { getCareerTaskTiming, groupCareerTasks, prepareCareerTaskLaunch, type CareerTaskItem } from '../Desktop/careerTaskGroups';
 import { getLanguageFromExtension } from '@/lib/utils/language';
 import { configureJSXSupport } from '@/lib/monaco/setup';
+import { playById } from '@/lib/sound';
 
 // Emmet support for Monaco
 import { emmetHTML, emmetCSS, emmetJSX } from 'emmet-monaco-es';
@@ -52,6 +65,7 @@ interface WorkspaceFile {
   path: string;
   content: string;
   language: string;
+  lastModified?: Date;
 }
 
 interface Workspace {
@@ -63,6 +77,13 @@ interface Workspace {
     runtime: string;
     entryPoint: string;
   };
+  lastAccessedAt: string;
+}
+
+interface WorkspaceSummary {
+  id: string;
+  name: string;
+  fileCount: number;
   lastAccessedAt: string;
 }
 
@@ -78,19 +99,30 @@ interface OpenFile {
   hasUnsavedChanges: boolean;
 }
 
+type AIAssistantAction = 'explain' | 'fix' | 'generate';
+
 interface VSCodeWithWorkspaceProps {
   openPreviewWindow?: (htmlContent: string, title?: string) => void;
+  initialWorkspaceId?: string;
+  initialFile?: string;
+  initialCareerTask?: CareerTaskItem;
 }
 
 // ============ CONSTANTS ============
 const MIN_EDITOR_WIDTH = 300;
 const MAX_EDITOR_WIDTH = 1200;
 const DEFAULT_EDITOR_WIDTH_PERCENT = 60;
+const MIN_SIDEBAR_WIDTH = 210;
+const MAX_SIDEBAR_WIDTH = 440;
+const MIN_AI_WIDTH = 280;
+const MAX_AI_WIDTH = 560;
+const MIN_CONSOLE_HEIGHT = 120;
+const MAX_CONSOLE_HEIGHT = 460;
 
 // ============ COMPONENT ============
-export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWorkspaceProps) {
+export default function VSCodeWithWorkspace({ openPreviewWindow, initialWorkspaceId, initialFile, initialCareerTask }: VSCodeWithWorkspaceProps) {
   // Workspace State
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [activeWorkspace, setActiveWorkspace] = useState<Workspace | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -100,11 +132,15 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
   const fileContentsRef = useRef<Map<string, string>>(new Map());
+  const editedCareerTaskIdsRef = useRef<Set<string>>(new Set());
+  const attemptedCareerTaskIdsRef = useRef<Set<string>>(new Set());
 
   // Monaco State
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
   const modelsRef = useRef<Map<string, any>>(new Map());
+  const shellRef = useRef<HTMLDivElement>(null);
+  const mainContentRef = useRef<HTMLDivElement>(null);
 
   // Preview State
   const [previewMode, setPreviewMode] = useState<'new-window' | 'inline'>('new-window');
@@ -123,52 +159,110 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
 
   // UI State
   const [sidebarWidth, setSidebarWidth] = useState(256);
+  const [aiPanelWidth, setAIPanelWidth] = useState(340);
+  const [activeResize, setActiveResize] = useState<'sidebar' | 'ai' | 'console' | null>(null);
   const [showWorkspaceSelector, setShowWorkspaceSelector] = useState(false);
   const [showFileTree, setShowFileTree] = useState(true);
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<string>('react');
+  const [explorerMode, setExplorerMode] = useState<'files' | 'tasks'>('files');
+  const [careerTasks, setCareerTasks] = useState<CareerTaskItem[]>([]);
+  const [submittingTaskId, setSubmittingTaskId] = useState<string | null>(null);
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
+  const [aiAction, setAIAction] = useState<AIAssistantAction>('explain');
+  const [aiPrompt, setAIPrompt] = useState('');
+  const [aiResult, setAIResult] = useState<{ summary: string; code?: string; provider?: string; model?: string } | null>(null);
+  const [isAIWorking, setIsAIWorking] = useState(false);
+  const aiTargetRef = useRef<{ path: string; range: any } | null>(null);
+  const now = useCareerClock();
+  const codingTaskGroups = useMemo(() => {
+    const codingTasks = careerTasks.filter((task) => task.type === 'coding' || task.id === initialCareerTask?.id);
+    if (initialCareerTask && !codingTasks.some((task) => task.id === initialCareerTask.id)) {
+      codingTasks.push(initialCareerTask);
+    }
+    return groupCareerTasks(codingTasks, now);
+  }, [careerTasks, initialCareerTask, now]);
+
+  useEffect(() => {
+    if (initialCareerTask) setExplorerMode('tasks');
+  }, [initialCareerTask]);
 
   // Project Templates
   const PROJECT_TEMPLATES = [
     { id: 'react', name: 'React (JavaScript)', icon: '⚛️', description: 'Modern React app with hooks' },
     { id: 'react-ts', name: 'React (TypeScript)', icon: '📘', description: 'Type-safe React application' },
     { id: 'html', name: 'HTML/CSS/JS', icon: '🌐', description: 'Simple web project' },
-    { id: 'node', name: 'Node.js', icon: '🟢', description: 'Backend with Express.js' },
+    { id: 'node', name: 'JavaScript / Node.js', icon: '🟢', description: 'Runnable JavaScript starter' },
+    { id: 'typescript', name: 'TypeScript / Node.js', icon: 'TS', description: 'Runnable typed starter' },
     { id: 'python', name: 'Python', icon: '🐍', description: 'Python scripts and backend' },
     { id: 'java', name: 'Java', icon: '☕', description: 'Java application' },
+    { id: 'sql', name: 'SQL Playground', icon: 'DB', description: 'SQL query practice' },
+    { id: 'mongodb', name: 'MongoDB Pipeline', icon: 'MDB', description: 'Aggregation pipeline practice' },
   ];
 
   // ============ LOAD WORKSPACES ============
   useEffect(() => {
     loadWorkspaces();
+  }, [initialWorkspaceId]);
+
+  useEffect(() => {
+    const loadCareerTasks = async () => {
+      const response = await fetch('/api/career/tasks');
+      if (!response.ok) return;
+      const result = await response.json();
+      setCareerTasks(Array.isArray(result.tasks) ? result.tasks : []);
+    };
+    void loadCareerTasks();
+    const handleProgress = () => void loadCareerTasks();
+    window.addEventListener('career-progress', handleProgress);
+    return () => window.removeEventListener('career-progress', handleProgress);
   }, []);
 
   const loadWorkspaces = async () => {
     setIsLoading(true);
     try {
-      // Use test endpoint (no auth required) - port 3001
-      const response = await fetch('http://localhost:3001/api/test-workspaces');
+      let requestedWorkspaceId = initialWorkspaceId;
+      let requestedFile = initialFile;
+      if (initialCareerTask) {
+        const launchArgs = await prepareCareerTaskLaunch(initialCareerTask);
+        if (typeof launchArgs.workspaceId === 'string') requestedWorkspaceId = launchArgs.workspaceId;
+        if (typeof launchArgs.initialFile === 'string') requestedFile = launchArgs.initialFile;
+      }
+
+      const response = await fetch('/api/workspaces');
       const result = await response.json();
       
       if (result.data && result.data.length > 0) {
         setWorkspaces(result.data);
-        const mostRecent = result.data.sort((a: Workspace, b: Workspace) => 
-          new Date(b.lastAccessedAt).getTime() - new Date(a.lastAccessedAt).getTime()
-        )[0];
-        setActiveWorkspace(mostRecent);
-        
-        // Setup models for all files
-        if (mostRecent.files.length > 0) {
-          setupModelsForWorkspace(mostRecent);
-          openFile(mostRecent.files[0].path, mostRecent.id);
-        }
+        const workspaceId = requestedWorkspaceId || result.data[0].id;
+        await loadWorkspace(workspaceId, requestedFile);
       }
     } catch (error) {
       addConsoleLog('error', 'Failed to load workspaces');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const loadWorkspace = async (workspaceId: string, requestedFileOverride?: string) => {
+    const response = await fetch(`/api/workspaces/${workspaceId}`);
+    const result = await response.json();
+    if (!response.ok || !result.data) throw new Error(result.error || 'Failed to load workspace');
+
+    const workspace: Workspace = result.data;
+    if (activeWorkspace) cleanupModelsForWorkspace(activeWorkspace.id);
+    setActiveWorkspace(workspace);
+    setOpenFiles([]);
+    setupModelsForWorkspace(workspace);
+
+    const requestedFile = requestedFileOverride || initialFile || initialCareerTask?.result?.filePath;
+    const exerciseFiles = workspace.files.filter((file) => file.path.startsWith('exercises/'));
+    const indexedFile = exerciseFiles[initialCareerTask?.result?.exerciseIndex ?? -1];
+    const firstFile = workspace.files.find((file) => file.path === requestedFile) || indexedFile || workspace.files[0];
+    setActiveFilePath(firstFile?.path || null);
+    if (firstFile) setOpenFiles([{ path: firstFile.path, hasUnsavedChanges: false }]);
+    return workspace;
   };
 
   // ============ MONACO MODEL MANAGEMENT ============
@@ -184,9 +278,14 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
       
       // Create models for each file with proper language
       workspace.files.forEach(file => {
+        const uri = monaco.Uri.parse(`smarty://workspace/${workspace.id}/${file.path}`);
+        const existingModel = modelsRef.current.get(file.path);
+        if (existingModel && existingModel.uri.toString() !== uri.toString()) {
+          existingModel.dispose();
+          modelsRef.current.delete(file.path);
+        }
         if (!modelsRef.current.has(file.path)) {
           const language = file.language || getLanguageFromExtension(file.path);
-          const uri = monaco.Uri.parse(`smarty://workspace/${workspace.id}/${file.path}`);
           const model = monaco.editor.createModel(file.content, language, uri);
           modelsRef.current.set(file.path, model);
         }
@@ -196,20 +295,15 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
     }
   };
 
-  const cleanupModelsForWorkspace = (workspaceId: string) => {
-    // Dispose models
-    modelsRef.current.forEach((model, path) => {
-      if (path.startsWith(workspaceId)) {
-        model.dispose();
-        modelsRef.current.delete(path);
-      }
-    });
+  const cleanupModelsForWorkspace = (_workspaceId: string) => {
+    modelsRef.current.forEach(model => model.dispose());
+    modelsRef.current.clear();
     fileContentsRef.current.clear();
   };
 
   // ============ FILE OPERATIONS ============
-  const openFile = (path: string, workspaceId?: string) => {
-    const ws = workspaceId ? workspaces.find(w => w.id === workspaceId) : activeWorkspace;
+  const openFile = (path: string, workspace?: Workspace) => {
+    const ws = workspace || activeWorkspace;
     if (!ws) return;
 
     const file = ws.files.find(f => f.path === path);
@@ -264,21 +358,35 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
   };
 
   // Track content changes without auto-saving
-  const updateFileContent = (path: string, content: string) => {
-    // Update local content
-    fileContentsRef.current.set(path, content);
-    
-    // Mark as unsaved
-    setOpenFiles(prev => 
-      prev.map(f => f.path === path ? { ...f, hasUnsavedChanges: true } : f)
+  const careerTaskForFile = (path: string) => {
+    const tasks = initialCareerTask
+      ? [initialCareerTask, ...careerTasks.filter(task => task.id !== initialCareerTask.id)]
+      : careerTasks;
+    return tasks.find(task =>
+      (!task.result?.workspaceId || task.result.workspaceId === activeWorkspace?.id)
+      && (!task.result?.filePath || task.result.filePath === path)
     );
   };
 
-  const saveFile = async (path: string, content: string) => {
+  const updateFileContent = (path: string, content: string) => {
+    // Update local content
+    fileContentsRef.current.set(path, content);
+    const careerTask = careerTaskForFile(path);
+    if (careerTask) editedCareerTaskIdsRef.current.add(careerTask.id);
+    
+    // Mark as unsaved
+    setOpenFiles(prev => {
+      const file = prev.find(item => item.path === path);
+      if (!file || file.hasUnsavedChanges) return prev;
+      return prev.map(item => item.path === path ? { ...item, hasUnsavedChanges: true } : item);
+    });
+  };
+
+  const saveFile = async (path: string, content: string): Promise<boolean> => {
     if (!activeWorkspace) {
       console.error('❌ No active workspace loaded');
       addConsoleLog('error', 'No active workspace loaded');
-      return;
+      return false;
     }
 
     console.log('💾 Saving to MongoDB:', { path, workspaceId: activeWorkspace.id });
@@ -286,7 +394,7 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
     addConsoleLog('info', `Saving ${path}...`);
     
     try {
-      const response = await fetch(`http://localhost:3001/api/test-workspaces/${activeWorkspace.id}/files`, {
+      const response = await fetch(`/api/workspaces/${activeWorkspace.id}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -355,16 +463,120 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
         } else if (isBackendFile) {
           addConsoleLog('info', 'Backend file saved - no preview refresh needed');
         }
+        return true;
       } else {
         const error = await response.json();
         console.error('❌ Save failed:', error);
         addConsoleLog('error', `Failed to save ${path}: ${error.error || 'Unknown error'}`);
+        return false;
       }
     } catch (error) {
       console.error('❌ Network error:', error);
       addConsoleLog('error', `Failed to save ${path}: Network error`);
+      return false;
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const saveAllFiles = async (): Promise<boolean> => {
+    if (!activeWorkspace || isSaving) return false;
+    const dirtyFiles = openFiles
+      .filter(file => file.hasUnsavedChanges)
+      .map(file => ({ path: file.path, content: fileContentsRef.current.get(file.path) ?? '' }));
+    if (dirtyFiles.length === 0) {
+      addConsoleLog('info', 'All open files are already saved');
+      return true;
+    }
+
+    setIsSaving(true);
+    addConsoleLog('info', `Saving ${dirtyFiles.length} changed ${dirtyFiles.length === 1 ? 'file' : 'files'}...`);
+    try {
+      const response = await fetch(`/api/workspaces/${activeWorkspace.id}/files`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dirtyFiles),
+      });
+      const result = await response.json();
+      const savedPaths = new Set<string>(
+        Array.isArray(result.results)
+          ? result.results.filter((item: { success: boolean }) => item.success).map((item: { path: string }) => item.path)
+          : []
+      );
+
+      if (savedPaths.size > 0) {
+        const savedAt = new Date();
+        const contentByPath = new Map(dirtyFiles.map(file => [file.path, file.content]));
+        setActiveWorkspace(previous => previous ? {
+          ...previous,
+          files: previous.files.map(file => savedPaths.has(file.path)
+            ? { ...file, content: contentByPath.get(file.path) ?? file.content, lastModified: savedAt }
+            : file),
+        } : previous);
+        setOpenFiles(previous => previous.map(file => savedPaths.has(file.path)
+          ? { ...file, hasUnsavedChanges: false }
+          : file));
+      }
+
+      if (!response.ok || savedPaths.size !== dirtyFiles.length) {
+        addConsoleLog('error', `Saved ${savedPaths.size}/${dirtyFiles.length} files. Unsaved buffers were preserved.`);
+        return false;
+      }
+      addConsoleLog('success', `Saved all ${dirtyFiles.length} changed ${dirtyFiles.length === 1 ? 'file' : 'files'}`);
+      return true;
+    } catch {
+      addConsoleLog('error', 'Save All failed: Network error. Unsaved buffers were preserved.');
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const submitCareerTask = async (task: CareerTaskItem) => {
+    const timing = getCareerTaskTiming(task, now);
+    const taskWorkspaceId = task.result?.workspaceId;
+    const taskFilePath = task.result?.filePath;
+    if (!activeFilePath || task.status === 'completed') return;
+    if (timing.state === 'upcoming') {
+      addConsoleLog('warn', `${task.title} cannot be submitted before its scheduled start.`);
+      return;
+    }
+    if (taskWorkspaceId && activeWorkspace?.id !== taskWorkspaceId) {
+      addConsoleLog('error', 'Open this task workspace before submitting.');
+      return;
+    }
+    if (taskFilePath && activeFilePath !== taskFilePath) {
+      addConsoleLog('error', `Open ${taskFilePath} before submitting this task.`);
+      return;
+    }
+    if (!editedCareerTaskIdsRef.current.has(task.id) && !attemptedCareerTaskIdsRef.current.has(task.id)) {
+      void playById('cid-le-mdc').catch(() => {});
+    }
+    setSubmittingTaskId(task.id);
+    try {
+      const content = fileContentsRef.current.get(activeFilePath) ?? '';
+      if (!await saveFile(activeFilePath, content)) return;
+
+      const response = await fetch('/api/career/tasks', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ missionId: task.missionId, taskId: task.id, completed: true }),
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        addConsoleLog('error', result.error || 'Failed to submit career task');
+        return;
+      }
+
+      setCareerTasks(tasks => tasks.map(item =>
+        item.id === task.id ? { ...item, status: 'completed' } : item
+      ));
+      window.dispatchEvent(new CustomEvent('career-progress', { detail: { missionId: task.missionId } }));
+      addConsoleLog('success', `Submitted ${task.title}`);
+    } catch {
+      addConsoleLog('error', 'Failed to submit career task');
+    } finally {
+      setSubmittingTaskId(null);
     }
   };
 
@@ -375,7 +587,7 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
     const fullPath = fileName.includes('/') ? fileName : fileName;
 
     try {
-      const response = await fetch(`http://localhost:3001/api/test-workspaces/${activeWorkspace.id}/files`, {
+      const response = await fetch(`/api/workspaces/${activeWorkspace.id}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -406,7 +618,7 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
     const gitkeepPath = `${folderName}/.gitkeep`;
     
     try {
-      const response = await fetch(`http://localhost:3001/api/test-workspaces/${activeWorkspace.id}/files`, {
+      const response = await fetch(`/api/workspaces/${activeWorkspace.id}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -434,7 +646,7 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
     if (!confirm(`Delete ${path}?`)) return;
 
     try {
-      const response = await fetch(`http://localhost:3001/api/test-workspaces/${activeWorkspace.id}/files`, {
+      const response = await fetch(`/api/workspaces/${activeWorkspace.id}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -457,7 +669,7 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
     if (!activeWorkspace) return;
 
     try {
-      const response = await fetch(`http://localhost:3001/api/test-workspaces/${activeWorkspace.id}/files`, {
+      const response = await fetch(`/api/workspaces/${activeWorkspace.id}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -481,36 +693,39 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
   const runCode = async () => {
     if (!activeWorkspace) return;
 
+    const careerTask = activeFilePath ? careerTaskForFile(activeFilePath) : undefined;
+    if (careerTask) attemptedCareerTaskIdsRef.current.add(careerTask.id);
+
     setIsRunning(true);
     setConsoleLogs([]);
+    setShowConsole(true);
+    setActiveConsoleTab('console');
     addConsoleLog('info', `Running ${activeWorkspace.name}...`);
 
     try {
-      // Use test endpoint (no auth required) - port 3001
-      const response = await fetch(`http://localhost:3001/api/test-workspaces/${activeWorkspace.id}/run`, {
+      const liveFiles = activeWorkspace.files.map(file => ({
+        ...file,
+        content: fileContentsRef.current.get(file.path) ?? file.content,
+      }));
+      const files = activeFilePath?.startsWith('exercises/')
+        ? liveFiles.filter(file => file.path === activeFilePath)
+        : liveFiles;
+      const response = await fetch(`/api/workspaces/${activeWorkspace.id}/run`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files, entryPoint: activeFilePath }),
       });
 
       const result = await response.json();
 
+      if (result.logs) {
+        result.logs.forEach((log: ConsoleLog) => {
+          addConsoleLog(log.type, log.message);
+        });
+      }
+
       if (result.success) {
-        // Add all logs from execution
-        if (result.logs) {
-          result.logs.forEach((log: ConsoleLog) => {
-            addConsoleLog(log.type, log.message);
-          });
-        }
-
-        // Check if this is a backend language (Python, Java, Node)
-        const isBackendLanguage = activeWorkspace.runtime === 'python' || 
-                                   activeWorkspace.runtime === 'java' || 
-                                   activeWorkspace.runtime === 'node';
-
-        if (isBackendLanguage) {
-          // Backend languages: Only show console output, NO preview window
-          // Logs already added above
-          setIsPreviewActive(false); // Ensure preview is not active
-        } else if (result.preview) {
+        if (result.preview) {
           // Frontend languages (React, HTML): Show preview
           setPreview(result.preview);
           setIsPreviewActive(true);
@@ -522,9 +737,17 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
             setShowInlinePreview(true);
             setActiveConsoleTab('browser');
           }
+        } else {
+          setIsPreviewActive(false);
+          setShowInlinePreview(false);
         }
       } else {
-        addConsoleLog('error', result.error || 'Run failed');
+        const failureText = [result.error, ...(result.logs || []).map((log: ConsoleLog) => log.message)].filter(Boolean).join('\n');
+        if (/syntax\s*error|unexpected token|parse error|compil(?:e|ation) (?:error|failed)|TS\d{4}/i.test(failureText)) {
+          void playById('baigan').catch(() => {});
+        }
+        const hasErrorLog = result.logs?.some((log: ConsoleLog) => log.type === 'error');
+        if (!hasErrorLog) addConsoleLog('error', result.error || 'Run failed');
         if (result.workspaceId) {
           addConsoleLog('error', `Workspace ID: ${result.workspaceId}`);
         }
@@ -537,13 +760,80 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
     }
   };
 
+  const runAIAssistant = async (action: AIAssistantAction) => {
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    if (!editor || !model || !activeFilePath) {
+      addConsoleLog('error', 'Open a file before using the coding assistant');
+      return;
+    }
+    if (action === 'generate' && !aiPrompt.trim()) {
+      addConsoleLog('warn', 'Describe what you want the AI to generate');
+      return;
+    }
+
+    const selection = editor.getSelection();
+    const hasSelection = selection && !selection.isEmpty();
+    const code = hasSelection ? model.getValueInRange(selection) : model.getValue();
+    const targetRange = hasSelection
+      ? selection
+      : action === 'generate'
+        ? new monacoRef.current.Range(selection.startLineNumber, selection.startColumn, selection.startLineNumber, selection.startColumn)
+        : model.getFullModelRange();
+
+    aiTargetRef.current = { path: activeFilePath, range: targetRange };
+    setAIAction(action);
+    setIsAIWorking(true);
+    setAIResult(null);
+    setShowAIAssistant(true);
+
+    try {
+      const activeFile = activeWorkspace?.files.find(file => file.path === activeFilePath);
+      const response = await fetch('/api/workspaces/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          path: activeFilePath,
+          language: activeFile?.language || getLanguageFromExtension(activeFilePath),
+          code,
+          instruction: aiPrompt.trim() || undefined,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || 'Coding assistant failed');
+      setAIResult(result);
+      addConsoleLog('success', `AI ${action} completed`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Coding assistant failed';
+      setAIResult({ summary: message });
+      addConsoleLog('error', message);
+    } finally {
+      setIsAIWorking(false);
+    }
+  };
+
+  const applyAIResult = () => {
+    const target = aiTargetRef.current;
+    const editor = editorRef.current;
+    if (!target || !editor || !aiResult?.code || target.path !== activeFilePath) {
+      addConsoleLog('warn', 'Reopen the original file before applying this suggestion');
+      return;
+    }
+
+    editor.pushUndoStop();
+    editor.executeEdits('smarty-ai', [{ range: target.range, text: aiResult.code, forceMoveMarkers: true }]);
+    editor.pushUndoStop();
+    addConsoleLog('success', 'AI change applied. Press Command+Z to undo.');
+  };
+
   // ============ WORKSPACE MANAGEMENT ============
   const createNewWorkspace = async () => {
     if (!newProjectName.trim()) return;
 
     try {
       // Use test endpoint (no auth required) - port 3001
-      const response = await fetch('http://localhost:3001/api/test-workspaces', {
+      const response = await fetch('/api/workspaces', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -555,11 +845,11 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
 
       const result = await response.json();
       if (result.data) {
-        setWorkspaces([result.data, ...workspaces]);
+        setWorkspaces([{ id: result.data.id, name: result.data.name, fileCount: result.data.files.length, lastAccessedAt: result.data.lastAccessedAt }, ...workspaces]);
         setActiveWorkspace(result.data);
         setupModelsForWorkspace(result.data);
         if (result.data.files && result.data.files.length > 0) {
-          openFile(result.data.files[0].path, result.data.id);
+          openFile(result.data.files[0].path, result.data);
         }
         addConsoleLog('log', `Created ${selectedTemplate} project: ${newProjectName}`);
         setShowNewProjectModal(false);
@@ -574,18 +864,18 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
   const seedLoaderProject = async () => {
     try {
       addConsoleLog('log', 'Seeding loader project...');
-      const response = await fetch('http://localhost:3001/api/test-workspaces/seed', {
+      const response = await fetch('/api/workspaces/seed', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
 
       const result = await response.json();
       if (result.success && result.data) {
-        setWorkspaces([result.data, ...workspaces]);
+        setWorkspaces([{ id: result.data.id, name: result.data.name, fileCount: result.data.files.length, lastAccessedAt: result.data.lastAccessedAt }, ...workspaces]);
         setActiveWorkspace(result.data);
         setupModelsForWorkspace(result.data);
         if (result.data.files && result.data.files.length > 0) {
-          openFile(result.data.files[0].path, result.data.id);
+          openFile(result.data.files[0].path, result.data);
         }
         addConsoleLog('success', '✓ Loader project seeded successfully!');
       } else {
@@ -596,22 +886,21 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
     }
   };
 
-  const switchWorkspace = (workspace: Workspace) => {
-    // Cleanup old workspace
-    if (activeWorkspace) {
-      cleanupModelsForWorkspace(activeWorkspace.id);
+  const switchWorkspace = async (workspace: WorkspaceSummary) => {
+    if (workspace.id === activeWorkspace?.id) {
+      setShowWorkspaceSelector(false);
+      return;
     }
-    
-    setActiveWorkspace(workspace);
-    setOpenFiles([]);
-    setActiveFilePath(null);
-    setupModelsForWorkspace(workspace);
-    
-    if (workspace.files.length > 0) {
-      openFile(workspace.files[0].path, workspace.id);
+
+    setIsLoading(true);
+    try {
+      await loadWorkspace(workspace.id);
+      setShowWorkspaceSelector(false);
+    } catch (error) {
+      addConsoleLog('error', error instanceof Error ? error.message : 'Failed to load workspace');
+    } finally {
+      setIsLoading(false);
     }
-    
-    setShowWorkspaceSelector(false);
   };
 
   // ============ CONSOLE HELPER ============
@@ -680,14 +969,6 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
       editor.setModel(modelsRef.current.get(activeFilePath));
     }
     
-    // Listen for content changes
-    editor.onDidChangeModelContent(() => {
-      const model = editor.getModel();
-      if (model && activeFilePath) {
-        const content = model.getValue();
-        updateFileContent(activeFilePath, content);
-      }
-    });
   };
 
   // ============ CONSOLE MESSAGE LISTENER ============
@@ -726,15 +1007,42 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
     }
   }, [isDraggingDivider, handleDividerDrag]);
 
+  useEffect(() => {
+    if (!activeResize) return;
+
+    const handlePaneResize = (event: MouseEvent) => {
+      const shellRect = shellRef.current?.getBoundingClientRect();
+      const contentRect = mainContentRef.current?.getBoundingClientRect();
+      if (!shellRect || !contentRect) return;
+
+      if (activeResize === 'sidebar') {
+        setSidebarWidth(Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, event.clientX - contentRect.left)));
+      } else if (activeResize === 'ai') {
+        setAIPanelWidth(Math.min(MAX_AI_WIDTH, Math.max(MIN_AI_WIDTH, contentRect.right - event.clientX)));
+      } else {
+        setConsoleHeight(Math.min(MAX_CONSOLE_HEIGHT, Math.max(MIN_CONSOLE_HEIGHT, shellRect.bottom - 24 - event.clientY)));
+      }
+    };
+    const stopResize = () => setActiveResize(null);
+
+    document.body.style.cursor = activeResize === 'console' ? 'row-resize' : 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', handlePaneResize);
+    window.addEventListener('mouseup', stopResize);
+    return () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handlePaneResize);
+      window.removeEventListener('mouseup', stopResize);
+    };
+  }, [activeResize]);
+
   // ============ KEYBOARD SHORTCUTS ============
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
-        if (activeFilePath) {
-          const content = fileContentsRef.current.get(activeFilePath) || '';
-          saveFile(activeFilePath, content);
-        }
+        void saveAllFiles();
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         e.preventDefault();
@@ -744,13 +1052,34 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeFilePath]);
+  }, [activeFilePath, activeWorkspace, isSaving, openFiles]);
 
   // ============ LOADING STATE ============
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center bg-[#1e1e1e]">
-        <Loader2 className="h-8 w-8 animate-spin text-[#007acc]" />
+      <div className="relative flex h-full overflow-hidden bg-[#090b12] text-slate-300">
+        <div className="w-60 shrink-0 border-r border-white/8 bg-[#11141d] p-4">
+          <div className="mb-6 h-5 w-28 animate-pulse rounded bg-white/8" />
+          {[72, 88, 64, 82, 58].map((width, index) => (
+            <div key={index} className="mb-3 flex items-center gap-2">
+              <div className="h-4 w-4 animate-pulse rounded bg-cyan-300/10" />
+              <div className="h-3 animate-pulse rounded bg-white/6" style={{ width: `${width}%` }} />
+            </div>
+          ))}
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="h-11 border-b border-white/8 bg-[#121620]" />
+          <div className="relative flex flex-1 items-center justify-center">
+            <div className="text-center">
+              <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-lg border border-cyan-300/20 bg-cyan-400/8 shadow-[0_0_28px_rgba(34,211,238,0.12)]">
+                <Loader2 className="h-5 w-5 animate-spin text-cyan-300" />
+              </div>
+              <p className="text-xs font-medium text-slate-300">Opening workspace</p>
+              <p className="mt-1 text-[10px] text-slate-600">Loading one project and preparing editor models</p>
+            </div>
+          </div>
+          <div className="h-32 border-t border-white/8 bg-[#090c13]" />
+        </div>
       </div>
     );
   }
@@ -785,7 +1114,7 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
         {/* New Project Modal */}
         {showNewProjectModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="w-[600px] rounded-lg bg-[#252526] p-6 shadow-2xl">
+            <div className="w-150 rounded-lg bg-[#252526] p-6 shadow-2xl">
               <h2 className="mb-4 text-xl font-semibold text-white">Create New Project</h2>
               
               {/* Project Name Input */}
@@ -865,13 +1194,11 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
                 <button
                   key={workspace.id}
                   onClick={() => switchWorkspace(workspace)}
-                  className={`w-full rounded p-2 text-left text-sm transition hover:bg-[#2a2d2e] ${
-                    workspace.id === activeWorkspace?.id ? 'bg-[#37373d]' : ''
-                  }`}
+                  className="w-full rounded p-2 text-left text-sm transition hover:bg-[#2a2d2e]"
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-white">{workspace.name}</span>
-                    <span className="text-xs text-gray-500">{workspace.files.length} files</span>
+                    <span className="text-xs text-gray-500">{workspace.fileCount} files</span>
                   </div>
                 </button>
               ))}
@@ -884,12 +1211,18 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
 
   // ============ MAIN UI ============
   return (
-    <div className="flex h-full flex-col bg-[#1e1e1e]">
+    <div ref={shellRef} className="relative flex h-full flex-col overflow-hidden bg-[#090b12] text-[#d8deef]">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-56 bg-[radial-gradient(circle_at_18%_-20%,rgba(14,165,233,0.18),transparent_48%),radial-gradient(circle_at_82%_-30%,rgba(217,119,6,0.15),transparent_44%)]" />
       {/* Header Bar */}
-      <div className="flex h-10 items-center justify-between border-b border-[#2d2d2d] bg-[#252526] px-3">
+      <div className="relative z-10 flex h-12 shrink-0 items-center justify-between border-b border-white/8 bg-[#10131d]/95 px-3 shadow-[0_8px_32px_rgba(0,0,0,0.28)] backdrop-blur-xl">
         <div className="flex items-center gap-2">
-          <Code size={16} className="text-[#007acc]" />
-          <span className="text-sm font-medium text-white">{activeWorkspace.name}</span>
+          <div className="flex h-7 w-7 items-center justify-center rounded-md border border-cyan-300/20 bg-cyan-400/10 shadow-[inset_0_1px_rgba(255,255,255,0.08),0_0_18px_rgba(34,211,238,0.08)]">
+            <Code size={15} className="text-cyan-300" />
+          </div>
+          <div className="leading-tight">
+            <span className="block text-[13px] font-semibold text-white">{activeWorkspace.name}</span>
+            <span className="block text-[9px] uppercase tracking-[0.18em] text-slate-500">Smarty Studio</span>
+          </div>
           {openFiles.some(f => f.hasUnsavedChanges) && <span className="text-xs text-yellow-500">●</span>}
         </div>
 
@@ -922,17 +1255,12 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
 
           {/* Save Button */}
           <button
-            onClick={() => {
-              if (activeFilePath) {
-                const content = fileContentsRef.current.get(activeFilePath) || '';
-                saveFile(activeFilePath, content);
-              }
-            }}
+            onClick={() => void saveAllFiles()}
             disabled={isSaving}
             className="flex items-center gap-1 rounded px-3 py-1.5 text-xs font-medium bg-[#37373d] text-blue-400 hover:bg-[#45454d] disabled:opacity-50 transition-colors"
           >
             {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            <span>{isSaving ? 'Saving...' : 'Save'}</span>
+            <span>{isSaving ? 'Saving...' : 'Save All'}</span>
             {!isSaving && (
               <span className="text-[10px] text-gray-500 ml-1">(⌘S)</span>
             )}
@@ -965,11 +1293,27 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
             </select>
           </div>
 
+          <button
+            onClick={() => setShowAIAssistant(value => !value)}
+            className={`flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-all ${showAIAssistant ? 'border-cyan-300/35 bg-cyan-400/15 text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.12)]' : 'border-white/8 bg-white/5 text-cyan-300 hover:border-cyan-300/25 hover:bg-cyan-400/10'}`}
+            title="Open AI coding assistant"
+          >
+            <Sparkles size={14} />
+            <span>AI</span>
+          </button>
+
           {/* RUN BUTTON */}
           <button
-            onClick={runCode}
+            onClick={() => {
+              const careerTask = activeFilePath ? careerTaskForFile(activeFilePath) : undefined;
+              if (careerTask && !editedCareerTaskIdsRef.current.has(careerTask.id) && !attemptedCareerTaskIdsRef.current.has(careerTask.id)) {
+                void playById('cid-le-mdc').catch(() => {});
+              }
+              void playById('gunshotjbudden').catch(() => {});
+              void runCode();
+            }}
             disabled={isRunning}
-            className="flex items-center gap-1 rounded bg-green-600 px-4 py-1 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+            className="flex h-8 items-center gap-1.5 rounded-md border border-emerald-300/30 bg-linear-to-r from-emerald-600 to-teal-600 px-4 text-xs font-semibold text-white shadow-[0_5px_18px_rgba(5,150,105,0.22)] transition hover:brightness-110 disabled:opacity-50"
           >
             {isRunning ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
             <span>Run</span>
@@ -994,14 +1338,14 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
             {workspaces.map(workspace => (
               <button
                 key={workspace.id}
-                onClick={() => switchWorkspace(workspace)}
+                onClick={() => void switchWorkspace(workspace)}
                 className={`w-full rounded p-2 text-left text-sm transition hover:bg-[#2a2d2e] ${
                   workspace.id === activeWorkspace.id ? 'bg-[#37373d]' : ''
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <span className="text-white">{workspace.name}</span>
-                  <span className="text-xs text-gray-500">{workspace.files.length} files</span>
+                  <span className="text-xs text-gray-500">{workspace.fileCount} files</span>
                 </div>
               </button>
             ))}
@@ -1010,39 +1354,129 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
       )}
 
       {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div ref={mainContentRef} className="relative z-1 flex min-h-0 flex-1 overflow-hidden">
         {/* Sidebar - File Tree */}
         {showFileTree && (
           <div
-            className="flex flex-col border-r border-[#2d2d2d] bg-[#252526]"
+            className="relative flex shrink-0 flex-col border-r border-white/8 bg-[#11141d]/96 shadow-[8px_0_30px_rgba(0,0,0,0.18)]"
             style={{ width: sidebarWidth }}
           >
-            <FileTree
-              files={activeWorkspace.files}
-              activeFile={activeFilePath || undefined}
-              onFileSelect={(path) => openFile(path)}
-              onFileDelete={deleteFile}
-              onFileRename={renameFile}
-              onFileAdd={addNewFile}
-              onFolderCreate={createNewFolder}
+            <div className="px-3 pb-2 pt-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Explorer</span>
+                <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-slate-500">{activeWorkspace.files.length} files</span>
+              </div>
+              <div className="grid grid-cols-2 gap-1 rounded-md border border-white/7 bg-black/20 p-1">
+              <button
+                onClick={() => setExplorerMode('files')}
+                className={`flex h-7 items-center justify-center gap-1.5 rounded text-xs transition ${explorerMode === 'files' ? 'bg-linear-to-r from-cyan-500/20 to-blue-500/10 text-cyan-100 shadow-[inset_0_0_0_1px_rgba(103,232,249,0.16)]' : 'text-slate-500 hover:bg-white/5 hover:text-slate-200'}`}
+              >
+                <FileText size={13} /> Files
+              </button>
+              <button
+                onClick={() => setExplorerMode('tasks')}
+                className={`flex h-7 items-center justify-center gap-1.5 rounded text-xs transition ${explorerMode === 'tasks' ? 'bg-linear-to-r from-amber-500/20 to-orange-500/10 text-amber-100 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.16)]' : 'text-slate-500 hover:bg-white/5 hover:text-slate-200'}`}
+              >
+                <ListTodo size={13} /> Tasks
+              </button>
+              </div>
+            </div>
+            {explorerMode === 'files' ? (
+              <FileTree
+                files={activeWorkspace.files}
+                activeFile={activeFilePath || undefined}
+                onFileSelect={(path) => openFile(path)}
+                onFileDelete={deleteFile}
+                onFileRename={renameFile}
+                onFileAdd={addNewFile}
+                onFolderCreate={createNewFolder}
+              />
+            ) : (
+              <div className="min-h-0 flex-1 overflow-y-auto p-2">
+                {codingTaskGroups.length === 0 ? (
+                  <div className="px-2 py-8 text-center text-xs leading-relaxed text-gray-500">
+                    Coding tasks from your Career plan will appear here.
+                  </div>
+                ) : codingTaskGroups.map((group) => (
+                  <section key={group.dateKey} className="mb-4">
+                    <div className="mb-1.5 flex items-center justify-between px-1 text-[10px] font-semibold uppercase text-gray-500">
+                      <span>{group.label}</span>
+                      <span>{group.tasks.length}</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {group.tasks.map((task) => {
+                        const isSelectedCareerTask = task.id === initialCareerTask?.id;
+                        const timing = getCareerTaskTiming(task, now);
+                        const isTaskFileActive = (!task.result?.workspaceId || task.result.workspaceId === activeWorkspace?.id)
+                          && (!task.result?.filePath || task.result.filePath === activeFilePath);
+                        return (
+                          <div
+                            key={task.id}
+                            className={`rounded border p-2.5 ${isSelectedCareerTask ? 'border-cyan-400/60 bg-cyan-400/10 shadow-[inset_3px_0_0_rgba(34,211,238,0.9)]' : 'border-[#3d3d3d] bg-[#1e1e1e]'}`}
+                          >
+                            {isSelectedCareerTask && <p className="mb-1 text-[9px] font-semibold uppercase text-cyan-300">Opened from Career</p>}
+                            <p className={`text-xs leading-snug ${task.status === 'completed' ? 'text-gray-500 line-through' : 'text-gray-200'}`}>{task.title}</p>
+                            {task.description && <p className="mt-1 text-[11px] leading-relaxed text-gray-400">{task.description}</p>}
+                            <div className="mt-2">
+                              <CareerTaskMeta task={task} now={now} />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void submitCareerTask(task)}
+                              disabled={!activeFilePath || !isTaskFileActive || timing.state === 'upcoming' || task.status === 'completed' || submittingTaskId === task.id}
+                              className="mt-2 flex h-7 w-full items-center justify-center gap-1.5 rounded bg-[#2d2d2d] text-[11px] text-gray-200 hover:bg-[#3d3d3d] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {submittingTaskId === task.id
+                                ? <Loader2 size={12} className="animate-spin" />
+                                : <CheckCircle2 size={12} />}
+                              {task.status === 'completed' ? 'Submitted' : timing.state === 'upcoming' ? 'Submit when task starts' : 'Save & Submit'}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            )}
+            <div
+              role="separator"
+              aria-label="Resize explorer"
+              className="absolute inset-y-0 -right-1 z-20 w-2 cursor-col-resize bg-transparent transition hover:bg-cyan-400/35"
+              onMouseDown={() => setActiveResize('sidebar')}
             />
           </div>
         )}
 
         {/* Editor + Preview */}
-        <div id="editor-container" className="flex flex-1 flex-col">
+        <div id="editor-container" className="flex min-w-0 flex-1 flex-col bg-[#0d1018]">
           {/* Open Tabs Row */}
           {openFiles.length > 0 && (
-            <div className="flex h-9 items-center gap-1 border-b border-[#2d2d2d] bg-[#252526] px-2">
+            <div className="flex h-10 shrink-0 items-center gap-1 border-b border-white/8 bg-[#121620] px-2">
               {/* Files pseudo-tab */}
               <button
-                onClick={() => setShowFileTree(!showFileTree)}
+                onClick={() => {
+                  setExplorerMode('files');
+                  setShowFileTree(true);
+                }}
                 className={`flex items-center rounded px-3 py-1.5 text-xs ${
-                  showFileTree ? 'bg-[#1e1e1e] text-white' : 'text-gray-400 hover:text-white'
+                  showFileTree && explorerMode === 'files' ? 'bg-[#1e1e1e] text-white' : 'text-gray-400 hover:text-white'
                 }`}
               >
                 <FileText size={14} className="mr-1" />
                 Files
+              </button>
+              <button
+                onClick={() => {
+                  setExplorerMode('tasks');
+                  setShowFileTree(true);
+                }}
+                className={`flex items-center rounded px-3 py-1.5 text-xs ${
+                  showFileTree && explorerMode === 'tasks' ? 'bg-[#1e1e1e] text-white' : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <ListTodo size={14} className="mr-1" />
+                Tasks
               </button>
 
               {/* Divider */}
@@ -1057,8 +1491,8 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
                   return (
                     <div
                       key={file.path}
-                      className={`group flex cursor-pointer items-center gap-2 rounded px-3 py-1.5 text-xs ${
-                        isActive ? 'bg-[#1e1e1e] text-white' : 'text-gray-400 hover:text-white'
+                      className={`group relative flex h-8 cursor-pointer items-center gap-2 rounded-md border px-3 text-xs transition ${
+                        isActive ? 'border-cyan-300/15 bg-cyan-400/8 text-white shadow-[inset_0_-2px_0_#22d3ee]' : 'border-transparent text-slate-500 hover:bg-white/4 hover:text-slate-200'
                       }`}
                       onClick={() => openFile(file.path)}
                     >
@@ -1115,11 +1549,6 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
                     enabled: true,
                     cycle: true,
                   },
-                  // TypeScript/JavaScript specific
-                  jsDocCompletion: 'on',
-                  typescriptCompletionOptions: {
-                    completeFunctionCalls: true,
-                  },
                   // Semantic highlighting
                   'semanticHighlighting.enabled': true,
                   // Format on type/paste
@@ -1133,16 +1562,6 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
                   // Colorization
                   colorDecorators: true,
                   renderLineHighlight: 'all',
-                  // Emmet
-                  emmet: {
-                    showExpandedAbbreviation: 'always',
-                    showAbbreviationSuggestions: true,
-                    syntaxProfiles: {
-                      html: { html: 'html' },
-                      css: { css: 'css' },
-                      javascript: { jsx: 'react' },
-                    }
-                  }
                 }}
                 onMount={handleEditorDidMount}
                 onChange={(value) => {
@@ -1237,19 +1656,103 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
             )}
           </div>
         </div>
+
+        {showAIAssistant && (
+          <aside className="relative flex shrink-0 flex-col border-l border-cyan-300/12 bg-[#0d111a]/98 shadow-[-12px_0_36px_rgba(0,0,0,0.25)]" style={{ width: aiPanelWidth }}>
+            <div
+              role="separator"
+              aria-label="Resize AI assistant"
+              className="absolute inset-y-0 -left-1 z-20 w-2 cursor-col-resize bg-transparent transition hover:bg-cyan-400/35"
+              onMouseDown={() => setActiveResize('ai')}
+            />
+            <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/8 bg-linear-to-r from-cyan-500/8 to-amber-500/5 px-3">
+              <div className="flex items-center gap-2.5 text-xs font-semibold text-gray-100">
+                <span className="flex h-7 w-7 items-center justify-center rounded-md border border-cyan-300/20 bg-cyan-400/10">
+                  <Bot size={15} className="text-cyan-300" />
+                </span>
+                <span><span className="block">Smarty AI</span><span className="block text-[9px] font-normal uppercase tracking-[0.14em] text-cyan-300/60">Coding copilot</span></span>
+              </div>
+              <button onClick={() => setShowAIAssistant(false)} className="rounded p-1 text-gray-500 hover:bg-[#2a2d2e] hover:text-white" title="Close assistant">
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-1 border-b border-[#2d2d2d] p-2">
+              {([
+                ['explain', BookOpen, 'Explain'],
+                ['fix', Wrench, 'Fix'],
+                ['generate', WandSparkles, 'Generate'],
+              ] as const).map(([action, Icon, label]) => (
+                <button
+                  key={action}
+                  onClick={() => void runAIAssistant(action)}
+                  disabled={isAIWorking}
+                  className={`flex h-8 items-center justify-center gap-1 rounded-md border text-[11px] transition disabled:opacity-50 ${aiAction === action ? 'border-cyan-300/25 bg-cyan-400/12 text-cyan-100' : 'border-transparent bg-white/3 text-slate-500 hover:bg-white/7 hover:text-white'}`}
+                >
+                  <Icon size={12} /> {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="border-b border-[#2d2d2d] p-3">
+              <textarea
+                value={aiPrompt}
+                onChange={event => setAIPrompt(event.target.value)}
+                placeholder="Describe code to generate, or add context for a fix..."
+                className="h-24 w-full resize-none rounded-md border border-white/10 bg-black/25 p-2.5 text-xs leading-relaxed text-gray-200 shadow-inner outline-none placeholder:text-slate-600 focus:border-cyan-300/45 focus:ring-2 focus:ring-cyan-400/8"
+              />
+              <p className="mt-1.5 text-[10px] text-gray-600">Select code for a focused response. No selection uses the active file.</p>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              {isAIWorking ? (
+                <div className="flex h-32 flex-col items-center justify-center gap-3 text-xs text-gray-400">
+                  <Loader2 size={20} className="animate-spin text-cyan-300" />
+                  Analyzing {activeFilePath?.split('/').pop()}...
+                </div>
+              ) : aiResult ? (
+                <div className="space-y-3">
+                  <div className="whitespace-pre-wrap text-xs leading-5 text-gray-300">{aiResult.summary}</div>
+                  {aiResult.code && (
+                    <>
+                      <pre className="max-h-80 overflow-auto rounded border border-[#2d2d2d] bg-[#111] p-3 font-mono text-[11px] leading-5 text-gray-300">{aiResult.code}</pre>
+                      <button onClick={applyAIResult} className="flex h-8 w-full items-center justify-center gap-1.5 rounded bg-[#0e639c] text-xs font-medium text-white hover:bg-[#1177bb]">
+                        <Check size={13} /> Apply to editor
+                      </button>
+                    </>
+                  )}
+                  {(aiResult.provider || aiResult.model) && (
+                    <div className="border-t border-[#2d2d2d] pt-2 text-[10px] text-gray-600">{[aiResult.provider, aiResult.model].filter(Boolean).join(' / ')}</div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex h-40 flex-col items-center justify-center gap-2 text-center text-xs leading-5 text-gray-600">
+                  <Sparkles size={22} />
+                  Select code or open a file, then choose an AI action.
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
       </div>
 
       {/* Bottom Console Panel */}
       {showConsole && (
         <div
-          className="flex flex-col border-t border-[#2d2d2d] bg-[#1e1e1e]"
+          className="relative z-10 flex shrink-0 flex-col border-t border-cyan-300/12 bg-[#090c13]/98 shadow-[0_-12px_32px_rgba(0,0,0,0.25)]"
           style={{ height: consoleHeight }}
         >
-          <div className="flex h-8 items-center justify-between border-b border-[#2d2d2d] px-3">
+          <div
+            role="separator"
+            aria-label="Resize terminal"
+            className="absolute -top-1 inset-x-0 z-20 h-2 cursor-row-resize bg-transparent transition hover:bg-cyan-400/35"
+            onMouseDown={() => setActiveResize('console')}
+          />
+          <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/8 bg-[#11151f] px-3">
             <div className="flex items-center gap-2">
-              <Terminal size={14} className="text-[#007acc]" />
-              <span className="text-xs font-medium text-gray-400">Console</span>
-              <span className="rounded bg-[#2d2d2d] px-1.5 text-xs text-gray-500">
+              <Terminal size={14} className="text-cyan-300" />
+              <span className="text-xs font-semibold text-slate-300">Terminal</span>
+              <span className="rounded-full border border-white/8 bg-white/5 px-1.5 text-[10px] text-slate-500">
                 {consoleLogs.length}
               </span>
             </div>
@@ -1305,10 +1808,24 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
         </button>
       )}
 
+      <div className="relative z-20 flex h-6 shrink-0 items-center justify-between border-t border-cyan-200/10 bg-linear-to-r from-[#0d6376] via-[#135b73] to-[#694919] px-2.5 text-[10px] text-white/85 shadow-[0_-4px_18px_rgba(0,0,0,0.25)]">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1"><GitBranch size={11} /> main</span>
+          <span className="text-emerald-200">● Ready</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span>{activeFilePath ? getLanguageFromExtension(activeFilePath) : 'Plain Text'}</span>
+          <button onClick={() => setShowConsole(value => !value)} className="flex items-center gap-1 rounded px-1.5 hover:bg-white/10" title="Toggle terminal">
+            <PanelBottom size={11} /> Terminal
+          </button>
+          <span>UTF-8</span>
+        </div>
+      </div>
+
       {/* New Project Modal */}
       {showNewProjectModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-[600px] rounded-lg bg-[#252526] p-6 shadow-2xl">
+          <div className="w-150 rounded-lg bg-[#252526] p-6 shadow-2xl">
             <h2 className="mb-4 text-xl font-semibold text-white">Create New Project</h2>
             
             {/* Project Name Input */}
@@ -1354,7 +1871,7 @@ export default function VSCodeWithWorkspace({ openPreviewWindow }: VSCodeWithWor
                   setShowNewProjectModal(false);
                   seedLoaderProject();
                 }}
-                className="w-full rounded border border-[#3d3d3d] bg-gradient-to-r from-[#1e1e1e] to-[#2a2d2e] p-3 text-left hover:border-[#007acc] transition"
+                className="w-full rounded border border-[#3d3d3d] bg-linear-to-r from-[#1e1e1e] to-[#2a2d2e] p-3 text-left hover:border-[#007acc] transition"
               >
                 <div className="flex items-center gap-3">
                   <div className="text-2xl">🎨</div>

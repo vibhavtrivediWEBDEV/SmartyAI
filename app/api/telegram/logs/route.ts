@@ -9,11 +9,8 @@ import { getRecentTelegramLogs } from '@/lib/telegram/logModel'
 
 export async function GET(request: NextRequest) {
   try {
-    // Get userId from session or query param (for testing)
     const { searchParams } = new URL(request.url)
-    const userIdParam = searchParams.get('userId')
-    
-    let userId = userIdParam || await getSessionUserId()
+    const userId = await getSessionUserId()
     
     if (!userId) {
       console.log('[API Logs] ❌ No userId')

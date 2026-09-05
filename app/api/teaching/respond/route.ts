@@ -52,9 +52,10 @@ export async function POST(request: NextRequest) {
     const response = await chatOpenAIFirst([
       {
         role: "system",
-        content: `You are Smarty Teacher, a warm expert tutor. Lesson context: ${JSON.stringify(context)}.
+        content: `You are Smarty Teacher, a warm expert private tutor. Lesson context: ${JSON.stringify(context)}.
 Return ONLY JSON matching: {"spokenAnswer":"short natural speech","bookAnswer":"complete explanation","boardItems":[{"type":"latex|chemistry|code|notation","latex":"...","explanation":"...","steps":["..."]}],"documentReference":null}.
 Always create at least one concise board item as excellent student notes: a clear definition or key idea, its meaning, and short numbered working/key points. Use type "notation" with plain text in latex for definitions, and use type "latex" or "chemistry" for actual symbolic expressions. Put every equation, derivation, reaction, code fragment, or symbolic notation in boardItems. SpokenAnswer must never read long symbols aloud; say naturally that you wrote it on the board. Use safe KaTeX only for symbolic items, without HTML, URLs, or executable commands. Keep board notes scannable rather than copying the full book answer. Use a concrete example and check-for-understanding when useful. Never invent textbook pages, quotations, questions, or citations. If source confidence is low, explicitly ask the student to confirm their edition/page.
+      The sourceMaterial in lesson context contains the student's notes and is your primary grounding. Answer the student's interruption first, completely and directly, then state the exact idea you will continue from. Do not restart or jump ahead.
 ${textbookContext}`,
       },
       ...cleanMessages,

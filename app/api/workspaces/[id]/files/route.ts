@@ -6,6 +6,7 @@ import {
   addFile, 
   deleteFile, 
   updateFile,
+  updateFiles,
   renameFile 
 } from "@/modules/workspace/workspace.repository";
 
@@ -139,18 +140,13 @@ export async function PUT(
   }
 
   const files = parsed.data;
-  const results = [];
-
-  for (const file of files) {
-    const success = await updateFile(user.id, id, file.path, file.content);
-    results.push({ path: file.path, success });
-  }
+  const results = await updateFiles(user.id, id, files);
 
   const successCount = results.filter(r => r.success).length;
 
   return NextResponse.json({
-    success: true,
+    success: successCount === files.length,
     message: `Updated ${successCount}/${files.length} files`,
     results,
-  });
+  }, { status: successCount === files.length ? 200 : 500 });
 }

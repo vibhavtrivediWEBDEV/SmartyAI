@@ -5,6 +5,7 @@ import * as careerPlanRepo from '@/modules/career/career-plan.repository';
 import * as careerMissionRepo from '@/modules/career/career.repository';
 import { careerPlanExecutor } from '@/lib/career/executor';
 import { CAREER_PLAN_STEPS } from '@/lib/career/types';
+import { emitCareerProgress } from '../../../../lib/career/careerEvents';
 
 // POST /api/career/execute - Execute career plan steps
 export async function POST(request: NextRequest) {
@@ -66,12 +67,28 @@ export async function POST(request: NextRequest) {
       company: mission.company,
       role: mission.role,
       jobDescription: mission.jobDescription,
-      interviewDate: mission.interviewDate
+      interviewDate: mission.interviewDate,
+      jobProfile: (plan as any).jobProfile,
+      userProfile: plan.userProfile
     };
+
+    await careerMissionRepo.updateMission(missionId, { status: 'EXECUTING' });
+    emitCareerProgress(userId, { missionId, reason: 'mission', progress: 0 });
     
     // Execute each step
     const executionResults = [];
     for (const step of plan.steps) {
+      if (step.status === 'completed') {
+        executionResults.push({
+          stepId: step.id,
+          stepName: step.name,
+          status: 'completed',
+          output: step.output,
+          reused: true
+        });
+        continue;
+      }
+
       try {
         const output = await careerPlanExecutor.executeStep(
           step.id, 
@@ -84,6 +101,20 @@ export async function POST(request: NextRequest) {
           status: 'completed',
           output
         });
+        const currentPlan = await careerPlanRepo.findPlanById(plan._id!.toString());
+        emitCareerProgress(userId, {
+          missionId,
+          reason: step.stepType === 'setup_learning' ? 'resources' : 'plan',
+          progress: currentPlan?.overallProgress || 0
+        });
+
+        if (step.stepType === 'analyze_profile') {
+          context.jobProfile = {
+            ...(output.jobProfile || {}),
+            skillGaps: output.skillGaps || []
+          };
+          context.userProfile = output.userProfile || context.userProfile;
+        }
       } catch (error: any) {
         executionResults.push({
           stepId: step.id,
@@ -97,9 +128,20 @@ export async function POST(request: NextRequest) {
     
     // Get updated plan
     const updatedPlan = await careerPlanRepo.findPlanById(plan._id!.toString());
+    const completed = updatedPlan?.overallProgress === 100;
+
+    await careerMissionRepo.updateMission(missionId, {
+      status: completed ? 'READY' : 'FAILED',
+      progress: completed ? 0 : updatedPlan?.overallProgress || 0
+    });
+    emitCareerProgress(userId, {
+      missionId,
+      reason: 'mission',
+      progress: updatedPlan?.overallProgress || 0
+    });
     
     return NextResponse.json({
-      success: true,
+      success: completed,
       plan: updatedPlan,
       executionResults,
       message: 'Career plan execution completed'

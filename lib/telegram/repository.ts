@@ -38,6 +38,20 @@ export async function createTelegramConnection(
   telegramUsername?: string
 ): Promise<TelegramConnection> {
   const collection = await connectionsCollection()
+  const now = new Date()
+
+  await collection.updateMany(
+    {
+      status: 'active',
+      $or: [
+        { telegramChatId },
+        { chatId: telegramChatId },
+        { userId },
+        ...(ObjectId.isValid(userId) ? [{ userId: new ObjectId(userId) }] : []),
+      ],
+    } as any,
+    { $set: { status: 'disconnected', updatedAt: now } }
+  )
   
   const connection: Omit<TelegramConnection, '_id'> = {
     userId,
@@ -48,10 +62,10 @@ export async function createTelegramConnection(
     telegramLastName,
     status: 'active',
     permissions: DEFAULT_PERMISSIONS,
-    linkedAt: new Date(),
-    lastSeenAt: new Date(),
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    linkedAt: now,
+    lastSeenAt: now,
+    createdAt: now,
+    updatedAt: now,
   }
   
   const result = await collection.insertOne(connection as any)
@@ -69,7 +83,13 @@ export async function getTelegramConnectionByChatId(
   telegramChatId: number
 ): Promise<WithId<TelegramConnection> | null> {
   const collection = await connectionsCollection()
-  return collection.findOne({ telegramChatId, status: 'active' })
+  return collection.findOne(
+    {
+      status: 'active',
+      $or: [{ telegramChatId }, { chatId: telegramChatId }],
+    } as any,
+    { sort: { linkedAt: -1, createdAt: -1, updatedAt: -1, _id: -1 } }
+  )
 }
 
 /**
@@ -81,7 +101,13 @@ export async function getTelegramConnectionByUserId(
   if (!ObjectId.isValid(userId)) return null
   
   const collection = await connectionsCollection()
-  return collection.findOne({ userId: new ObjectId(userId) })
+  return collection.findOne(
+    {
+      status: 'active',
+      $or: [{ userId }, { userId: new ObjectId(userId) }],
+    } as any,
+    { sort: { linkedAt: -1, createdAt: -1, updatedAt: -1, _id: -1 } }
+  )
 }
 
 /**
@@ -91,8 +117,11 @@ export async function updateTelegramConnectionLastSeen(
   telegramChatId: number
 ): Promise<void> {
   const collection = await connectionsCollection()
+  const connection = await getTelegramConnectionByChatId(telegramChatId)
+  if (!connection) return
+
   await collection.updateOne(
-    { telegramChatId },
+    { _id: connection._id },
     { $set: { lastSeenAt: new Date(), updatedAt: new Date() } }
   )
 }
@@ -108,7 +137,7 @@ export async function updateTelegramConnectionPermissions(
   
   const collection = await connectionsCollection()
   const result = await collection.updateOne(
-    { userId: new ObjectId(userId) },
+    { $or: [{ userId }, { userId: new ObjectId(userId) }], status: 'active' } as any,
     {
       $set: {
         permissions: { ...DEFAULT_PERMISSIONS, ...permissions },
@@ -129,8 +158,11 @@ export async function deactivateTelegramConnection(
   if (!ObjectId.isValid(userId)) return false
   
   const collection = await connectionsCollection()
-  const result = await collection.updateOne(
-    { userId: new ObjectId(userId) },
+  const result = await collection.updateMany(
+    {
+      status: 'active',
+      $or: [{ userId }, { userId: new ObjectId(userId) }],
+    } as any,
     {
       $set: {
         status: 'disconnected',
@@ -151,7 +183,9 @@ export async function deleteTelegramConnection(
   if (!ObjectId.isValid(userId)) return false
   
   const collection = await connectionsCollection()
-  const result = await collection.deleteOne({ userId: new ObjectId(userId) })
+  const result = await collection.deleteMany({
+    $or: [{ userId }, { userId: new ObjectId(userId) }],
+  } as any)
   
   return result.deletedCount > 0
 }

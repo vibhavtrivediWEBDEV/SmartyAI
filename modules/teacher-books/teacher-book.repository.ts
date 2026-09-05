@@ -11,6 +11,8 @@ export interface TeacherBookMessage {
 export interface TeacherBookPage {
   type: "cover" | "text" | "image" | "end";
   content: {
+    kind?: "coding";
+    language?: string;
     title?: string;
     subtitle?: string;
     author?: string;
@@ -36,9 +38,45 @@ export interface TeacherBookDocument {
   messages: TeacherBookMessage[];
   pages: TeacherBookPage[];
   status: "generating" | "enriching" | "complete" | "failed";
+  generationSource?: "interactive" | "career";
+  isPublic?: boolean;
+  publishedAt?: Date;
+  publicMetadata?: {
+    creatorName: string;
+    summary: string;
+    coverImageUrl?: string;
+    interview?: {
+      label: string;
+      company?: string;
+      role?: string;
+    };
+  };
   lastError?: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface PublicTeacherBookSummary {
+  id: string;
+  subject: string;
+  title: string;
+  creatorName: string;
+  summary: string;
+  coverImageUrl?: string;
+  interview?: TeacherBookDocument["publicMetadata"] extends infer Metadata
+    ? Metadata extends { interview?: infer Interview } ? Interview : never
+    : never;
+  pageCount: number;
+  publishedAt: string;
+}
+
+export interface PublicTeacherBookDetail extends PublicTeacherBookSummary {
+  pages: TeacherBookPage[];
+}
+
+export interface PublicTeacherBookCursor {
+  publishedAt: Date;
+  id: ObjectId;
 }
 
 const collection = async () => (await getDatabase()).collection<TeacherBookDocument>("teacherBooks");
@@ -51,6 +89,10 @@ async function ensureTeacherBookIndexes() {
       await Promise.all([
         books.createIndex({ userId: 1, sessionId: 1 }, { unique: true, name: "teacher_books_user_session_unique" }),
         books.createIndex({ userId: 1, createdAt: -1 }, { name: "teacher_books_user_created" }),
+        books.createIndex(
+          { isPublic: 1, status: 1, publishedAt: -1, _id: -1 },
+          { name: "teacher_books_public_catalog", partialFilterExpression: { isPublic: true, status: "complete" } },
+        ),
       ]);
     })();
   }
@@ -58,7 +100,7 @@ async function ensureTeacherBookIndexes() {
 }
 
 export async function countTeacherBooksForPeriod(userId: string, periodStart: Date): Promise<number> {
-  return (await collection()).countDocuments({ userId, createdAt: { $gte: periodStart } });
+  return (await collection()).countDocuments({ userId, generationSource: { $ne: "career" }, createdAt: { $gte: periodStart } });
 }
 
 export async function createTeacherBook(input: Omit<TeacherBookDocument, "createdAt" | "updatedAt">) {
@@ -121,6 +163,90 @@ export async function listTeacherBooks(userId: string, limit = 20): Promise<Arra
 export async function findTeacherBook(userId: string, id: string): Promise<WithId<TeacherBookDocument> | null> {
   if (!ObjectId.isValid(id)) return null;
   return (await collection()).findOne({ _id: new ObjectId(id), userId });
+}
+
+export async function listPublicTeacherBooks(
+  limit = 24,
+  cursor?: PublicTeacherBookCursor,
+): Promise<{ books: PublicTeacherBookSummary[]; nextCursor: PublicTeacherBookCursor | null }> {
+  await ensureTeacherBookIndexes();
+  const boundedLimit = Math.min(Math.max(limit, 1), 48);
+  const pagination = cursor ? {
+    $or: [
+      { publishedAt: { $lt: cursor.publishedAt } },
+      { publishedAt: cursor.publishedAt, _id: { $lt: cursor.id } },
+    ],
+  } : {};
+  const documents = await (await collection()).find(
+    { isPublic: true, status: "complete", publishedAt: { $type: "date" }, ...pagination },
+    {
+      projection: {
+        subject: 1, title: 1, pages: 1, publishedAt: 1,
+        "publicMetadata.creatorName": 1, "publicMetadata.summary": 1,
+        "publicMetadata.coverImageUrl": 1, "publicMetadata.interview": 1,
+      },
+    },
+  ).sort({ publishedAt: -1, _id: -1 }).limit(boundedLimit + 1).toArray();
+
+  const hasMore = documents.length > boundedLimit;
+  const visible = documents.slice(0, boundedLimit);
+  const books = visible.flatMap((book) => {
+    if (!book.publishedAt || !book.publicMetadata) return [];
+    return [{
+      id: book._id.toHexString(), subject: book.subject, title: book.title,
+      creatorName: book.publicMetadata.creatorName, summary: book.publicMetadata.summary,
+      coverImageUrl: book.publicMetadata.coverImageUrl, interview: book.publicMetadata.interview,
+      pageCount: book.pages?.length || 0, publishedAt: book.publishedAt.toISOString(),
+    }];
+  });
+  const last = hasMore ? visible.at(-1) : undefined;
+  return {
+    books,
+    nextCursor: last?.publishedAt ? { publishedAt: last.publishedAt, id: last._id } : null,
+  };
+}
+
+export async function findPublicTeacherBook(id: string): Promise<PublicTeacherBookDetail | null> {
+  if (!ObjectId.isValid(id)) return null;
+  const book = await (await collection()).findOne(
+    { _id: new ObjectId(id), isPublic: true, status: "complete", publishedAt: { $type: "date" } },
+    {
+      projection: {
+        subject: 1, title: 1, pages: 1, publishedAt: 1,
+        "publicMetadata.creatorName": 1, "publicMetadata.summary": 1,
+        "publicMetadata.coverImageUrl": 1, "publicMetadata.interview": 1,
+      },
+    },
+  );
+  if (!book?.publishedAt || !book.publicMetadata) return null;
+  return {
+    id: book._id.toHexString(), subject: book.subject, title: book.title,
+    creatorName: book.publicMetadata.creatorName, summary: book.publicMetadata.summary,
+    coverImageUrl: book.publicMetadata.coverImageUrl, interview: book.publicMetadata.interview,
+    pageCount: book.pages?.length || 0, publishedAt: book.publishedAt.toISOString(), pages: book.pages || [],
+  };
+}
+
+export async function publishTeacherBook(
+  userId: string,
+  id: string,
+  metadata: NonNullable<TeacherBookDocument["publicMetadata"]>,
+): Promise<boolean> {
+  if (!ObjectId.isValid(id)) return false;
+  const result = await (await collection()).updateOne(
+    { _id: new ObjectId(id), userId, status: "complete" },
+    { $set: { isPublic: true, publishedAt: new Date(), publicMetadata: metadata, updatedAt: new Date() } },
+  );
+  return result.matchedCount === 1;
+}
+
+export async function unpublishTeacherBook(userId: string, id: string): Promise<boolean> {
+  if (!ObjectId.isValid(id)) return false;
+  const result = await (await collection()).updateOne(
+    { _id: new ObjectId(id), userId },
+    { $set: { isPublic: false, updatedAt: new Date() }, $unset: { publishedAt: "", publicMetadata: "" } },
+  );
+  return result.matchedCount === 1;
 }
 
 export async function setTeacherBookImage(userId: string, id: string, pageIndex: number, imageUrl: string): Promise<boolean> {

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 import {
   getFeedbackByInterviewId,
-  getInterviewById,
+  getOwnedInterviewById,
 } from "@/lib/actions/general.action";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/actions/auth.action";
@@ -14,7 +14,8 @@ const Feedback = async ({ params }: RouteParams) => {
   const { id } = await params;
   const user = await getCurrentUser();
 
-  const interview = await getInterviewById(id);
+  if (!user?.id) redirect("/");
+  const interview = await getOwnedInterviewById(id, user.id);
   if (!interview) redirect("/");
 
   const feedback = await getFeedbackByInterviewId({

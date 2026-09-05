@@ -128,6 +128,7 @@ export function CareerAgentSimple({
     response: string;
     nextState: ConversationState;
     shouldCreateMission: boolean;
+    missionId?: string;
   }> => {
     try {
       const response = await fetch('/api/career/ai', {
@@ -250,8 +251,13 @@ Would you like to continue with this mission, update it, or create a new one?`;
       // Mark as created BEFORE API call to prevent duplicates
       setMissionCreated(true);
       
-      // Create mission immediately
-      await createCareerMissionWithData(result.nextState.missionData);
+      if (!result.missionId) {
+        setMissionCreated(false);
+        throw new Error('Career session completed without a mission ID');
+      }
+
+      // The conversational API already persisted the canonical mission.
+      await activateCareerMission(result.missionId);
       
       // Set conversation to complete
       setAiResponse(result.response);
@@ -272,42 +278,19 @@ Would you like to continue with this mission, update it, or create a new one?`;
     addLog(`🤖 Agent: ${result.response}`);
   };
 
-  const createCareerMissionWithData = async (data: CareerMissionData) => {
-    // Double-check we haven't already created a mission
-    if (missionCreated) {
-      addLog(`⚠️ Mission already created, skipping duplicate creation`);
-      return;
-    }
-    
-    addLog("🚀 Creating career mission with confirmed data...");
-    addLog(`   Company: ${data.company || 'Not specified'}`);
-    addLog(`   Role: ${data.role || 'Not specified'}`);
-    addLog(`   Interview Date: ${data.interviewDate || 'Not specified'}`);
-    
+  const activateCareerMission = async (missionId: string) => {
+    addLog("🚀 Loading confirmed career mission...");
+
     try {
-      addLog("💾 Saving mission to MongoDB...");
-      
-      const missionPayload = {
-        company: data.company || 'Unknown Company',
-        role: data.role || 'Software Engineer',
-        jobDescription: data.jobDescription,
-        interviewDate: data.interviewDate,
-        priority: data.priority || 'medium'
-      };
-      
-      const response = await fetch('/api/career/mission', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(missionPayload)
-      });
+      const response = await fetch(`/api/career/mission?id=${encodeURIComponent(missionId)}`);
       
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create mission');
+        throw new Error(errorData.error || 'Failed to load mission');
       }
       
       const result = await response.json();
-      addLog(`✅ Mission created! ID: ${result.mission.id.slice(0, 8)}...`);
+      addLog(`✅ Mission confirmed! ID: ${result.mission.id.slice(0, 8)}...`);
       addLog(`📊 Mission status: ${result.mission.status || 'CREATED'}`);
       
       // Mark as created to prevent duplicates
@@ -319,7 +302,7 @@ Would you like to continue with this mission, update it, or create a new one?`;
       setMissionStatus(result.mission.status);
       setMissionProgress(result.mission.progress || 0);
       
-      addLog(`✅ MISSION CREATION COMPLETE`);
+      addLog(`✅ MISSION ACTIVATION COMPLETE`);
       
       // Execute career plan workflow (create notes, calendar, learning resources)
       addLog(`🚀 Starting career plan execution...`);
@@ -414,27 +397,8 @@ Created by Career Agent on ${new Date().toLocaleDateString()}
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // Step 3: Open Interview App for mock sessions
-      addLog("🤖 Setting up Interview practice...");
-      openApplication('interview', 500, 100, 'setup-mock', {
-        company: conversation.missionData.company,
-        role: conversation.missionData.role,
-        type: 'technical',
-        focus: 'full-stack'
-      });
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Step 4: Open Teacher App for learning
-      addLog("📚 Preparing learning resources...");
-      openApplication('teacher', 700, 100, 'setup-learning', {
-        topic: `${conversation.missionData.role} interview preparation`,
-          skills: ['React', 'Node.js', 'System Design', 'Algorithms'],
-        company: conversation.missionData.company
-      });
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      addLog("✅ All apps launched and configured!");
-      addLog("🎯 Check your Notes, Calendar, Interview, and Teacher apps");
+      addLog("✅ Notes and Calendar are ready.");
+      addLog("🎯 Interview, Teacher, and AI Book will open at their scheduled start time.");
       
     } catch (error: any) {
       addLog(`❌ Orchestration error: ${error.message}`);

@@ -16,7 +16,6 @@ export type DesktopSettingsResponse = DesktopSettingsUpdate & { hasAppLockPasswo
 export async function getDesktopSettings(userId: string): Promise<DesktopSettingsResponse> {
   const db = await getDatabase();
   const settings = db.collection<DesktopSettingsDocument>("desktopSettings");
-  await settings.createIndex({ userId: 1 }, { unique: true, name: "desktop_settings_user_unique" });
   const document = await settings.findOne({ userId: new ObjectId(userId) });
   if (!document) return {};
 

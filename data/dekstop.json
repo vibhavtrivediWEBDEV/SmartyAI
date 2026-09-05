@@ -717,19 +717,14 @@
   ],
 
   "youtube.search": [
-    { "action": "open", "target": "Youtube", "delay": 500 },
-    { "action": "move", "target": "youtube_search_input", "delay": 1000 },
-    { "action": "click", "target": "youtube_search_input", "delay": 1200 },
     {
-      "action": "type",
-      "target": "youtube_search_input",
-      "params": { "text": "{{query}}" }
+      "action": "open",
+      "target": "Youtube",
+      "delay": 500,
+      "params": { "searchQuery": "{{query}}", "autoplayFirst": true }
     },
-{ "action": "keypress", "target": "youtube_search_input", "params": { "key": "Enter" } },
-    { "action": "wait", "params": { "timeout": 3000, "condition": "elementExists" }, "target": "youtube_first_video", "delay": 2000 },
-    { "action": "move", "target": "youtube_first_video", "delay": 500 },
-    { "action": "click", "target": "youtube_first_video", "delay": 700 },
-    { "action": "wait", "params": { "timeout": 2000, "condition": "videoPlaying" }, "delay": 1000 }
+    { "action": "maximize", "target": "Youtube", "delay": 700 },
+    { "action": "wait", "params": { "timeout": 8000, "condition": "exists" }, "target": "youtube_video_player" }
   ],
 
   "desktop.screenshot": [

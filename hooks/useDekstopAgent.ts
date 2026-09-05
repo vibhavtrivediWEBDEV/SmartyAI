@@ -10,7 +10,9 @@ import { getFormattedCommands, getFormattedCommandsWithExamples } from "@/lib/he
 import { createAIService } from "@/lib/ai";
 import { useElevenTTS } from "./ElevenLabs";
 import { getUserAIContext, generateDesktopAssistantPrompt, type UserAIContext } from "@/lib/ai/userAIContext";
-import { setVoiceMode, isCareerVoiceActive } from "@/lib/voiceMode";
+import { setVoiceMode, isCareerVoiceActive, isInterviewVoiceActive, isTeacherVoiceActive } from "@/lib/voiceMode";
+import { getVoiceErrorMessage, resolveVoiceAppIntent } from "@/lib/helper/voiceAppIntent";
+import type { CreateAssistantDTO } from "@vapi-ai/web/dist/api";
 
 export enum CallStatus {
     INACTIVE = "INACTIVE",
@@ -344,6 +346,20 @@ ${formattedCommands}
             console.log("🎤 User:", userTranscript);
             console.log("🤖 Assistant:", assistantResponse);
 
+            const voiceAppIntent = resolveVoiceAppIntent(userTranscript);
+            if (voiceAppIntent) {
+                addLog(`🖥 Opening ${voiceAppIntent.appName}`);
+                openApplication(voiceAppIntent.appName);
+                vapi.say(voiceAppIntent.appName === "AI Book" ? "Opening your AI Book." : "Starting Smarty Teacher.");
+
+                setTimeout(() => {
+                    addLog("📞 Ending call...");
+                    vapi.stop();
+                }, 3000);
+
+                return;
+            }
+
             /**
              * 🧠 STEP 1: Try COMMAND extraction FIRST
              * Because command responses are STRUCTURED & strict
@@ -444,7 +460,7 @@ ${formattedCommands}
     useEffect(() => {
         const onCallStart = () => {
             // ❌ Skip if Career Agent is active
-            if (isCareerVoiceActive()) {
+            if (isCareerVoiceActive() || isInterviewVoiceActive() || isTeacherVoiceActive()) {
                 addLog("⚠️ Career Agent is active, ignoring desktop call");
                 return;
             }
@@ -455,7 +471,7 @@ ${formattedCommands}
 
         const onCallEnd = () => {
             // ❌ Skip if Career Agent is active
-            if (isCareerVoiceActive()) {
+            if (isCareerVoiceActive() || isInterviewVoiceActive() || isTeacherVoiceActive()) {
                 addLog("⚠️ Career Agent is active, ignoring desktop call end");
                 return;
             }
@@ -467,18 +483,20 @@ ${formattedCommands}
 
         const onMessage = (message: Message) => {
             // ❌ Skip if Career Agent is active
-            if (isCareerVoiceActive()) {
+            if (isCareerVoiceActive() || isInterviewVoiceActive() || isTeacherVoiceActive()) {
                 return;
             }
             
             if (message.type === "transcript" && message.transcriptType === "final") {
-                setLastTranscript(message.transcript);
+                const transcript = message.transcript?.trim();
+                if (!transcript) return;
+                setLastTranscript(transcript);
 
                 if (message.role === "user") {
-                    lastUserText.current = message.transcript;
-                    addLog(`🎤 User: "${message.transcript}"`);
+                    lastUserText.current = transcript;
+                    addLog(`🎤 User: "${transcript}"`);
                 } else if (message.role === "assistant") {
-                    const fullAssistantText = message.transcript.trim();
+                    const fullAssistantText = transcript;
                     addLog(`🤖 Assistant: "${fullAssistantText}"`);
 
                     if (lastUserText.current) {
@@ -489,22 +507,22 @@ ${formattedCommands}
         };
 
         const onSpeechStart = () => {
-            if (!isCareerVoiceActive()) {
+            if (!isCareerVoiceActive() && !isInterviewVoiceActive() && !isTeacherVoiceActive()) {
                 setIsSpeaking(true);
             }
         };
         
         const onSpeechEnd = () => {
-            if (!isCareerVoiceActive()) {
+            if (!isCareerVoiceActive() && !isInterviewVoiceActive() && !isTeacherVoiceActive()) {
                 setIsSpeaking(false);
             }
         };
         
-        const onError = (error: Error) => {
-            if (isCareerVoiceActive()) {
+        const onError = (error: unknown) => {
+            if (isCareerVoiceActive() || isInterviewVoiceActive() || isTeacherVoiceActive()) {
                 return;
             }
-            addLog(`❌ VAPI Error: ${error.message}`);
+            addLog(`❌ VAPI Error: ${getVoiceErrorMessage(error)}`);
             console.error("VAPI error:", error);
         };
 
@@ -550,7 +568,7 @@ ${formattedCommands}
                 const formattedCommands = getFormattedCommandsWithExamples();
                 
                 // 🔥 Create user-specific assistant
-                const userSpecificAssistant = {
+                const userSpecificAssistant: CreateAssistantDTO = {
                     name: `${userContext?.displayName || 'User'} AI`,
                     firstMessage: `Hi! ${userContext?.displayName || 'User'} ka AI assistant hoon. Kya help chahiye?`,
                     transcriber: {

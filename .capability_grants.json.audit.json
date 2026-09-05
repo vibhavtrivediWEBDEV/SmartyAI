@@ -148,5 +148,59 @@
     "capability": "browser.control",
     "actor": "user",
     "at": 1787253173637
+  },
+  {
+    "action": "grant",
+    "capability": "calendar.write",
+    "actor": "user",
+    "at": 1788568877280
+  },
+  {
+    "action": "grant",
+    "capability": "calendar.write",
+    "actor": "user",
+    "at": 1788568881396
+  },
+  {
+    "action": "grant",
+    "capability": "calendar.write",
+    "actor": "user",
+    "at": 1788568882403
+  },
+  {
+    "action": "grant",
+    "capability": "calendar.write",
+    "actor": "user",
+    "at": 1788568883039
+  },
+  {
+    "action": "grant",
+    "capability": "calendar.write",
+    "actor": "user",
+    "at": 1788568883502
+  },
+  {
+    "action": "grant",
+    "capability": "calendar.write",
+    "actor": "user",
+    "at": 1788568883919
+  },
+  {
+    "action": "grant",
+    "capability": "calendar.write",
+    "actor": "user",
+    "at": 1788568884281
+  },
+  {
+    "action": "grant_ephemeral",
+    "capability": "calendar.write",
+    "actor": "user",
+    "at": 1788568999482
+  },
+  {
+    "action": "grant",
+    "capability": "calendar.write",
+    "actor": "user",
+    "at": 1788569000984
   }
 ]

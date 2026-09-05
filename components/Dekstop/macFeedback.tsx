@@ -100,6 +100,7 @@ export default function LoveCounter() {
 
   // ── Init ─────────────────────────────────────────────────────────────────
   useEffect(() => {
+    let cancelled = false;
     userId.current = getUserId();
 
     // Restore this user's saved reaction from localStorage
@@ -121,15 +122,40 @@ export default function LoveCounter() {
         await fetchData();
       } catch { }
 
+      if (cancelled) return;
       setLoading(false);
-
-      // 3. Live poll every 5s — picks up other users' reactions in real time
-      pollRef.current = setInterval(fetchData, 5000);
+      startPolling();
     };
 
-    init();
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    const stopPolling = () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = null;
+    };
+    const startPolling = () => {
+      stopPolling();
+      if (!document.hidden) pollRef.current = setInterval(fetchData, 30000);
+    };
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        void fetchData();
+        startPolling();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    void init();
+    return () => {
+      cancelled = true;
+      stopPolling();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [fetchData]);
+
+  useEffect(() => {
+    if (open) void fetchData();
+  }, [open, fetchData]);
 
   // ── Outside click closes panel ───────────────────────────────────────────
   useEffect(() => {

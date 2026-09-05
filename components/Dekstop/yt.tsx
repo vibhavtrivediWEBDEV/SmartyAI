@@ -28,12 +28,28 @@
 "use client";
 
 import React, {
+  type ReactElement,
   useState,
   useEffect,
   useMemo,
   useCallback,
   useRef,
 } from "react";
+import { ArrowLeft, LockKeyhole } from "lucide-react";
+import YouTube, { type YouTubeEvent, type YouTubePlayer } from "react-youtube";
+import { useSettings } from "@/app/context/settingContext";
+import { playById } from "@/lib/sound";
+import { CareerTaskMeta, useCareerClock } from "../Desktop/CareerTaskMeta";
+import {
+  careerTaskDateKey,
+  getCareerTaskTiming,
+  type CareerTaskItem,
+} from "../Desktop/careerTaskGroups";
+import {
+  buildLearningVideoQuery,
+  extractLearningTopic,
+  isVideoTitleRelevant,
+} from "@/lib/youtubeLearningSearch";
 
 /* =============================================================================
  * YouTubeApple.tsx
@@ -47,12 +63,13 @@ import React, {
 const YT_API_KEY =
   process.env.NEXT_PUBLIC_YOUTUBE_API_KEY ?? "YOUR_YOUTUBE_API_KEY";
 
-const HOME_URL = `https://youtube.googleapis.com/youtube/v3/videos?part=snippet%2CcontentDetails%2Cstatistics&chart=mostPopular&maxResults=50&regionCode=IN&key=${YT_API_KEY}`;
-
 const searchUrl = (q: string) =>
-  `https://youtube.googleapis.com/youtube/v3/search?part=snippet&maxResults=10&key=${YT_API_KEY}&order=relevance&q=${encodeURIComponent(
+  `https://youtube.googleapis.com/youtube/v3/search?part=snippet&maxResults=12&type=video&videoEmbeddable=true&safeSearch=strict&key=${YT_API_KEY}&order=relevance&q=${encodeURIComponent(
     q
   )}`;
+
+const detailsUrl = (ids: string[]) =>
+  `https://youtube.googleapis.com/youtube/v3/videos?part=snippet%2CcontentDetails%2Cstatistics&id=${ids.join(",")}&key=${YT_API_KEY}`;
 
 /* -----------------------------------------------------------------------
  * 1. Types
@@ -102,15 +119,8 @@ type NormalizedVideo = {
   views?: string;
 };
 
-type Theme = "light" | "dark";
-type NavKey =
-  | "home"
-  | "trending"
-  | "subscriptions"
-  | "library"
-  | "history"
-  | "watchlater"
-  | "liked";
+type CareerResource = { title: string; searchQuery: string; url: string };
+type CareerPlaylist = { missionId: string; title: string; youtubeResources: CareerResource[] };
 
 /* -----------------------------------------------------------------------
  * 2. Helpers
@@ -188,63 +198,21 @@ function normalizeHome(items: HomeVideo[]): NormalizedVideo[] {
   }));
 }
 
-function normalizeSearch(items: SearchItem[]): NormalizedVideo[] {
-  return items
-    .filter((i) => i.id?.videoId)
-    .map((v) => ({
-      id: v.id.videoId,
-      title: v.snippet.title,
-      description: v.snippet.description,
-      channelTitle: v.snippet.channelTitle,
-      publishedAt: v.snippet.publishedAt,
-      thumbnail: bestThumbnail(v.snippet.thumbnails),
-    }));
-}
-
 /* -----------------------------------------------------------------------
  * 3. Root component
  * -------------------------------------------------------------------- */
-export default function YouTubeApple() {
-  /* ---------- theme ---------- */
-  const [theme, setTheme] = useState<Theme>("light");
-  useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem("yta-theme") : null;
-    if (saved === "light" || saved === "dark") {
-      setTheme(saved);
-    } else if (typeof window !== "undefined" && window.matchMedia) {
-      setTheme(window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    }
-  }, []);
-  useEffect(() => {
-    if (typeof window !== "undefined") localStorage.setItem("yta-theme", theme);
-  }, [theme]);
-
-  /* ---------- home feed ---------- */
-  const [videos, setVideos] = useState<NormalizedVideo[]>([]);
-  const [homeLoading, setHomeLoading] = useState(true);
-  const [homeError, setHomeError] = useState<string | null>(null);
-
-  const loadHome = useCallback(async () => {
-    setHomeLoading(true);
-    setHomeError(null);
-    try {
-      const res = await fetch(HOME_URL);
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error?.message ?? `Request failed (${res.status})`);
-      }
-      const data = await res.json();
-      setVideos(normalizeHome(data.items ?? []));
-    } catch (err: any) {
-      setHomeError(err?.message ?? "Unable to load videos");
-    } finally {
-      setHomeLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadHome();
-  }, [loadHome]);
+export default function YouTubeApple({
+  initialCareerTask,
+  initialSearchQuery,
+  autoplayFirst = false,
+}: {
+  initialCareerTask?: CareerTaskItem;
+  initialSearchQuery?: string;
+  autoplayFirst?: boolean;
+} = {}) {
+  const { settings } = useSettings();
+  const dark = settings.darkMode;
+  const now = useCareerClock();
 
   /* ---------- search ---------- */
   const [searchQuery, setSearchQuery] = useState("");
@@ -252,23 +220,58 @@ export default function YouTubeApple() {
   const [searchResults, setSearchResults] = useState<NormalizedVideo[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [careerPlaylists, setCareerPlaylists] = useState<CareerPlaylist[]>([]);
+  const [careerTasks, setCareerTasks] = useState<CareerTaskItem[]>([]);
+  const [selectedTask, setSelectedTask] = useState<CareerTaskItem | null>(null);
+  const [lockedTopic, setLockedTopic] = useState("");
+  const [selectedVideo, setSelectedVideo] = useState<NormalizedVideo | null>(null);
   const requestId = useRef(0);
+  const initializedTopic = useRef(false);
+  const shouldAutoplay = useRef(autoplayFirst);
 
   const runSearch = useCallback(async (q: string) => {
-    if (!q.trim()) return;
+    const topic = extractLearningTopic(q);
+    if (!topic) return;
     const myId = ++requestId.current;
+    setSearchQuery(topic);
     setSearchMode(true);
     setSearchLoading(true);
     setSearchError(null);
     try {
-      const res = await fetch(searchUrl(q));
+      const res = await fetch(searchUrl(buildLearningVideoQuery(topic)));
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         throw new Error(body?.error?.message ?? `Request failed (${res.status})`);
       }
       const data = await res.json();
       if (myId !== requestId.current) return; // stale
-      setSearchResults(normalizeSearch(data.items ?? []));
+      const ids: string[] = (data.items ?? [])
+        .map((item: SearchItem) => item.id?.videoId)
+        .filter((id: string | undefined): id is string => Boolean(id));
+      if (!ids.length) {
+        setSearchResults([]);
+        return;
+      }
+      const detailsResponse = await fetch(detailsUrl(ids));
+      if (!detailsResponse.ok) {
+        throw new Error(`Unable to load video details (${detailsResponse.status})`);
+      }
+      const details = await detailsResponse.json();
+      if (myId !== requestId.current) return;
+      const videosById = new Map<string, HomeVideo>(
+        (details.items ?? []).map((video: HomeVideo) => [video.id, video])
+      );
+      const videos = ids
+        .map((id) => videosById.get(id))
+        .filter((video): video is HomeVideo =>
+          Boolean(video && isVideoTitleRelevant(topic, video.snippet.title))
+        );
+      const normalizedVideos = normalizeHome(videos);
+      setSearchResults(normalizedVideos);
+      if (shouldAutoplay.current && normalizedVideos[0]) {
+        shouldAutoplay.current = false;
+        setSelectedVideo(normalizedVideos[0]);
+      }
     } catch (err: any) {
       if (myId !== requestId.current) return;
       setSearchError(err?.message ?? "Unable to search videos");
@@ -277,9 +280,61 @@ export default function YouTubeApple() {
     }
   }, []);
 
+  const loadCareerResources = useCallback(() => {
+    return Promise.all([fetch('/api/career/resources'), fetch('/api/career/tasks')])
+      .then(async ([resourcesResponse, tasksResponse]) => {
+        if (!resourcesResponse.ok || !tasksResponse.ok) {
+          throw new Error('Career learning schedule unavailable');
+        }
+        const [{ playlists }, { tasks }] = await Promise.all([
+          resourcesResponse.json(),
+          tasksResponse.json(),
+        ]);
+        setCareerPlaylists(Array.isArray(playlists) ? playlists : []);
+        setCareerTasks(Array.isArray(tasks) ? tasks : []);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    loadCareerResources();
+    const handleProgress = (event: Event) => {
+      const detail = (event as CustomEvent<{ reason?: string }>).detail;
+      if (detail?.reason === 'resources' || detail?.reason === 'mission') loadCareerResources();
+    };
+    window.addEventListener('career-progress', handleProgress);
+    return () => window.removeEventListener('career-progress', handleProgress);
+  }, [loadCareerResources]);
+
+  const todayTasks = useMemo(() => {
+    const today = careerTaskDateKey(now);
+    return careerTasks
+      .filter((task) => careerTaskDateKey(task.scheduledDate) === today)
+      .sort(
+        (left, right) =>
+          new Date(left.scheduledDate).getTime() -
+          new Date(right.scheduledDate).getTime()
+      );
+  }, [careerTasks, now]);
+
+  useEffect(() => {
+    if (initializedTopic.current) return;
+    const task = initialCareerTask || (todayTasks.find((item) => item.status !== 'completed') ?? todayTasks[0]);
+    const topic = initialSearchQuery || task?.title;
+    if (!topic) return;
+    initializedTopic.current = true;
+    setSelectedTask(task ?? null);
+    setLockedTopic(extractLearningTopic(topic));
+    void runSearch(topic);
+  }, [initialCareerTask, initialSearchQuery, runSearch, todayTasks]);
+
+  function handleSearchChange(value: string) {
+    if (!lockedTopic || value.startsWith(lockedTopic)) setSearchQuery(value);
+  }
+
   function handleSearchSubmit(e: React.FormEvent) {
     e.preventDefault();
-    runSearch(searchQuery);
+    if (searchQuery) runSearch(searchQuery);
   }
   function clearSearch() {
     requestId.current++;
@@ -289,20 +344,22 @@ export default function YouTubeApple() {
     setSearchError(null);
   }
 
-  /* ---------- nav + player ---------- */
-  const [activeNav, setActiveNav] = useState<NavKey>("home");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [selectedVideo, setSelectedVideo] = useState<NormalizedVideo | null>(null);
+  function selectScheduledTask(task: CareerTaskItem) {
+    setSelectedTask(task);
+    setLockedTopic(extractLearningTopic(task.title));
+    void runSearch(task.title);
+  }
+
+  const selectedTiming = selectedTask ? getCareerTaskTiming(selectedTask, now) : null;
+  const canWatch = !selectedTask || selectedTiming?.state === 'active';
+  const playedLockedTaskSoundRef = useRef<string | null>(null);
 
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setSelectedVideo(null);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  const dark = theme === "dark";
+    if (!selectedTask || canWatch || careerTaskDateKey(selectedTask.scheduledDate) !== careerTaskDateKey(now)) return;
+    if (playedLockedTaskSoundRef.current === selectedTask.id) return;
+    playedLockedTaskSoundRef.current = selectedTask.id;
+    void playById('shocked-sound-effect').catch(() => {});
+  }, [canWatch, now, selectedTask]);
 
   return (
     <div
@@ -313,27 +370,15 @@ export default function YouTubeApple() {
     >
       <Navbar
         dark={dark}
-        onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
         searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
+        lockedTopic={lockedTopic}
+        onSearchChange={handleSearchChange}
         onSearchSubmit={handleSearchSubmit}
         onClearSearch={clearSearch}
         searchMode={searchMode}
-        onOpenSidebar={() => setSidebarOpen(true)}
       />
 
       <div className="flex">
-        <Sidebar
-          dark={dark}
-          active={activeNav}
-          onSelect={(k) => {
-            setActiveNav(k);
-            setSidebarOpen(false);
-          }}
-          open={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-        />
-
         <main className="flex-1 min-w-0 px-4 md:px-6 py-5">
           {searchMode ? (
             <SearchResultsView
@@ -343,16 +388,17 @@ export default function YouTubeApple() {
               error={searchError}
               results={searchResults}
               onRetry={() => runSearch(searchQuery)}
-              onOpen={setSelectedVideo}
+              onOpen={canWatch ? setSelectedVideo : undefined}
+              task={selectedTask}
+              now={now}
             />
           ) : (
-            <HomeView
+            <CareerLearningView
               dark={dark}
-              loading={homeLoading}
-              error={homeError}
-              videos={videos}
-              onRetry={loadHome}
-              onOpen={setSelectedVideo}
+              playlists={careerPlaylists}
+              todayTasks={todayTasks}
+              now={now}
+              onSelect={selectScheduledTask}
             />
           )}
         </main>
@@ -362,9 +408,29 @@ export default function YouTubeApple() {
         <VideoPlayerModal
           dark={dark}
           video={selectedVideo}
-          onClose={() => setSelectedVideo(null)}
+          task={selectedTask}
+          onClose={() => {
+            setSelectedVideo(null);
+            void loadCareerResources();
+          }}
         />
       )}
+      <style jsx global>{`
+        .youtube-theme-fill {
+          background: var(--theme-primary-color);
+        }
+        .youtube-theme-text {
+          color: var(--theme-primary-color);
+        }
+        .youtube-theme-soft {
+          color: var(--theme-primary-color);
+          background: var(--theme-primary-soft);
+        }
+        .youtube-theme-panel {
+          border-color: color-mix(in srgb, var(--theme-primary-color) 28%, transparent);
+          background: var(--theme-primary-soft);
+        }
+      `}</style>
     </div>
   );
 }
@@ -374,22 +440,20 @@ export default function YouTubeApple() {
  * -------------------------------------------------------------------- */
 function Navbar({
   dark,
-  onToggleTheme,
   searchQuery,
+  lockedTopic,
   onSearchChange,
   onSearchSubmit,
   onClearSearch,
   searchMode,
-  onOpenSidebar,
 }: {
   dark: boolean;
-  onToggleTheme: () => void;
   searchQuery: string;
-  onSearchChange: (v: string) => void;
+  lockedTopic: string;
+  onSearchChange: (value: string) => void;
   onSearchSubmit: (e: React.FormEvent) => void;
   onClearSearch: () => void;
   searchMode: boolean;
-  onOpenSidebar: () => void;
 }) {
   return (
     <header
@@ -400,18 +464,20 @@ function Navbar({
           : "bg-white/70 border-black/[0.06]")
       }
     >
-      <button
-        onClick={onOpenSidebar}
-        aria-label="Open menu"
-        className={
-          "md:hidden w-8 h-8 grid place-items-center rounded-lg " +
-          (dark ? "hover:bg-white/10" : "hover:bg-black/5")
-        }
-      >
-        <MenuIcon />
-      </button>
-
       <div className="flex items-center gap-1.5 shrink-0">
+        {searchMode && (
+          <button
+            type="button"
+            onClick={onClearSearch}
+            aria-label="Back to today's schedule"
+            className={
+              "mr-1 grid h-8 w-8 place-items-center rounded-full transition-colors " +
+              (dark ? "hover:bg-white/10" : "hover:bg-black/5")
+            }
+          >
+            <ArrowLeft size={17} />
+          </button>
+        )}
         <PlaySquareIcon dark={dark} />
         <span className="font-semibold text-[15px] tracking-tight hidden sm:inline">
           Tube
@@ -432,9 +498,10 @@ function Navbar({
             id="youtube_search_input"
             name="youtube_search_input"
             value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search"
-            aria-label="Search videos"
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="Select today's scheduled topic"
+            aria-label="Search within the selected learning topic"
+            title={lockedTopic ? `Topic locked: ${lockedTopic}. You can append search details.` : undefined}
             className="flex-1 bg-transparent outline-none text-[13.5px] placeholder:text-inherit placeholder:opacity-40"
           />
           {searchMode && (
@@ -452,16 +519,6 @@ function Navbar({
 
       <div className="flex items-center gap-1.5 shrink-0">
         <button
-          onClick={onToggleTheme}
-          aria-label="Toggle theme"
-          className={
-            "w-8 h-8 grid place-items-center rounded-full transition-all active:scale-90 " +
-            (dark ? "hover:bg-white/10" : "hover:bg-black/5")
-          }
-        >
-          {dark ? <SunIcon /> : <MoonIcon />}
-        </button>
-        <button
           aria-label="Notifications"
           className={
             "w-8 h-8 grid place-items-center rounded-full transition-all active:scale-90 " +
@@ -472,7 +529,7 @@ function Navbar({
         </button>
         <button
           aria-label="Account"
-          className="w-8 h-8 rounded-full bg-gradient-to-br from-[#0A84FF] to-[#5E5CE6] grid place-items-center text-white text-[12px] font-semibold"
+          className="youtube-theme-fill grid h-8 w-8 place-items-center rounded-full text-[12px] font-semibold text-white"
         >
           V
         </button>
@@ -482,100 +539,75 @@ function Navbar({
 }
 
 /* -----------------------------------------------------------------------
- * 5. Sidebar
+ * 6. Home view
  * -------------------------------------------------------------------- */
-const NAV_ITEMS: { key: NavKey; label: string; icon: (a: { dark: boolean }) => JSX.Element }[] = [
-  { key: "home", label: "Home", icon: HomeIcon },
-  { key: "trending", label: "Trending", icon: TrendingIcon },
-  { key: "subscriptions", label: "Subscriptions", icon: SubsIcon },
-  { key: "library", label: "Library", icon: LibraryIcon },
-  { key: "history", label: "History", icon: HistoryIcon },
-  { key: "watchlater", label: "Watch Later", icon: ClockIcon },
-  { key: "liked", label: "Liked Videos", icon: HeartIcon },
-];
-
-function Sidebar({
+function CareerLearningView({
   dark,
-  active,
+  playlists,
+  todayTasks,
+  now,
   onSelect,
-  open,
-  onClose,
 }: {
   dark: boolean;
-  active: NavKey;
-  onSelect: (k: NavKey) => void;
-  open: boolean;
-  onClose: () => void;
+  playlists: CareerPlaylist[];
+  todayTasks: CareerTaskItem[];
+  now: Date;
+  onSelect: (task: CareerTaskItem) => void;
 }) {
-  const content = (
-    <nav className="flex flex-col gap-0.5 p-3">
-      {NAV_ITEMS.map(({ key, label, icon: Icon }) => {
-        const isActive = key === active;
-        return (
-          <button
-            key={key}
-            onClick={() => onSelect(key)}
-            className={
-              "flex items-center gap-3 h-9 px-3 rounded-lg text-[13.5px] font-medium transition-colors text-left " +
-              (isActive
-                ? dark
-                  ? "bg-white/10 text-white"
-                  : "bg-black/[0.06] text-black"
-                : dark
-                ? "text-white/60 hover:bg-white/5 hover:text-white"
-                : "text-black/60 hover:bg-black/[0.04] hover:text-black")
-            }
-          >
-            <Icon dark={dark} />
-            {label}
-          </button>
-        );
-      })}
-    </nav>
+  const resources = playlists.flatMap((playlist) =>
+    playlist.youtubeResources.map((resource) => ({ ...resource, missionTitle: playlist.title }))
   );
 
   return (
-    <>
-      {/* desktop */}
-      <aside
-        className={
-          "hidden md:block w-[230px] shrink-0 border-r sticky top-14 h-[calc(100vh-56px)] overflow-y-auto " +
-          (dark ? "border-white/10 bg-black/40" : "border-black/[0.06] bg-white/40")
-        }
-      >
-        {content}
-      </aside>
+    <div className="mx-auto max-w-5xl">
+      <div className="mb-6 border-b border-current/10 pb-5">
+        <p className="youtube-theme-text text-[11px] font-semibold uppercase">Today&apos;s Career Learning</p>
+        <h1 className="mt-1 text-2xl font-semibold">Watch only what is scheduled today</h1>
+        <p className={"mt-1 max-w-2xl text-[13px] leading-relaxed " + (dark ? "text-white/50" : "text-black/50")}>
+          Videos are selected from your dated Career tasks and ranked by real YouTube popularity.
+        </p>
+      </div>
 
-      {/* mobile drawer */}
-      {open && (
-        <div className="md:hidden fixed inset-0 z-50 flex">
-          <div className="flex-1 bg-black/40" onClick={onClose} />
-          <div
-            className={
-              "w-[240px] h-full overflow-y-auto " +
-              (dark ? "bg-[#111113]" : "bg-white")
-            }
-          >
-            <div className="flex justify-end p-2">
+      {todayTasks.length > 0 ? (
+        <div className="overflow-hidden rounded-lg border border-current/10">
+          {todayTasks.map((task, index) => {
+            const timing = getCareerTaskTiming(task, now);
+            return (
               <button
-                onClick={onClose}
-                className={"w-8 h-8 grid place-items-center rounded-full " + (dark ? "hover:bg-white/10" : "hover:bg-black/5")}
-                aria-label="Close menu"
+                key={task.id}
+                onClick={() => onSelect(task)}
+                className={
+                  "flex w-full items-start gap-4 p-5 text-left transition-colors " +
+                  (index ? "border-t border-current/10 " : "") +
+                  (dark ? "bg-white/4 hover:bg-white/8" : "bg-white hover:bg-black/3")
+                }
               >
-                <CloseIcon />
+                <span className="youtube-theme-soft grid h-9 w-9 shrink-0 place-items-center rounded-lg text-sm font-semibold">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-semibold leading-snug">{task.title}</span>
+                  <span className="mt-1 block text-[12px] text-current/45">
+                    {timing.start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - {timing.end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · {task.duration ?? 60} min
+                  </span>
+                </span>
+                <CareerTaskMeta task={task} now={now} />
               </button>
-            </div>
-            {content}
-          </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="py-24 text-center">
+          <p className="text-[15px] font-semibold">No video study task scheduled today</p>
+          <p className={"mt-1 text-[13px] " + (dark ? "text-white/45" : "text-black/45")}>
+            Your future syllabus has {resources.length} topic{resources.length === 1 ? '' : 's'} and will unlock on its assigned date.
+          </p>
         </div>
       )}
-    </>
+    </div>
   );
 }
 
-/* -----------------------------------------------------------------------
- * 6. Home view
- * -------------------------------------------------------------------- */
 function HomeView({
   dark,
   loading,
@@ -613,6 +645,8 @@ function SearchResultsView({
   results,
   onRetry,
   onOpen,
+  task,
+  now,
 }: {
   dark: boolean;
   query: string;
@@ -620,13 +654,36 @@ function SearchResultsView({
   error: string | null;
   results: NormalizedVideo[];
   onRetry: () => void;
-  onOpen: (v: NormalizedVideo) => void;
+  onOpen?: (v: NormalizedVideo) => void;
+  task: CareerTaskItem | null;
+  now: Date;
 }) {
+  const timing = task ? getCareerTaskTiming(task, now) : null;
+
   return (
     <div>
-      <h2 className="text-[15px] font-semibold mb-4">
-        Search results for &ldquo;{query}&rdquo;
-      </h2>
+      {task && timing && (
+        <div className="youtube-theme-panel mb-5 flex flex-wrap items-center gap-4 rounded-lg border p-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase opacity-55">Today&apos;s allotted topic</p>
+            <h2 className="mt-1 truncate text-[15px] font-semibold">{task.title}</h2>
+            <p className="mt-1 text-[12px] opacity-55">
+              {timing.start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - {timing.end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · {task.duration ?? 60} minutes
+            </p>
+          </div>
+          <CareerTaskMeta task={task} now={now} />
+        </div>
+      )}
+
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-[15px] font-semibold">Popular videos for &ldquo;{query}&rdquo;</h2>
+        {timing?.state !== 'active' && (
+          <span className="flex shrink-0 items-center gap-1 text-[11px] opacity-50">
+            <LockKeyhole size={12} />
+            Opens at allotted time
+          </span>
+        )}
+      </div>
 
       {error ? (
         <ErrorState dark={dark} message={error} onRetry={onRetry} />
@@ -711,17 +768,19 @@ function SearchResultRow({
 }: {
   dark: boolean;
   video: NormalizedVideo;
-  onOpen: (v: NormalizedVideo) => void;
+  onOpen?: (v: NormalizedVideo) => void;
   isFirst?: boolean;
 }) {
   return (
     <button
       id={isFirst ? 'youtube_first_video' : undefined}
       name={isFirst ? 'youtube_first_video' : undefined}
-      onClick={() => onOpen(video)}
+      onClick={() => onOpen?.(video)}
+      disabled={!onOpen}
       className={
         "w-full text-left flex flex-col sm:flex-row gap-3 p-2 rounded-2xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0A84FF] " +
-        (dark ? "hover:bg-white/5" : "hover:bg-black/[0.03]")
+        (dark ? "hover:bg-white/5" : "hover:bg-black/[0.03]") +
+        (!onOpen ? " cursor-not-allowed opacity-60" : "")
       }
       aria-label={`Play ${video.title}`}
     >
@@ -731,7 +790,7 @@ function SearchResultRow({
       <div className="min-w-0 py-1">
         <p className="text-[14.5px] font-semibold leading-snug line-clamp-2">{video.title}</p>
         <p className={"text-[12px] mt-1 " + (dark ? "text-white/40" : "text-black/40")}>
-          {video.channelTitle} &middot; {formatPublishedDate(video.publishedAt)}
+          {video.channelTitle} &middot; {[video.views, formatPublishedDate(video.publishedAt)].filter(Boolean).join(" · ")}
         </p>
         <p className={"text-[12.5px] mt-2 line-clamp-2 " + (dark ? "text-white/50" : "text-black/55")}>
           {video.description}
@@ -824,33 +883,228 @@ function ErrorState({
 function VideoPlayerModal({
   dark,
   video,
+  task,
   onClose,
 }: {
   dark: boolean;
   video: NormalizedVideo;
+  task: CareerTaskItem | null;
   onClose: () => void;
 }) {
+  const playerRef = useRef<YouTubePlayer | null>(null);
+  const playStartedAt = useRef<number | null>(null);
+  const watchedSeconds = useRef(0);
+  const durationSeconds = useRef(0);
+  const watchAccepted = useRef(false);
+  const [phase, setPhase] = useState<'video' | 'loading-quiz' | 'quiz' | 'passed'>('video');
+  const [questions, setQuestions] = useState<Array<{ id: string; prompt: string; options: string[] }>>([]);
+  const [answers, setAnswers] = useState<number[]>([]);
+  const [feedback, setFeedback] = useState<Array<{ questionId: string; correct: boolean; explanation: string }>>([]);
+  const [agentError, setAgentError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const flushPlayTime = useCallback(() => {
+    if (playStartedAt.current !== null) {
+      watchedSeconds.current += Math.max(0, (Date.now() - playStartedAt.current) / 1000);
+      playStartedAt.current = null;
+    }
+    return watchedSeconds.current;
+  }, []);
+
+  const callAgent = useCallback(async (body: Record<string, unknown>) => {
+    if (!task) return null;
+    const response = await fetch('/api/career/youtube-agent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ missionId: task.missionId, taskId: task.id, ...body }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'YouTube Agent could not continue');
+    return data;
+  }, [task]);
+
+  const handleReady = useCallback((event: YouTubeEvent) => {
+    playerRef.current = event.target;
+    durationSeconds.current = Number(event.target.getDuration?.() || 0);
+  }, []);
+
+  const handlePlay = useCallback(() => {
+    if (playStartedAt.current === null) playStartedAt.current = Date.now();
+    if (task && watchedSeconds.current === 0) {
+      void callAgent({
+        action: 'record',
+        event: 'started',
+        video: { id: video.id, title: video.title, channelTitle: video.channelTitle },
+        durationSeconds: durationSeconds.current,
+      }).catch((error: Error) => setAgentError(error.message));
+    }
+  }, [callAgent, task, video]);
+
+  const handlePause = useCallback(() => {
+    flushPlayTime();
+  }, [flushPlayTime]);
+
+  const handleEnd = useCallback(async () => {
+    if (!task) return;
+    setAgentError(null);
+    setPhase('loading-quiz');
+    const watched = flushPlayTime();
+    try {
+      const recorded = await callAgent({
+        action: 'record',
+        event: 'ended',
+        video: { id: video.id, title: video.title, channelTitle: video.channelTitle },
+        watchedSeconds: watched,
+        durationSeconds: durationSeconds.current || Number(playerRef.current?.getDuration?.() || 0),
+      });
+      if (recorded?.evidence?.status !== 'watched') {
+        throw new Error('Watch at least 80% of this related video before the knowledge check.');
+      }
+      watchAccepted.current = true;
+      const quiz = await callAgent({ action: 'questions' });
+      setQuestions(quiz.questions);
+      setAnswers(Array(quiz.questions.length).fill(-1));
+      setPhase('quiz');
+    } catch (error) {
+      setAgentError(error instanceof Error ? error.message : 'YouTube Agent could not prepare the check-in');
+      setPhase('video');
+    }
+  }, [callAgent, flushPlayTime, task, video]);
+
+  const closePlayer = useCallback(() => {
+    const watched = flushPlayTime();
+    if (task && !watchAccepted.current && phase !== 'passed') {
+      void callAgent({
+        action: 'record',
+        event: 'skipped',
+        video: { id: video.id, title: video.title, channelTitle: video.channelTitle },
+        watchedSeconds: watched,
+        durationSeconds: durationSeconds.current || Number(playerRef.current?.getDuration?.() || 0),
+      }).finally(onClose);
+      return;
+    }
+    onClose();
+  }, [callAgent, flushPlayTime, onClose, phase, task, video]);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') closePlayer();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [closePlayer]);
+
+  const submitAnswers = useCallback(async () => {
+    if (answers.some((answer) => answer < 0)) {
+      setAgentError('Answer every question before submitting.');
+      return;
+    }
+    setSubmitting(true);
+    setAgentError(null);
+    try {
+      const result = await callAgent({ action: 'submit', answers });
+      setFeedback(result.feedback || []);
+      if (result.passed) {
+        setPhase('passed');
+        window.dispatchEvent(new CustomEvent('career-progress', {
+          detail: { missionId: task?.missionId, reason: 'task', progress: result.progress },
+        }));
+      } else {
+        setAgentError(`Score: ${result.score}%. Review the feedback and try again.`);
+      }
+    } catch (error) {
+      setAgentError(error instanceof Error ? error.message : 'Could not submit answers');
+    } finally {
+      setSubmitting(false);
+    }
+  }, [answers, callAgent, task]);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-      onClick={onClose}
+      onClick={closePlayer}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         className={
-          "w-full max-w-3xl rounded-2xl overflow-hidden border shadow-2xl " +
+          "w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-2xl border shadow-2xl " +
           (dark ? "bg-[#111113] border-white/10" : "bg-white border-black/10")
         }
       >
-        <div className="aspect-video bg-black">
-          <iframe
-            src={`https://www.youtube.com/embed/${video.id}?autoplay=1`}
-            title={video.title}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            className="w-full h-full"
-          />
-        </div>
+        {phase === 'video' || !task ? (
+          <div className="aspect-video bg-black">
+            <YouTube
+              videoId={video.id}
+              id="youtube_video_player"
+              className="w-full h-full"
+              iframeClassName="w-full h-full"
+              opts={{
+                width: '100%',
+                height: '100%',
+                playerVars: { autoplay: 1, rel: 0 },
+              }}
+              onReady={handleReady}
+              onPlay={handlePlay}
+              onPause={handlePause}
+              onEnd={handleEnd}
+            />
+          </div>
+        ) : (
+          <div className="p-6 md:p-8">
+            {phase === 'loading-quiz' ? (
+              <div className="min-h-64 grid place-items-center text-sm">YouTube Agent is preparing your check-in...</div>
+            ) : phase === 'passed' ? (
+              <div className="min-h-64 flex flex-col items-center justify-center text-center gap-4">
+                <div className="w-12 h-12 rounded-full grid place-items-center bg-green-500 text-white text-xl">✓</div>
+                <div>
+                  <h3 className="text-lg font-semibold">Knowledge check passed</h3>
+                  <p className={"mt-1 text-sm " + (dark ? "text-white/55" : "text-black/55")}>Your watched video, answers, score, and feedback are saved.</p>
+                </div>
+                <button onClick={closePlayer} className="h-9 px-5 rounded-lg bg-green-600 text-white text-sm font-medium">Done</button>
+              </div>
+            ) : (
+              <div>
+                <p className="text-xs font-semibold uppercase text-red-500">YouTube Agent</p>
+                <h3 className="mt-1 text-lg font-semibold">Answer every question to complete this task</h3>
+                <div className="mt-5 space-y-5">
+                  {questions.map((question, questionIndex) => (
+                    <fieldset key={question.id}>
+                      <legend className="text-sm font-medium">{questionIndex + 1}. {question.prompt}</legend>
+                      <div className="mt-2 grid gap-2">
+                        {question.options.map((option, optionIndex) => {
+                          return (
+                            <label key={option} className={"flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm " + (dark ? "border-white/10" : "border-black/10")}>
+                              <input
+                                type="radio"
+                                name={question.id}
+                                checked={answers[questionIndex] === optionIndex}
+                                onChange={() => setAnswers((current) => current.map((answer, index) => index === questionIndex ? optionIndex : answer))}
+                              />
+                              <span>{option}</span>
+                            </label>
+                          );
+                        })}
+                        {feedback.find((item) => item.questionId === question.id) && (
+                          <p className={"text-xs " + (feedback.find((item) => item.questionId === question.id)?.correct ? "text-green-600" : "text-red-500")}>
+                            {feedback.find((item) => item.questionId === question.id)?.explanation}
+                          </p>
+                        )}
+                      </div>
+                    </fieldset>
+                  ))}
+                </div>
+                {agentError && <p role="alert" className="mt-4 text-sm text-red-500">{agentError}</p>}
+                <button
+                  onClick={submitAnswers}
+                  disabled={submitting}
+                  className="mt-5 h-10 px-5 rounded-lg bg-red-600 text-white text-sm font-semibold disabled:opacity-50"
+                >
+                  {submitting ? 'Checking...' : feedback.length ? 'Try again' : 'Submit answers'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         <div className="flex items-start justify-between gap-4 p-4">
           <div className="min-w-0">
             <h3 className="text-[15px] font-semibold leading-snug line-clamp-2">{video.title}</h3>
@@ -860,7 +1114,7 @@ function VideoPlayerModal({
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={closePlayer}
             aria-label="Close player"
             className={
               "w-8 h-8 shrink-0 grid place-items-center rounded-full transition-colors " +
@@ -882,13 +1136,6 @@ function iconColor(dark?: boolean) {
   return dark ? "rgba(255,255,255,0.75)" : "rgba(0,0,0,0.65)";
 }
 
-function MenuIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
 function CloseIcon({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">

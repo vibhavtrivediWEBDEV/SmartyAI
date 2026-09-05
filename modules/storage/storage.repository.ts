@@ -43,7 +43,7 @@ export interface FileNodeDocument {
   content?: string;
   url?: string;
   legacyId?: string;
-  migrationSource?: "firebase" | "fixture" | "resume" | "system";
+  migrationSource?: "firebase" | "fixture" | "resume" | "system" | "career";
   isStarred: boolean;
   showOnDesktop?: boolean;
   isTrashed: boolean;

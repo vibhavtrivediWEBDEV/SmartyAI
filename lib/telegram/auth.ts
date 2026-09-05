@@ -66,6 +66,9 @@ export async function resolveTelegramUser(
       console.log('[Telegram Auth] Using enhanced repository, found connection:', !!connection)
     } catch (enhancedError) {
       console.log('[Telegram Auth] Enhanced repository failed, using old repository')
+    }
+
+    if (!connection) {
       const { getTelegramConnectionByChatId: getOldConnection } = await import('./repository')
       connection = await getOldConnection(telegramChatId)
     }

@@ -138,8 +138,7 @@ export async function processMessageThroughAI(
         console.log(`   Sequence:`, JSON.stringify(automationSequence, null, 2))
         
         // Send sequence to Desktop via WebSocket
-        const { registerPendingCommand } = await import('@/lib/socket')
-        const { getSocketIO } = await import('@/lib/socket')
+        const { getSocketIO, registerPendingCommand, sendAutomationCommand } = await import('@/lib/socket')
         const socketIO = getSocketIO()
         
         if (!socketIO) {
@@ -156,7 +155,7 @@ export async function processMessageThroughAI(
           userId,
           command: intent,
           sequence: automationSequence,
-          source: 'telegram',
+          source: 'telegram' as const,
           timestamp: Date.now()
         }
         
@@ -165,7 +164,9 @@ export async function processMessageThroughAI(
         console.log(`   Payload:`, JSON.stringify(payload, null, 2))
         
         const pendingResponse = registerPendingCommand(executionId)
-        socketIO.to(`user:${userId}`).emit('automation-command', payload)
+        if (!sendAutomationCommand(userId, payload)) {
+          return '❌ Desktop connection not available'
+        }
         
         console.log('[Telegram AI] ⏳ Waiting for Desktop response (15s)...')
         const success = await pendingResponse
@@ -314,10 +315,10 @@ export async function processAutomationCommand(
     // Step 1: Check permission
     console.log('[Telegram] 📋 Step 2: Checking permissions...')
     const { validateActionPermission } = await import('./auth')
-    const hasPermission = await validateActionPermission(userId, 'macAutomation')
-    console.log(`[Telegram] ${hasPermission ? '✅' : '❌'} Permission: ${hasPermission}`)
+    const permission = await validateActionPermission(chatId, 'mac_automation')
+    console.log(`[Telegram] ${permission.allowed ? '✅' : '❌'} Permission: ${permission.allowed}`)
     
-    if (!hasPermission) {
+    if (!permission.allowed) {
       console.log('[Telegram] ❌ ERROR: Mac automation not enabled')
       await logToTelegram.error('🔒 Mac automation not enabled', 'Automation', userId)
       return `🔒 Mac automation is not enabled for your account.
@@ -372,7 +373,7 @@ To enable:
     console.log(`   Expected Room: user:${userId}`)
     console.log('🔍'.repeat(80) + '\n')
     
-    const { isDesktopOnline, getDesktopSession } = await import('@/lib/socket')
+    const { getDesktopSession, isDesktopOnline, sendAutomationCommand } = await import('@/lib/socket')
     
     console.log('\n' + '📊'.repeat(80))
     console.log('[TELEGRAM] GLOBAL SESSION REGISTRY CHECK')
@@ -418,7 +419,7 @@ To enable:
     }
     console.log('🚪'.repeat(80) + '\n')
     
-    if (!desktopOnline || socketsInRoom.length === 0) {
+    if (socketsInRoom.length === 0) {
       console.log('[Telegram] ❌ Desktop offline - sending user-friendly message')
       await logToTelegram.warn('🖥️ Desktop offline', 'Automation', userId)
       return `🖥️ **Smarty Desktop is offline**
@@ -489,7 +490,7 @@ To execute automation commands:
         userId,
         command: `${result.automation[0].action} ${result.automation[0].target}`,
         sequence: result.automation,
-        source: 'telegram',
+        source: 'telegram' as const,
         timestamp: Date.now()
       }
       
@@ -526,7 +527,9 @@ To execute automation commands:
       console.log(`room: user:${userId}`)
       console.log('🔥🔥🔥\n')
       
-      socketIO.to(`user:${userId}`).emit('automation-command', payload)
+      if (!sendAutomationCommand(userId, payload)) {
+        throw new Error('Active desktop socket is unavailable')
+      }
       
       console.log('[Telegram] ✅ WebSocket emit complete')
       console.log(`[Telegram] ⏳ Waiting for Desktop response (${finalTimeout/1000}s timeout)...`)

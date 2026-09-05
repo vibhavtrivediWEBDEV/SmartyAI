@@ -20,7 +20,7 @@ export interface WorkspaceFile {
  * Workspace settings
  */
 export interface WorkspaceSettings {
-  runtime: "react" | "html" | "node" | "python" | "java";
+  runtime: "react" | "react-ts" | "html" | "node" | "typescript" | "python" | "java" | "sql" | "mongodb";
   entryPoint: string; // e.g., "src/App.jsx"
   autoSave: boolean;
   theme?: string;
@@ -70,7 +70,7 @@ export interface SerializedWorkspace {
  */
 export interface ConsoleLogEntry {
   id: string;
-  type: "log" | "error" | "warn" | "info";
+  type: "log" | "error" | "warn" | "info" | "success";
   message: string;
   timestamp: string;
 }

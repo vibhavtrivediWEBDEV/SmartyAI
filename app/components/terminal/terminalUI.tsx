@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from "react"
 import { TerminalInput } from "./terminalinput"
 import { TerminalOutput } from "./terminaloutput"
-import { TelegramLiveLogs } from "@/components/Dekstop/TelegramLiveLogs"
 import type { JSX } from "react/jsx-runtime"
 import { Rnd } from "react-rnd"
 import { handleCommand } from "@/lib/handleCommand"
@@ -33,7 +32,6 @@ export function TerminalUI({ automationAPI, autoRunCommand, autoRunCommandArgs, 
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isMinimized, setIsMinimized] = useState(false)
   const [isClosed, setIsClosed] = useState(false)
-  const [showTelegramLogs, setShowTelegramLogs] = useState(false)
 
   // Store last known size & position
   const [size, setSize] = useState({ width: 800, height: 500 })
@@ -135,35 +133,10 @@ export function TerminalUI({ automationAPI, autoRunCommand, autoRunCommandArgs, 
       {reopenButton}
 
       <div className="flex flex-col h-screen">
-        {/* Telegram Logs Toggle Button */}
-        <div className="absolute top-2 right-2 z-50">
-          <button
-            onClick={() => setShowTelegramLogs(!showTelegramLogs)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-mono flex items-center gap-2 transition-all ${
-              showTelegramLogs
-                ? 'bg-purple-600 text-white shadow-lg'
-                : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-            }`}
-          >
-            <span className={showTelegramLogs ? 'animate-pulse' : ''}>📡</span>
-            Telegram Live
-            {showTelegramLogs && <span className="text-xs">●</span>}
-          </button>
-        </div>
-
-        {/* Telegram Live Logs Panel */}
-        {showTelegramLogs && (
-          <div className="h-1/2 border-b border-gray-800">
-            <TelegramLiveLogs maxLogs={20} userId={userId} />
-          </div>
-        )}
-
         {/* Scrollable output */}
         <div
           ref={outputRef}
-          className={`flex-1 overflow-y-auto p-4 text-sm scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900 ${
-            showTelegramLogs ? 'h-1/2' : ''
-          }`}
+          className="flex-1 overflow-y-auto p-4 text-sm scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900"
           style={{ paddingBottom: "6rem" }} // reserve space for input
         >
           <TerminalOutput history={history} />

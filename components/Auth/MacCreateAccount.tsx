@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, FileUp, Check, User, Mail, Lock, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import { signUp } from "@/lib/actions/auth.action";
 
 interface MacCreateAccountProps {
   goNext: () => void;
@@ -67,11 +66,12 @@ export default function MacCreateAccount({ goNext, goBack }: MacCreateAccountPro
 
     try {
       // Create user account
-      const result = await signUp({
-        name: fullName,
-        email: email,
-        password: password,
+      const accountResponse = await fetch("/api/auth/sign-up", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: fullName, email, password }),
       });
+      const result = await accountResponse.json();
 
       if (!result.success) {
         toast.error(result.message);

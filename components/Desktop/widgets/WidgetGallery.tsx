@@ -16,6 +16,7 @@ import GlassWorldClockWidget from './GlassWorldClockWidget';
 import GlassSmallWorldClockWidget from './GlassSmallWorldClockWidget';
 import GlassWideRemindersWidget from './GlassWideRemindersWidget';
 import GlassSFWeatherWidget from './GlassSFWeatherWidget';
+import CareerAgentWidget from './CareerAgentWidget';
 
 interface WidgetGalleryProps {
   isOpen: boolean;
@@ -58,6 +59,21 @@ export default function WidgetGallery({ isOpen, onClose, onAddWidget, isDarkMode
       </div>
       
       <div className="relative z-10 flex-1 overflow-y-auto p-5 pb-10 space-y-6">
+        <div className="flex flex-col items-center">
+          <div className="w-full mb-3 flex items-center justify-between">
+            <span className={`font-medium ${textColorPrimary}`}>Career Agent</span>
+            <button
+              onClick={() => onAddWidget('career-agent')}
+              className={`px-3 py-1 rounded-full text-xs ${buttonBg} ${textColor} transition-colors`}
+            >
+              Add
+            </button>
+          </div>
+          <div className="pointer-events-none h-44 w-full">
+            <CareerAgentWidget preview onOpen={() => undefined} />
+          </div>
+        </div>
+
         {/* Glass Clock Widget */}
         <div className="flex flex-col items-center">
           <div className="w-full mb-3 flex items-center justify-between">

@@ -7,10 +7,50 @@ import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
+import ts from 'typescript';
 import type { ConsoleLogEntry } from '@/lib/types/workspace';
+
+const EXECUTION_TIMEOUT_MS = 8_000;
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+function appendLegacySolutionInvocation(code: string): string {
+  const legacyExport = /module\.exports\s*=\s*\{\s*solution\s*\}\s*;?\s*$/;
+  if (!legacyExport.test(code)) return code;
+
+  return `${code}\n\nPromise.resolve(solution()).then((result) => {\n  if (result === undefined) {\n    console.log('[Runner] solution() returned undefined. Add your implementation or return a value.');\n    return;\n  }\n  console.log(typeof result === 'string' ? result : JSON.stringify(result, null, 2));\n});\n`;
+}
+
+function runCommand(command: string, args: string[], cwd: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(command, args, { cwd, env: process.env });
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      proc.kill('SIGKILL');
+    }, EXECUTION_TIMEOUT_MS);
+
+    proc.stdout.on('data', (data) => { stdout += data.toString(); });
+    proc.stderr.on('data', (data) => { stderr += data.toString(); });
+    proc.on('error', (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    proc.on('close', (exitCode) => {
+      clearTimeout(timeout);
+      if (timedOut) {
+        reject(new Error(`${stdout}${stderr}\nExecution stopped after ${EXECUTION_TIMEOUT_MS / 1000} seconds. Interactive input and long-running servers are not supported.`.trim()));
+      } else if (exitCode === 0) {
+        resolve(stdout);
+      } else {
+        reject(new Error(stderr || stdout || `Exit code: ${exitCode}`));
+      }
+    });
+  });
 }
 
 /**
@@ -33,35 +73,7 @@ export async function executePython(code: string): Promise<ConsoleLogEntry[]> {
     });
 
     // Execute Python
-    const output = await new Promise<string>((resolve, reject) => {
-      const proc = spawn('python3', [tmpFile], {
-        cwd: tmpDir,
-        env: process.env,
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      proc.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      proc.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      proc.on('close', (code) => {
-        if (code === 0) {
-          resolve(stdout);
-        } else {
-          reject(new Error(stderr || `Exit code: ${code}`));
-        }
-      });
-
-      proc.on('error', (err) => {
-        reject(err);
-      });
-    });
+    const output = await runCommand('python3', [tmpFile], tmpDir);
 
     // Add output logs
     if (output.trim()) {
@@ -130,28 +142,7 @@ export async function executeJava(code: string): Promise<ConsoleLogEntry[]> {
     });
 
     // Compile Java
-    const compileOutput = await new Promise<string>((resolve, reject) => {
-      const proc = spawn('javac', [javaFile], {
-        cwd: tmpDir,
-      });
-
-      let stderr = '';
-      proc.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      proc.on('close', (code) => {
-        if (code === 0) {
-          resolve('Compilation successful');
-        } else {
-          reject(new Error(stderr || 'Compilation failed'));
-        }
-      });
-
-      proc.on('error', (err) => {
-        reject(err);
-      });
-    });
+    await runCommand('javac', [javaFile], tmpDir);
 
     logs.push({
       id: generateId(),
@@ -168,34 +159,7 @@ export async function executeJava(code: string): Promise<ConsoleLogEntry[]> {
     });
 
     // Execute Java
-    const output = await new Promise<string>((resolve, reject) => {
-      const proc = spawn('java', ['-cp', tmpDir, className], {
-        cwd: tmpDir,
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      proc.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      proc.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      proc.on('close', (code) => {
-        if (code === 0) {
-          resolve(stdout);
-        } else {
-          reject(new Error(stderr || `Exit code: ${code}`));
-        }
-      });
-
-      proc.on('error', (err) => {
-        reject(err);
-      });
-    });
+    const output = await runCommand('java', ['-cp', tmpDir, className], tmpDir);
 
     // Add output logs
     if (output.trim()) {
@@ -243,14 +207,23 @@ export async function executeJava(code: string): Promise<ConsoleLogEntry[]> {
 /**
  * Execute Node.js code
  */
-export async function executeNode(code: string): Promise<ConsoleLogEntry[]> {
+export async function executeNode(code: string, isTypeScript = false): Promise<ConsoleLogEntry[]> {
   const logs: ConsoleLogEntry[] = [];
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'node-'));
   const tmpFile = path.join(tmpDir, 'index.js');
 
   try {
     // Write code to temp file
-    await fs.writeFile(tmpFile, code, 'utf-8');
+    const transpiledCode = isTypeScript
+      ? ts.transpileModule(code, {
+          compilerOptions: {
+            module: ts.ModuleKind.CommonJS,
+            target: ts.ScriptTarget.ES2022,
+          },
+        }).outputText
+      : code;
+    const executableCode = appendLegacySolutionInvocation(transpiledCode);
+    await fs.writeFile(tmpFile, executableCode, 'utf-8');
 
     logs.push({
       id: generateId(),
@@ -260,35 +233,7 @@ export async function executeNode(code: string): Promise<ConsoleLogEntry[]> {
     });
 
     // Execute Node.js
-    const output = await new Promise<string>((resolve, reject) => {
-      const proc = spawn('node', [tmpFile], {
-        cwd: tmpDir,
-        env: process.env,
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      proc.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      proc.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      proc.on('close', (code) => {
-        if (code === 0) {
-          resolve(stdout);
-        } else {
-          reject(new Error(stderr || `Exit code: ${code}`));
-        }
-      });
-
-      proc.on('error', (err) => {
-        reject(err);
-      });
-    });
+    const output = await runCommand('node', [tmpFile], tmpDir);
 
     // Add output logs
     if (output.trim()) {
@@ -301,6 +246,13 @@ export async function executeNode(code: string): Promise<ConsoleLogEntry[]> {
             timestamp: new Date().toISOString(),
           });
         }
+      });
+    } else {
+      logs.push({
+        id: generateId(),
+        type: 'warn',
+        message: 'Program finished with no output. Use console.log(...) or return a value from solution().',
+        timestamp: new Date().toISOString(),
       });
     }
 

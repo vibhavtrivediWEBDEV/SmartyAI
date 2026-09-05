@@ -24,8 +24,10 @@ const monthStart = () => {
 };
 
 const serializeBook = (book: Awaited<ReturnType<typeof listTeacherBooks>>[number]) => ({
-  id: book._id.toHexString(), subject: book.subject, title: book.title, provider: book.provider || "unknown", model: book.model,
+  id: book._id.toHexString(), sessionId: book.sessionId, subject: book.subject, title: book.title, provider: book.provider || "unknown", model: book.model,
   messages: book.messages, pages: book.pages, status: book.status,
+  isPublic: book.isPublic === true,
+  publicMetadata: book.publicMetadata,
   context: book.context,
   lastError: book.lastError,
   createdAt: book.createdAt.toISOString(), updatedAt: book.updatedAt.toISOString(),
@@ -43,23 +45,24 @@ function parseBookPages(content: string): TeacherBookPage[] {
     const candidate = page as Partial<TeacherBookPage>;
     return Boolean(candidate.content && ["cover", "text", "image", "end"].includes(candidate.type || ""));
   });
-  if (pages.length < 2) throw new Error("The book agent returned too few valid pages.");
-  return pages.slice(0, 20);
+  if (pages.length < 10) throw new Error("The book agent returned fewer than 10 valid pages.");
+  return pages.slice(0, 25);
 }
 
 async function enrichBook(input: {
   userId: string; bookId: string; subject: string; studentName: string;
   messages: TeacherBookMessage[];
 }) {
-  const systemPrompt = `Turn the completed live lesson about "${input.subject}" into a beautiful, accurate study book for ${input.studentName}.
-Return ONLY a valid JSON array with 6-12 pages. Preserve every meaningful student question and teacher answer. Improve clarity without inventing facts.
+  const systemPrompt = `Turn the completed lesson and source notes about "${input.subject}" into an exceptionally polished, accurate private study book for ${input.studentName}.
+Return ONLY a valid JSON array with 10-25 substantial pages. Preserve every meaningful source-note fact, student question, and teacher answer. Improve clarity without inventing facts.
 Allowed shapes:
 {"type":"cover","content":{"title":"...","subtitle":"...","author":"..."}}
 {"type":"text","content":{"title":"...","body":"..."}}
 {"type":"text","content":{"question":"...","answer":"..."}}
+{"type":"text","content":{"kind":"coding","language":"javascript|typescript|python|java|sql|mongodb|html","title":"Coding exercise","question":"A complete standalone coding problem for the student to solve"}}
 {"type":"image","content":{"src":"specific educational image search phrase","alt":"...","caption":"..."}}
 {"type":"end","content":{"message":"..."}}
-Include a cover and end page, every useful Q&A, concise summaries, examples, key terms, practical applications, and 2-4 useful image pages. Image src is a search description, never a URL. Output JSON only.`;
+Build a coherent progression: editorial introduction, foundations, key terms, deep explanations, worked examples, practical applications, common misconceptions, recall questions with answers, applied exercises, a one-page revision map, and a final mastery checklist. When the subject includes programming, include standalone coding exercises using kind "coding" and omit their solutions so the student can solve them in VS Code. Include a cover and end page, every useful Q&A, and 2-4 purposeful image pages. Keep each page focused and information-rich. Image src is a search description, never a URL. Output JSON only.`;
   try {
     const response = await chatOpenAIFirst(
       [{ role: "system", content: systemPrompt }, ...input.messages],
@@ -96,11 +99,16 @@ Include a cover and end page, every useful Q&A, concise summaries, examples, key
 }
 
 export async function GET() {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const [books, used] = await Promise.all([listTeacherBooks(user.id), countTeacherBooksForPeriod(user.id, monthStart())]);
-  const limit = SUBSCRIPTION_PLANS[user.plan].teacherBooksPerMonth;
-  return NextResponse.json({ books: books.map(serializeBook), usage: { used, limit, remaining: Math.max(0, limit - used) } });
+  try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const [books, used] = await Promise.all([listTeacherBooks(user.id), countTeacherBooksForPeriod(user.id, monthStart())]);
+    const limit = SUBSCRIPTION_PLANS[user.plan].teacherBooksPerMonth;
+    return NextResponse.json({ books: books.map(serializeBook), usage: { used, limit, remaining: Math.max(0, limit - used) } });
+  } catch (error) {
+    console.error("Teacher book history failed:", error);
+    return NextResponse.json({ error: "Book history is temporarily unavailable.", books: [] }, { status: 500 });
+  }
 }
 
 export async function POST(request: NextRequest) {

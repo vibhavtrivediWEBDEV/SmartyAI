@@ -20,13 +20,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.log('\n========== TELEGRAM SEND FROM UI ==========')
     
     const body = await request.json()
-    const { message, userId: bodyUserId } = body
-    
-    // Get userId from body or session
-    let userId = bodyUserId
-    if (!userId) {
-      userId = await getSessionUserId()
-    }
+    const { message, processAutomation = true } = body
+    const userId = await getSessionUserId()
     
     console.log('[Telegram Send] User ID:', userId)
     
@@ -89,7 +84,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     
     // Log outgoing message to database
     console.log('[Telegram Send] Logging message to database...')
-    await logTelegramOutgoing(userId, chatId, formattedMessage, true)
+    await logTelegramOutgoing(userId, chatId, message, true, undefined, 'user')
     
     // Send message through Telegram Bot API
     console.log('[Telegram Send] 📤 Sending to Telegram API...')
@@ -98,6 +93,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     })
     
     console.log('[Telegram Send] ✅ Message sent to Telegram - ID:', result.message_id)
+
+    if (processAutomation === false) {
+      console.log('[Telegram Send] ✅ Send-only message complete')
+      return NextResponse.json({
+        success: true,
+        messageId: result.message_id,
+        chatId,
+        text: message
+      })
+    }
     
     // NOW: Process message through automation command engine
     console.log('[Telegram Send] 🧠 Processing through automation command engine...')
@@ -138,7 +143,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Determine error type
     let errorType = 'SEND_FAILED'
     let errorMessage = 'Failed to send message'
-    let details = error instanceof Error ? error.message : 'Unknown error'
+    const details = error instanceof Error ? error.message : 'Unknown error'
     
     // Parse Telegram API errors
     if (details.includes('403') || details.includes('bot was blocked')) {

@@ -42,6 +42,7 @@
 import React, {
   useEffect, useRef, useState, useCallback,
 } from "react";
+import { SOUND_REACTION_EVENT, type SoundReactionDetail } from "../../lib/sound/soundReactionEvent";
 import {
   AdaptiveCursorFilter,
   GestureStateMachine,
@@ -67,7 +68,7 @@ const DOCK_APPS: DockApp[] = [
   { id: "finder", name: "Finder", iconUrl: "https://framerusercontent.com/images/wtQkw1jK0MlEDOrW0Q1kE5PBqc.png", color: "#5AC8FA", glow: "rgba(90,200,250,0.5)" },
   { id: "safari", name: "Safari", iconUrl: "https://framerusercontent.com/images/qQISGOSSnz748TdrZn91l44R5u0.png", color: "#34AADC", glow: "rgba(52,170,220,0.5)" },
   { id: "mail", name: "Mail", iconUrl: "https://framerusercontent.com/images/fm90fwzWoBMCvK5C0MOyKdo94.png", color: "#0A84FF", glow: "rgba(10,132,255,0.5)" },
-  { id: "messages", name: "Messages", iconUrl: "https://framerusercontent.com/images/CwKoPLck9kD8CifRkrpug3socM.png", color: "#30D158", glow: "rgba(48,209,88,0.5)" },
+  { id: "messages", name: "Telegram", iconUrl: "/covers/telegram.png", color: "#3390EC", glow: "rgba(51,144,236,0.5)" },
   { id: "maps", name: "Maps", iconUrl: "https://framerusercontent.com/images/YtLyrfz2kFN2QhkzBWG6TrATw.png", color: "#34C759", glow: "rgba(52,199,89,0.5)" },
   { id: "photos", name: "Photos", iconUrl: "https://framerusercontent.com/images/ogWIDEJmWxA8SVRZpEe7gk35FcM.png", color: "#FF9F0A", glow: "rgba(255,159,10,0.5)" },
   { id: "chrome", name: "Chrome", iconUrl: "https://tse2.mm.bing.net/th/id/OIP.psOZ1V2b8TrCOZ-Mp42IHAHa?pid=Api&P=0&h=180", color: "#EA4335", glow: "rgba(234,67,53,0.5)" },
@@ -206,6 +207,23 @@ function loadScript(src: string): Promise<void> {
   });
 }
 interface Particle { id: string; emoji: string; label: string; color: string; x: number; y: number; }
+
+function ReactionParticles({ particles }: { particles: Particle[] }) {
+  return (
+    <>
+      {particles.map(p => (
+        <div key={p.id} className="fixed pointer-events-none" style={{ left: p.x, top: p.y, zIndex: 2147483624, textAlign: "center", animation: "gdReact 2.6s cubic-bezier(0.16,1,0.3,1) forwards" }}>
+          <div style={{ fontSize: 86, lineHeight: 1, filter: `drop-shadow(0 10px 50px ${p.color}88)`, animation: "gdReactW 0.6s ease-out" }}>{p.emoji}</div>
+          <div style={{ marginTop: 10, fontSize: 10, fontWeight: 800, letterSpacing: "3.5px", textTransform: "uppercase", color: "white", fontFamily: "'SF Pro Text',monospace", textShadow: `0 0 24px ${p.color}` }}>{p.label}</div>
+        </div>
+      ))}
+      <style>{`
+        @keyframes gdReact  { 0%{opacity:0;transform:translateY(50px) scale(.2) rotate(-12deg)}  12%{opacity:1;transform:translateY(-20px) scale(1.22) rotate(5deg)} 55%{opacity:1;transform:translateY(-100px) scale(1) rotate(0deg)} 100%{opacity:0;transform:translateY(-200px) scale(.8) rotate(6deg)} }
+        @keyframes gdReactW { 0%{transform:scale(.35) rotate(-16deg)}                            55%{transform:scale(1.18) rotate(7deg)} 100%{transform:scale(1) rotate(0deg)} }
+      `}</style>
+    </>
+  );
+}
 
 export interface AutomationAPI { executeTextCommand: (t: string) => Promise<boolean>; }
 export interface GestureDockProps {
@@ -369,15 +387,27 @@ export function GestureDock({ visible = true, onAppLaunch, accentColor = "#0A84F
     });
   }, [updateHoverTarget]);
 
-  const spawnReaction = useCallback((g: GestureName) => {
-    const r = REACTIONS[g]; if (!r) return;
+  const spawnParticle = useCallback((reaction: { emoji: string; label: string; color: string }) => {
     const id = String(++pIdRef.current);
     const x = 80 + Math.random() * (winRef.current.w - 220);
     const y = winRef.current.h * 0.12 + Math.random() * (winRef.current.h * 0.35);
-    setParticles(p => [...p, { id, ...r, x, y }]);
+    setParticles(p => [...p, { id, ...reaction, x, y }]);
     setTimeout(() => setParticles(p => p.filter(q => q.id !== id)), 2600);
-    flashRing(r.color, 800);
+    flashRing(reaction.color, 800);
   }, [flashRing]);
+
+  const spawnReaction = useCallback((g: GestureName) => {
+    const reaction = REACTIONS[g];
+    if (reaction) spawnParticle(reaction);
+  }, [spawnParticle]);
+
+  useEffect(() => {
+    const handleSoundReaction = (event: Event) => {
+      spawnParticle((event as CustomEvent<SoundReactionDetail>).detail);
+    };
+    window.addEventListener(SOUND_REACTION_EVENT, handleSoundReaction);
+    return () => window.removeEventListener(SOUND_REACTION_EVENT, handleSoundReaction);
+  }, [spawnParticle]);
 
   const triggerOp = useCallback((idx: number, op: AppOperation) => {
     const app = DOCK_APPS[idx]; if (!app) return;
@@ -582,7 +612,7 @@ export function GestureDock({ visible = true, onAppLaunch, accentColor = "#0A84F
     };
   }, [visible, processHand, updateCursor]);
 
-  if (!visible) return null;
+  if (!visible) return <ReactionParticles particles={particles} />;
 
   const hovApp = hovIdx !== null ? DOCK_APPS[hovIdx] : null;
   const cursorColor = hovApp?.color ?? accentColor;
@@ -660,12 +690,7 @@ export function GestureDock({ visible = true, onAppLaunch, accentColor = "#0A84F
       )}
 
       {/* ── REACTION PARTICLES ────────────────────────────────────────────── */}
-      {particles.map(p => (
-        <div key={p.id} className="fixed pointer-events-none" style={{ left: p.x, top: p.y, zIndex: 2147483624, textAlign: "center", animation: "gdReact 2.6s cubic-bezier(0.16,1,0.3,1) forwards" }}>
-          <div style={{ fontSize: 86, lineHeight: 1, filter: `drop-shadow(0 10px 50px ${p.color}88)`, animation: "gdReactW 0.6s ease-out" }}>{p.emoji}</div>
-          <div style={{ marginTop: 10, fontSize: 10, fontWeight: 800, letterSpacing: "3.5px", textTransform: "uppercase", color: "white", fontFamily: "'SF Pro Text',monospace", textShadow: `0 0 24px ${p.color}` }}>{p.label}</div>
-        </div>
-      ))}
+      <ReactionParticles particles={particles} />
 
       {/* ── GESTURE BADGE top-right ───────────────────────────────────────── */}
       {status === "active" && gesture !== "none" && G_LABEL[gesture] && (
@@ -738,8 +763,6 @@ export function GestureDock({ visible = true, onAppLaunch, accentColor = "#0A84F
         @keyframes gdSpin   { from{transform:rotate(0deg)}                                       to{transform:rotate(360deg)} }
         @keyframes gdBurst  { from{transform:translate(-50%,-50%) scale(.5);opacity:1}           to{transform:translate(-50%,-50%) scale(3.2);opacity:0} }
         @keyframes gdArr    { 0%,100%{opacity:.18;transform:translateY(-50%) scale(1)}           50%{opacity:.6;transform:translateY(-50%) scale(1.3)} }
-        @keyframes gdReact  { 0%{opacity:0;transform:translateY(50px) scale(.2) rotate(-12deg)}  12%{opacity:1;transform:translateY(-20px) scale(1.22) rotate(5deg)} 55%{opacity:1;transform:translateY(-100px) scale(1) rotate(0deg)} 100%{opacity:0;transform:translateY(-200px) scale(.8) rotate(6deg)} }
-        @keyframes gdReactW { 0%{transform:scale(.35) rotate(-16deg)}                            55%{transform:scale(1.18) rotate(7deg)} 100%{transform:scale(1) rotate(0deg)} }
         @keyframes gdCard   { 0%{opacity:0;transform:scale(.75) translateY(30px)}                10%{opacity:1;transform:scale(1.03) translateY(-2px)} 72%{opacity:1;transform:scale(1)} 100%{opacity:0;transform:scale(.92) translateY(-14px)} }
         @keyframes gdIconB  { 0%{transform:scale(.38);opacity:0}                                 62%{transform:scale(1.16);opacity:1} 100%{transform:scale(1)} }
         @keyframes gdDB     { from{transform:translateY(0);opacity:.4}                           to{transform:translateY(-9px);opacity:1} }

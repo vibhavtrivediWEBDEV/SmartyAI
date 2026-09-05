@@ -202,14 +202,15 @@ async function extractResume(buffer: Buffer) {
   return { resumeText, profile, repositories: await fetchGitHubRepositories(profile.githubUsername) };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const sessionUser = await getCurrentUser();
   if (!sessionUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const shouldRefresh = new URL(request.url).searchParams.get("refresh") === "true";
 
   let user = await findUserById(sessionUser.id);
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-  if (user.resumeStorageKey && user.resumeExtractionVersion !== RESUME_EXTRACTION_VERSION) {
+  if (shouldRefresh && user.resumeStorageKey && user.resumeExtractionVersion !== RESUME_EXTRACTION_VERSION) {
     try {
       const signedUrl = cloudinary.url(user.resumeStorageKey, {
         resource_type: user.resumeResourceType ?? "raw",
@@ -247,7 +248,7 @@ export async function GET() {
   }
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-  if (user.resumeProfile?.githubUsername) {
+  if (shouldRefresh && user.resumeProfile?.githubUsername) {
     try {
       const repositories = await fetchGitHubRepositories(user.resumeProfile.githubUsername);
       if (repositories.length) await syncResumeProfileToFinder(sessionUser.id, user.resumeProfile, repositories);

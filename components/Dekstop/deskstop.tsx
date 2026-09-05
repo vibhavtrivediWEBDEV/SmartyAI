@@ -4,15 +4,9 @@ import DevFinderMock from '@/components/DevFinderMock'
 import { useRef, useEffect, useState, useCallback } from "react"
 import dynamic from "next/dynamic"
 import { Window } from "./window"
-import { TerminalUI } from "@/app/components/terminal/terminalUI"
-import { ScienceBook } from "@/app/components/terminal/ai-book"
-import { AISearch } from "@/app/components/terminal/AiSearch"
-import { ExcelEditor } from "@/app/components/terminal/ExcelEditor"
-import { MailSender } from "@/app/components/terminal/mail-sender"
-import { PdfViewer } from "@/app/components/terminal/pdfviwer"
 import { DesktopIcon } from "./dekstopIcon"
 import { StickyNote } from "./stickyNote"
-import { ProjectExplorerWindow, type ProjectFile } from "./ProjectExpWindow"
+import type { ProjectFile } from "./ProjectExpWindow"
 import { gsap } from "gsap"
 import { FolderIcon, Trash2Icon, CameraIcon, TerminalIcon, BookIcon, SearchIcon, TableIcon, MailIcon, ListTodoIcon, FileTextIcon } from 'lucide-react' // Import Lucide icons
 import { Dock } from "./dock"
@@ -23,25 +17,11 @@ import { FileDetailsViewer } from "./file-details-viewer"
 import { TerminalProvider } from "@/app/context/terminalContext"
 import { KeyboardProvider } from "@/app/context/keyBoardContext"
 import { toast } from "sonner"
-import CircularGallery from "./Gallery"
-import MotionGallary from "./motionGalary"
-import MacGallery from "./MacGallery"
-import DomeGallery from "../animationComponents/gallery"
-import InfiniteMenu from "../animationComponents/newsGallery"
 import TextType from "./textAnimation"
 import KeyboardWrapper from "./keyboardWrapper"
 import CustomCursor from "../CustomCursor"
-import GamePage from "./Game"
 import Webpage from "./webpage"
-import DotGrid from "../animationComponents/dotGrid"
-import VSCodeWithWorkspace from "./VSCodeWithWorkspace"
-import { BrowserContent } from "./Browser"
-import Spotify from "./spotify"
-import MapsNew from "./MapsNew"
-import Youtube from "./yt"
-import SettingsPanel from "./Settings"
 import { useSettings } from "@/app/context/settingContext"
-import EnhancedCalendar from "../Desktop/EnhancedCalendar"
 import { useCursorAutomation } from "@/hooks/useCursorAutomation"
 import { AutomationControlPanel } from "./AutomationControlPannel"
 import { FakeCursor } from "./FakeCursor"
@@ -49,7 +29,6 @@ import { useElevenTTS } from "@/hooks/ElevenLabs"
 import { resolveSequence } from "@/lib/helper/helper"
 import { VoiceControlButton } from "./VoiceControlButton"
 import { CareerAgentVoice } from "./CareerAgentVoice"
-import { CareerAgentProgress } from "./CareerAgentProgress"
 import { getFormattedCommandsWithExamples } from "@/lib/helper/commandRegistry"
 import { useWindowLayout } from "@/hooks/useWindowLayout"
 import { SnapPreview } from "./SnapPreview"
@@ -57,24 +36,16 @@ import LoveCounter from "./macFeedback"
 import AppleTopBar from "../Desktop/APpleTopBar"
 import FileIcon from "./fileicon"
 import LiquidGlassVideo from "./glassvediowallpaper"
-import Figma from "./figma"
-import PremiumNotes from "./notesapp"
 import GestureDock from "./gestureDock"
 import { selectTopmostMatchingWindow } from "./gestureEngine"
 import { ProjectsFolder } from "./ProjectsFolder"
 import { EasterEggWindow } from "./EasterEggWindow"
 import { ResumeProfilePanel, type ResumeProfile } from "./ResumeProfilePanel"
-import { ATSResumeBuilder } from "./ATSResumeBuilder"
-import { getDesktopApp } from "@/lib/desktopApps"
-import FaceTimeApp from "./FaceTimeApp"
-import AppStoreApp from "./AppStoreApp"
-import SmartyInterview from "@/app/components/terminal/smartyInterview"
-import StartInterview from "@/app/components/terminal/StartInterview"
-import FeedbackInterview from "@/app/components/terminal/feedbackInterview"
-import SmartyTeacherWrapper from "@/app/components/terminal/smartyTeacher"
-import { DynamicAgGridConfigurator } from "./dataTableViewer"
+import { canPinDesktopApp, getDesktopApp } from "@/lib/desktopApps"
 import { getUserAIContext, type UserAIContext } from "@/lib/ai/userAIContext"
 import { useSocketIO } from "@/hooks/useSocketIO"
+import type { CareerLaunchEvent } from "@/lib/career/careerEvents"
+import { playById } from "@/lib/sound"
 // CapabilityCenter removed - only PermissionPrompt handles permissions
 import useCapabilityManager from '@/hooks/useCapabilityManager'
 import PermissionPrompt from '@/components/PermissionPrompt'
@@ -95,6 +66,7 @@ import GlassWorldClockWidget from "../Desktop/widgets/GlassWorldClockWidget"
 import GlassSmallWorldClockWidget from "../Desktop/widgets/GlassSmallWorldClockWidget"
 import GlassWideRemindersWidget from "../Desktop/widgets/GlassWideRemindersWidget"
 import GlassSFWeatherWidget from "../Desktop/widgets/GlassSFWeatherWidget"
+import CareerAgentWidget from "../Desktop/widgets/CareerAgentWidget"
 import DraggableWidget from "../Desktop/widgets/DraggableWidget"
 import WebWidget from "../Desktop/widgets/WebWidget"
 import SnapshotWidget from "../Desktop/widgets/SnapshotWidget"
@@ -102,6 +74,33 @@ import WebCaptureWidget from "../Desktop/widgets/WebCaptureWidget"
 import WidgetCreationModal from "../Desktop/WidgetCreationModal"
 import WebpageCropper from "../Desktop/WebpageCropper"
 import { WidgetStore, type Widget, type WebWidget as WebWidgetType, type SnapshotWidget as SnapshotWidgetType, type WebCaptureWidget as WebCaptureWidgetType } from "@/lib/store/widgetStore"
+
+const TerminalUI = dynamic(() => import("@/app/components/terminal/terminalUI").then((module) => module.TerminalUI), { ssr: false })
+const ScienceBook = dynamic(() => import("@/app/components/terminal/ai-book").then((module) => module.ScienceBook), { ssr: false })
+const LibraryApp = dynamic(() => import("./LibraryApp"), { ssr: false })
+const AISearch = dynamic(() => import("@/app/components/terminal/AiSearch").then((module) => module.AISearch), { ssr: false })
+const ExcelEditor = dynamic(() => import("@/app/components/terminal/ExcelEditor").then((module) => module.ExcelEditor), { ssr: false })
+const MailSender = dynamic(() => import("@/app/components/terminal/mail-sender").then((module) => module.MailSender), { ssr: false })
+const PdfViewer = dynamic(() => import("@/app/components/terminal/pdfviwer").then((module) => module.PdfViewer), { ssr: false })
+const ProjectExplorerWindow = dynamic(() => import("./ProjectExpWindow").then((module) => module.ProjectExplorerWindow), { ssr: false })
+const MacGallery = dynamic(() => import("./MacGallery"), { ssr: false })
+const VSCodeWithWorkspace = dynamic(() => import("./VSCodeWithWorkspace"), { ssr: false })
+const BrowserContent = dynamic(() => import("./Browser").then((module) => module.BrowserContent), { ssr: false })
+const Spotify = dynamic(() => import("./spotify"), { ssr: false })
+const MapsNew = dynamic(() => import("./MapsNew"), { ssr: false })
+const Youtube = dynamic(() => import("./yt"), { ssr: false })
+const SettingsPanel = dynamic(() => import("./Settings"), { ssr: false })
+const EnhancedCalendar = dynamic(() => import("../Desktop/EnhancedCalendar"), { ssr: false })
+const Figma = dynamic(() => import("./figma"), { ssr: false })
+const PremiumNotes = dynamic(() => import("./notesapp"), { ssr: false })
+const ATSResumeBuilder = dynamic(() => import("./ATSResumeBuilder").then((module) => module.ATSResumeBuilder), { ssr: false })
+const FaceTimeApp = dynamic(() => import("./FaceTimeApp"), { ssr: false })
+const AppStoreApp = dynamic(() => import("./AppStoreApp"), { ssr: false })
+const SmartyInterview = dynamic(() => import("@/app/components/terminal/smartyInterview"), { ssr: false })
+const StartInterview = dynamic(() => import("@/app/components/terminal/StartInterview"), { ssr: false })
+const FeedbackInterview = dynamic(() => import("@/app/components/terminal/feedbackInterview"), { ssr: false })
+const SmartyTeacherWrapper = dynamic(() => import("@/app/components/terminal/smartyTeacher"), { ssr: false })
+const DynamicAgGridConfigurator = dynamic(() => import("./dataTableViewer").then((module) => module.DynamicAgGridConfigurator), { ssr: false })
 
 interface WindowState {
   id: string
@@ -155,6 +154,10 @@ export function Desktop() {
   // 🤖 Socket.io for Telegram integration (defined here but will be connected after automationAPI is available)
   const sendResultRef = useRef<((commandId: string, success: boolean, message?: string, requestId?: string) => void) | null>(null)
   const automationAPIRef = useRef<any>(null) // Store automationAPI in ref
+  const telegramWelcomeSentForUserRef = useRef<string | null>(null)
+
+  const careerReminderPlayedRef = useRef(false)
+
   
   const handleTelegramCommand = useCallback(async (data: { requestId?: string; commandId: string; command?: string; sequence?: any[] }) => {
     console.log('\n🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥')
@@ -251,17 +254,37 @@ export function Desktop() {
     }
   }, [])
 
-  const { socket: socketIO, isConnected: isSocketConnected } = useSocketIO({
+  const { socket: socketIO, isConnected: isSocketConnected, error: socketError, reconnect: reconnectSocket } = useSocketIO({
     userId: userContext?.userId,
     enabled: !!userContext?.userId,
-    onCommand: handleTelegramCommand
+    onCommand: handleTelegramCommand,
+    onCareerProgress: useCallback((event) => {
+      window.dispatchEvent(new CustomEvent('career-progress', { detail: event }))
+    }, []),
+     onCareerReminder: useCallback(() => {
+    if (careerReminderPlayedRef.current) return   // ✅ already bol chuka, dobara mat bolo
+    careerReminderPlayedRef.current = true
+    void playById('depression-indian').catch(() => {})
+  }, []),
+    onCareerLaunch: useCallback((event) => {
+      const launch = careerLaunchHandlerRef.current
+      if (launch) {
+        launch(event)
+      } else {
+        pendingCareerLaunchRef.current = event
+      }
+    }, [])
   })
 
   // 🎯 Send welcome when Socket.IO connects
   useEffect(() => {
-    if (isSocketConnected && userContext?.userId) {
+    const userId = userContext?.userId
+    if (isSocketConnected && userId && telegramWelcomeSentForUserRef.current !== userId) {
+      telegramWelcomeSentForUserRef.current = userId
       console.log('[Desktop] 🎉 Socket connected, sending Telegram welcome...');
-      sendTelegramWelcome(userContext.userId, userContext.displayName || 'User');
+      sendTelegramWelcome(userId).then((sent) => {
+        if (!sent) telegramWelcomeSentForUserRef.current = null
+      });
     }
   }, [isSocketConnected, userContext?.userId]);
 
@@ -290,6 +313,8 @@ export function Desktop() {
   }, [socketIO, userContext?.userId])
 
   const pendingTelegramCommandRef = useRef<{ commandId: string; command: string } | null>(null)
+  const careerLaunchHandlerRef = useRef<((event: CareerLaunchEvent) => void) | null>(null)
+  const pendingCareerLaunchRef = useRef<CareerLaunchEvent | null>(null)
 
 
 
@@ -436,26 +461,19 @@ export function Desktop() {
   ]);
 
   // 🆕 Desktop Widgets State
-  const [widgets, setWidgets] = useState<Array<{
-    id: string;
-    type: string;
-    x: number;
-    y: number;
-  }>>([]);
+  const [widgets, setWidgets] = useState<Widget[]>([]);
 
   // Load widgets from localStorage on client-side only
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && userContext?.userId) {
       try {
-        const widgets = WidgetStore.loadWidgets();
+        const widgets = WidgetStore.loadWidgets(userContext.userId);
         setWidgets(widgets);
       } catch (error) {
         console.error('Failed to load widgets:', error);
-        // Clear corrupted data
-        localStorage.removeItem("os_desktop_widgets");
       }
     }
-  }, []);
+  }, [userContext?.userId]);
   
   const [showWidgetGallery, setShowWidgetGallery] = useState(false);
   // CapabilityCenter removed - only PermissionPrompt handles permissions
@@ -524,20 +542,13 @@ export function Desktop() {
       setUserContext(ctx);
       console.log('✅ User context loaded:', ctx?.displayName, 'UserId:', ctx?.userId);
       console.log('🔌 WebSocket will connect with userId:', ctx?.userId);
-      
-      // 🚀 Send human-like welcome to Telegram when desktop goes live
-      if (ctx?.userId && socketIO) {
-        setTimeout(() => {
-          sendTelegramWelcome(ctx.userId, ctx.displayName || 'User');
-        }, 2000); // Wait 2s after connection
-      }
     }).catch(error => {
       console.error('Failed to load user context:', error);
     });
   }, []);
 
   // 🚀 Send human-like welcome message to Telegram
-  const sendTelegramWelcome = async (userId: string, userName: string) => {
+  const sendTelegramWelcome = async (userId: string): Promise<boolean> => {
     try {
       const welcomeMessages = [
         `👋 Hey! I'm online and ready to help you. What would you like me to do?`,
@@ -555,7 +566,8 @@ export function Desktop() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId,
-          message: randomMessage
+          message: randomMessage,
+          processAutomation: false
         })
       });
       
@@ -563,13 +575,16 @@ export function Desktop() {
       
       if (response.ok) {
         console.log('[Desktop] ✅ Telegram welcome sent successfully');
+        return true;
       } else {
         // Gracefully handle when Telegram is not connected (expected for unauthenticated users)
         console.warn('[Desktop] Telegram not available:', result.error);
+        return false;
       }
     } catch (error) {
       // Silently ignore Telegram errors - it's optional functionality
       console.warn('[Desktop] Telegram welcome skipped (not connected)');
+      return false;
     }
   };
 
@@ -1081,11 +1096,29 @@ export function Desktop() {
           break;
 
         case "AI Book":
-          component = <ScienceBook name="vibhav" subject="" messages={[]} callStart={null} status="NOT_STARTED" />;
+          component = <ScienceBook
+            key={`ai-book-${arg?.bookId || arg?.taskId || arg?.sessionId || 'default'}`}
+            name="vibhav"
+            subject={arg?.topic || arg?.task?.topic || arg?.task?.title || ""}
+            messages={[]}
+            callStart={null}
+            status="NOT_STARTED"
+            sessionId={arg?.sessionId}
+            bookId={arg?.bookId}
+            openApplication={openApplication}
+          />;
           title = "AI Book";
           iconPath = "/icons/book.png";
           defaultWidth = 800;
           defaultHeight = 650;
+          break;
+
+        case "Library":
+          component = <LibraryApp openApplication={openApplication} />;
+          title = "Library";
+          iconPath = "/icons/book.png";
+          defaultWidth = 1040;
+          defaultHeight = 720;
           break;
 
         case "Interview":
@@ -1099,7 +1132,7 @@ export function Desktop() {
 
         case "Start Interview":
           // Start interview with specific ID
-          component = <StartInterview id={arg?.interviewId} />;
+          component = <StartInterview key={`career-interview-${arg?.taskId || arg?.interviewId || 'default'}`} id={arg?.interviewId} />;
           title = "Start Interview";
           iconPath = "/ai-avatar.png";
           defaultWidth = 900;
@@ -1124,7 +1157,11 @@ export function Desktop() {
           break;
 
         case "Smarty Teacher":
-          component = <SmartyTeacherWrapper />;
+          component = <SmartyTeacherWrapper
+            key={`career-teacher-${arg?.taskId || arg?.sessionId || 'default'}`}
+            sessionId={arg?.sessionId}
+            initialTopic={arg?.topic || arg?.task?.topic || arg?.task?.title}
+          />;
           title = "Smarty Teacher";
           iconPath = "/app.svg";
           defaultWidth = 900;
@@ -1132,8 +1169,8 @@ export function Desktop() {
           break;
 
         case "game":
-          component = <GamePage />;
-          title = "devil level";
+          component = <div className="flex h-full items-center justify-center bg-black text-white">3D games are temporarily disabled.</div>;
+          title = "3D Games";
           iconPath = "/icons/book.png";
           defaultWidth = 700;
           defaultHeight = 600;
@@ -1146,7 +1183,11 @@ export function Desktop() {
           defaultHeight = 550;
           break;
         case "Notes":
-          component = <PremiumNotes />;
+          component = <PremiumNotes
+            key={`career-notes-${arg?.taskId || 'default'}`}
+            initialCareerTask={arg?.task}
+            initialCareerTaskId={arg?.taskId}
+          />;
           title = "notes";
           iconPath = "/icons/ai.png";
           defaultWidth = 700;
@@ -1154,7 +1195,11 @@ export function Desktop() {
           break;
         case "vscode":
           component = <VSCodeWithWorkspace
+            key={`vscode-${arg?.taskId || arg?.workspaceId || 'default'}`}
             openPreviewWindow={(html, title) => openPreviewWindowRef.current?.(html, title)}
+            initialWorkspaceId={arg?.workspaceId}
+            initialFile={arg?.initialFile}
+            initialCareerTask={arg?.task}
           />;
           title = "VS Code";
           iconPath = "/icons/ai.png";
@@ -1170,7 +1215,9 @@ export function Desktop() {
           break;
         case "Settings":
           component = <SettingsPanel
-
+            isSocketConnected={isSocketConnected}
+            socketError={socketError}
+            onReconnect={reconnectSocket}
           />;
           title = "System Settings";
           iconPath = "/icons/settings.png";
@@ -1207,7 +1254,7 @@ export function Desktop() {
           break;
 
         case "Calendar":
-          component = <EnhancedCalendar />;
+          component = <EnhancedCalendar openApplication={openApplication} />;
           title = "Calendar";
           iconPath = "/icons/ai.png";
           defaultWidth = 1200;
@@ -1221,7 +1268,12 @@ export function Desktop() {
           defaultHeight = 750;
           break;
         case "Youtube":
-          component = <Youtube />;
+          component = <Youtube
+            key={`career-video-${arg?.taskId || arg?.searchQuery || 'default'}`}
+            initialCareerTask={arg?.task}
+            initialSearchQuery={arg?.searchQuery || arg?.topic || arg?.task?.title}
+            autoplayFirst={Boolean(arg?.autoplayFirst)}
+          />;
           title = "Youtube ";
           iconPath = "/icons/ai.png";
           defaultWidth = 1000;
@@ -1359,9 +1411,7 @@ export function Desktop() {
           defaultHeight = 650;
           break;
         case "TV":
-          component = <div style={{ height: '600px', position: 'relative' }}>
-            <InfiniteMenu items={news} />
-          </div>;
+          component = <div className="flex h-full items-center justify-center bg-black text-white">3D gallery is temporarily disabled.</div>;
           title = "news";
           iconPath = "/icons/camera.png";
           defaultWidth = 900;
@@ -1398,6 +1448,22 @@ export function Desktop() {
           title = "Phone";
           iconPath = "/icons/phone.svg";
           defaultWidth = 800;
+          defaultHeight = 650;
+          break;
+        case "Messages":
+          const WhatsAppAppComponent = dynamic(() => import("./WhatsAppApp").then(mod => ({ default: mod.default })), { ssr: false });
+          component = <WhatsAppAppComponent />;
+          title = "WhatsApp";
+          iconPath = "https://cdn.simpleicons.org/whatsapp/25D366";
+          defaultWidth = 900;
+          defaultHeight = 650;
+          break;
+        case "Telegram":
+          const TelegramAppComponent = dynamic(() => import("./TelegramApp").then(mod => ({ default: mod.default })), { ssr: false });
+          component = <TelegramAppComponent />;
+          title = "Telegram";
+          iconPath = "https://cdn.simpleicons.org/telegram/26A5E4";
+          defaultWidth = 900;
           defaultHeight = 650;
           break;
         case "FaceTime":
@@ -1497,13 +1563,94 @@ export function Desktop() {
             )
           );
         }
-        if (appName === 'vscode' && arg?.initialFile) {
+        if (appName === 'vscode' && (arg?.initialFile || arg?.workspaceId || arg?.taskId)) {
           const freshComponent = <VSCodeWithWorkspace
+            key={`vscode-${arg?.taskId || arg?.workspaceId || Date.now()}`}
             openPreviewWindow={(html, title) => openPreviewWindowRef.current?.(html, title)}
+            initialWorkspaceId={arg?.workspaceId}
+            initialFile={arg?.initialFile}
+            initialCareerTask={arg?.task}
           />;
           setOpenWindows((prev) =>
             prev.map((win) =>
-              win.id === existingWindow.id ? { ...win, component: freshComponent, title: `VS Code — ${arg.initialFile.name}` } : win
+              win.id === existingWindow.id
+                ? { ...win, component: freshComponent, title: arg?.initialFile ? `VS Code — ${arg.initialFile.name}` : arg?.task?.title ? `VS Code — ${arg.task.title}` : win.title }
+                : win
+            )
+          );
+        }
+        if (appName === 'Notes' && (arg?.taskId || arg?.task)) {
+          const freshComponent = <PremiumNotes
+            key={`career-notes-${arg?.taskId || Date.now()}`}
+            initialCareerTask={arg?.task}
+            initialCareerTaskId={arg?.taskId}
+          />;
+          setOpenWindows((prev) =>
+            prev.map((win) =>
+              win.id === existingWindow.id
+                ? { ...win, component: freshComponent, title: arg?.task?.title ? `Notes — ${arg.task.title}` : win.title }
+                : win
+            )
+          );
+        }
+        if (appName === 'AI Book' && (arg?.bookId || arg?.taskId || arg?.sessionId || arg?.topic)) {
+          const freshComponent = <ScienceBook
+            key={`ai-book-${arg?.bookId || arg?.taskId || arg?.sessionId || Date.now()}`}
+            name="vibhav"
+            subject={arg?.topic || arg?.task?.topic || arg?.task?.title || ""}
+            messages={[]}
+            callStart={null}
+            status="NOT_STARTED"
+            sessionId={arg?.sessionId}
+            bookId={arg?.bookId}
+            openApplication={openApplication}
+          />;
+          setOpenWindows((prev) =>
+            prev.map((win) =>
+              win.id === existingWindow.id
+                ? { ...win, component: freshComponent, title: arg?.task?.title ? `AI Book — ${arg.task.title}` : win.title }
+                : win
+            )
+          );
+        }
+        if (appName === 'Smarty Teacher' && (arg?.taskId || arg?.sessionId || arg?.topic || arg?.task)) {
+          const freshComponent = <SmartyTeacherWrapper
+            key={`career-teacher-${arg?.taskId || arg?.sessionId || Date.now()}`}
+            sessionId={arg?.sessionId}
+            initialTopic={arg?.topic || arg?.task?.topic || arg?.task?.title}
+          />;
+          setOpenWindows((prev) =>
+            prev.map((win) =>
+              win.id === existingWindow.id
+                ? { ...win, component: freshComponent, title: arg?.title || arg?.task?.title ? `Smarty Teacher — ${arg?.title || arg.task.title}` : win.title }
+                : win
+            )
+          );
+        }
+        if (appName === 'Start Interview' && (arg?.taskId || arg?.interviewId)) {
+          const freshComponent = <StartInterview
+            key={`career-interview-${arg?.taskId || arg?.interviewId || Date.now()}`}
+            id={arg?.interviewId}
+          />;
+          setOpenWindows((prev) =>
+            prev.map((win) =>
+              win.id === existingWindow.id
+                ? { ...win, component: freshComponent, title: arg?.title || arg?.task?.title ? `Interview — ${arg?.title || arg.task.title}` : win.title }
+                : win
+            )
+          );
+        }
+        if (appName === 'Youtube' && (arg?.taskId || arg?.searchQuery || arg?.task)) {
+          const freshComponent = <Youtube
+            key={`career-video-${arg?.taskId || arg?.searchQuery || Date.now()}`}
+            initialCareerTask={arg?.task}
+            initialSearchQuery={arg?.searchQuery || arg?.topic || arg?.task?.title}
+          />;
+          setOpenWindows((prev) =>
+            prev.map((win) =>
+              win.id === existingWindow.id
+                ? { ...win, component: freshComponent, title: arg?.title || arg?.task?.title ? `YouTube — ${arg?.title || arg.task.title}` : win.title }
+                : win
             )
           );
         }
@@ -1584,6 +1731,9 @@ export function Desktop() {
       settings.appLockEnabled,
       settings.hasAppLockPassword,
       settings.lockedApps,
+      isSocketConnected,
+      socketError,
+      reconnectSocket,
     ]
   );
 
@@ -1600,7 +1750,8 @@ export function Desktop() {
       const storedApps = storedValue ? JSON.parse(storedValue) : []
       if (!Array.isArray(storedApps)) return
 
-      const appNames = [...new Set(storedApps.filter((name): name is string => typeof name === "string"))]
+      const scheduledApps = new Set(["Interview", "Start Interview", "Smarty Teacher"])
+      const appNames = [...new Set(storedApps.filter((name): name is string => typeof name === "string" && !scheduledApps.has(name)))]
       appNames.forEach((appName) => openApplication(appName))
       setOpenWindows((prev) => prev.map((win) => (
         appNames.includes(win.appName) ? { ...win, isMinimized: true } : win
@@ -1686,6 +1837,24 @@ export function Desktop() {
       executeCommand()
     }
   }, [automationAPI])
+
+  useEffect(() => {
+    const handleCareerLaunch = (event: CareerLaunchEvent) => {
+      openApplication(event.appName, 80, 60, undefined, event.args)
+    }
+
+    careerLaunchHandlerRef.current = handleCareerLaunch
+    if (pendingCareerLaunchRef.current) {
+      handleCareerLaunch(pendingCareerLaunchRef.current)
+      pendingCareerLaunchRef.current = null
+    }
+
+    return () => {
+      if (careerLaunchHandlerRef.current === handleCareerLaunch) {
+        careerLaunchHandlerRef.current = null
+      }
+    }
+  }, [openApplication])
 
   useEffect(() => {
     const handleAppStoreLaunch = (event: Event) => {
@@ -2003,9 +2172,16 @@ export function Desktop() {
     if (existingPreview) {
       // UPDATE existing window content
       console.log('[openPreviewWindow] Updating content in existing window');
+      const topZIndex = claimTopZIndex();
       setOpenWindows(prev => prev.map(w => 
         w.appName === 'Preview' 
-          ? { ...w, previewContent: htmlContent, previewTitle: title }
+          ? {
+            ...w,
+            previewContent: htmlContent,
+            previewTitle: title,
+            isMinimized: false,
+            zIndex: topZIndex,
+          }
           : w
       ));
     } else {
@@ -2013,7 +2189,7 @@ export function Desktop() {
       console.log('[openPreviewWindow] Opening new window');
       openApplication('Preview', 100, 100, undefined, { htmlContent, title });
     }
-  }, [openWindows, openApplication])
+  }, [claimTopZIndex, openWindows, openApplication])
   
   // Set the ref so it can be called from VS Code component
   openPreviewWindowRef.current = openPreviewWindowActual
@@ -2057,7 +2233,7 @@ export function Desktop() {
     "Finder",
     ...(settings.pinnedDockApps ?? []),
     "App Store",
-  ])).flatMap((name) => {
+  ])).filter(canPinDesktopApp).flatMap((name) => {
     const app = getDesktopApp(name)
     return app ? [{ name: app.name, icon: app.icon }] : []
   })
@@ -2134,20 +2310,21 @@ export function Desktop() {
 
   // 🆕 Widget handlers
   const handleAddWidget = useCallback((type: string) => {
+    if (!userContext?.userId) return;
     const newWidget: Widget = {
       id: `widget_${Date.now()}`,
       category: "native",
       type: type as any,
       x: 100,
       y: 100,
-      width: 160,
-      height: 160
+      width: type === 'career-agent' ? 280 : 160,
+      height: type === 'career-agent' ? 190 : 160
     };
-    const next = WidgetStore.addWidget(newWidget);
+    const next = WidgetStore.addWidget(userContext.userId, newWidget);
     setWidgets(next);
     setShowWidgetGallery(false);
     toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} widget added!`);
-  }, []);
+  }, [userContext?.userId]);
 
   // 🌐 Handle browser "Add to Desktop" event
   useEffect(() => {
@@ -2175,24 +2352,26 @@ export function Desktop() {
 
   // 🌐 Create live web widget
   const handleCreateWebWidget = useCallback((url: string, title: string) => {
+    if (!userContext?.userId) return;
     const newWidget = WidgetStore.createWebWidget({ url, title, isLive: true });
-    const next = WidgetStore.addWidget(newWidget);
+    const next = WidgetStore.addWidget(userContext.userId, newWidget);
     setWidgets(next);
     toast.success('Live Web Widget created!');
-  }, []);
+  }, [userContext?.userId]);
 
   // 📸 Create snapshot widget with cropped image
   const handleCreateSnapshotWidget = useCallback((url: string, title: string, croppedImage: string) => {
+    if (!userContext?.userId) return;
     const newWidget = WidgetStore.createSnapshotWidget({
       url,
       title,
       isLive: false,
       imageData: croppedImage
     });
-    const next = WidgetStore.addWidget(newWidget);
+    const next = WidgetStore.addWidget(userContext.userId, newWidget);
     setWidgets(next);
     toast.success('Web Widget created!');
-  }, []);
+  }, [userContext?.userId]);
 
   // 🎥 Create web capture widget with Puppeteer screenshot
   const handleCreateWebCaptureWidget = useCallback(async (captureData: {
@@ -2203,6 +2382,7 @@ export function Desktop() {
     viewport: { width: number; height: number; scrollX: number; scrollY: number };
     capturedAt: string;
   }) => {
+    if (!userContext?.userId) return;
     try {
       toast.info('Capturing web region...');
       
@@ -2234,7 +2414,7 @@ export function Desktop() {
         refreshInterval: 0, // Will add UI to configure this later
       });
 
-      const next = WidgetStore.addWidget(newWidget);
+      const next = WidgetStore.addWidget(userContext.userId, newWidget);
       setWidgets(next);
       toast.success('Web Capture Widget created!');
       
@@ -2242,21 +2422,23 @@ export function Desktop() {
       console.error('Web capture failed:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to capture web region');
     }
-  }, []);
+  }, [userContext?.userId]);
 
   const handleRemoveWidget = useCallback((id: string) => {
-    const next = WidgetStore.removeWidget(id);
+    if (!userContext?.userId) return;
+    const next = WidgetStore.removeWidget(userContext.userId, id);
     setWidgets(next);
     toast.success('Widget removed');
-  }, []);
+  }, [userContext?.userId]);
 
   const handleWidgetDrag = useCallback((id: string, offsetX: number, offsetY: number) => {
     const widget = widgets.find(w => w.id === id);
     if (widget) {
-      const next = WidgetStore.updatePosition(id, widget.x + offsetX, widget.y + offsetY);
+      if (!userContext?.userId) return;
+      const next = WidgetStore.updatePosition(userContext.userId, id, widget.x + offsetX, widget.y + offsetY);
       setWidgets(next);
     }
-  }, [widgets]);
+  }, [widgets, userContext?.userId]);
 
   // Render widget by type with theme support
   // 🔄 Use darkMode boolean from settings (synced with Control Center)
@@ -2277,7 +2459,8 @@ export function Desktop() {
           onRemove={() => handleRemoveWidget(widget.id)}
           onRefresh={() => {
             // Force iframe reload by updating a timestamp
-            const next = WidgetStore.updateSize(widget.id, webWidget.width, webWidget.height);
+            if (!userContext?.userId) return;
+            const next = WidgetStore.updateSize(userContext.userId, widget.id, webWidget.width, webWidget.height);
             setWidgets(next);
           }}
           onOpenInBrowser={() => {
@@ -2289,7 +2472,8 @@ export function Desktop() {
             }, 500);
           }}
           onResize={(width, height) => {
-            const next = WidgetStore.updateSize(widget.id, width, height);
+            if (!userContext?.userId) return;
+            const next = WidgetStore.updateSize(userContext.userId, widget.id, width, height);
             setWidgets(next);
           }}
           canEmbed={webWidget.canEmbed}
@@ -2392,6 +2576,8 @@ export function Desktop() {
         return <GlassWideRemindersWidget isDarkMode={isDarkMode} />;
       case 'glass-sf-weather':
         return <GlassSFWeatherWidget isDarkMode={isDarkMode} />;
+      case 'career-agent':
+        return <CareerAgentWidget onOpen={() => openApplication('Career')} />;
       default:
         return null;
     }
@@ -2443,7 +2629,7 @@ export function Desktop() {
 
             <div
               aria-hidden="true"
-              className="pointer-events-none fixed inset-0 z-[2147483646] bg-black"
+              className="pointer-events-none fixed inset-0 z-2147483646 bg-black"
               style={{
                 opacity: Math.max(0, 1 - Math.min(settings.screenBrightness, settings.automaticBrightness && (new Date().getHours() >= 20 || new Date().getHours() < 7) ? 65 : 100) / 100) * 0.72,
               }}
@@ -2621,7 +2807,9 @@ export function Desktop() {
             />}
 
 {/* counter */}
-            <LoveCounter />
+            {!openWindows.some((window) => window.appName === 'Career' && !window.isMinimized) && (
+              <LoveCounter />
+            )}
 
             {/* Central Portfolio Text */}
             {/* <h1
@@ -2715,12 +2903,14 @@ export function Desktop() {
                 widget={widget}
                 desktopRef={desktopRef}
                 onPositionChange={(id, x, y) => {
-                  const next = WidgetStore.updatePosition(id, x, y);
+                  if (!userContext?.userId) return;
+                  const next = WidgetStore.updatePosition(userContext.userId, id, x, y);
                   setWidgets(next);
                 }}
                 onRemove={handleRemoveWidget}
                 onResize={(id, width, height) => {
-                  const next = WidgetStore.updateSize(id, width, height);
+                  if (!userContext?.userId) return;
+                  const next = WidgetStore.updateSize(userContext.userId, id, width, height);
                   setWidgets(next);
                 }}
               >
@@ -2912,7 +3102,6 @@ export function Desktop() {
         </div>
         
         {/* CAREER AGENT: Progress Tracker - Shows active missions and progress */}
-        <CareerAgentProgress />
         
         </TerminalProvider>
       </KeyboardProvider >

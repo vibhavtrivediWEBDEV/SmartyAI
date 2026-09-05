@@ -24,7 +24,7 @@ export interface NativeWidget extends BaseWidget {
         "glass-clock" | "glass-calendar" | "glass-weather" | 
         "glass-reminders" | "glass-day" | "glass-mini-calendar" | 
         "glass-world-clock" | "glass-small-world-clock" | 
-        "glass-wide-reminders" | "glass-sf-weather";
+      "glass-wide-reminders" | "glass-sf-weather" | "career-agent";
 }
 
 export interface WebWidget extends BaseWidget {
@@ -106,33 +106,46 @@ export interface WebCaptureCreationOptions {
  * Widget Store class for managing widgets
  */
 export class WidgetStore {
-  private static STORAGE_KEY = "os_desktop_widgets";
+  private static LEGACY_STORAGE_KEY = "os_desktop_widgets";
+
+  private static storageKey(userId: string): string {
+    return `${this.LEGACY_STORAGE_KEY}:${encodeURIComponent(userId)}`;
+  }
+
+  private static normalizeWidgets(value: unknown): Widget[] {
+    if (!Array.isArray(value)) return [];
+
+    return value.map((widget: any) => {
+      if (!widget.category) {
+        return {
+          ...widget,
+          category: "native",
+          width: widget.width || 160,
+          height: widget.height || 160
+        } as NativeWidget;
+      }
+      return widget as Widget;
+    });
+  }
 
   /**
    * Load widgets from localStorage
    */
-  static loadWidgets(): Widget[] {
-    if (typeof window === "undefined") return [];
+  static loadWidgets(userId: string): Widget[] {
+    if (typeof window === "undefined" || !userId) return [];
     
     try {
-      const stored = localStorage.getItem(this.STORAGE_KEY);
-      if (!stored) return [];
-      
-      const widgets = JSON.parse(stored);
-      
-      // Migrate old widget format to new format if needed
-      return widgets.map((w: any) => {
-        // Old format: { id, type, x, y } - assume native
-        if (!w.category) {
-          return {
-            ...w,
-            category: "native",
-            width: w.width || 160,
-            height: w.height || 160
-          } as NativeWidget;
-        }
-        return w;
-      });
+      const key = this.storageKey(userId);
+      const stored = localStorage.getItem(key);
+      if (stored) return this.normalizeWidgets(JSON.parse(stored));
+
+      const legacy = localStorage.getItem(this.LEGACY_STORAGE_KEY);
+      if (!legacy) return [];
+
+      const widgets = this.normalizeWidgets(JSON.parse(legacy));
+      localStorage.setItem(key, JSON.stringify(widgets));
+      localStorage.removeItem(this.LEGACY_STORAGE_KEY);
+      return widgets;
     } catch (error) {
       console.error("Failed to load widgets:", error);
       return [];
@@ -142,11 +155,11 @@ export class WidgetStore {
   /**
    * Save widgets to localStorage
    */
-  static saveWidgets(widgets: Widget[]): void {
-    if (typeof window === "undefined") return;
+  static saveWidgets(userId: string, widgets: Widget[]): void {
+    if (typeof window === "undefined" || !userId) return;
     
     try {
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(widgets));
+      localStorage.setItem(this.storageKey(userId), JSON.stringify(widgets));
     } catch (error) {
       console.error("Failed to save widgets:", error);
     }
@@ -155,44 +168,44 @@ export class WidgetStore {
   /**
    * Add a new widget
    */
-  static addWidget(widget: Widget): Widget[] {
-    const widgets = this.loadWidgets();
+  static addWidget(userId: string, widget: Widget): Widget[] {
+    const widgets = this.loadWidgets(userId);
     widgets.push(widget);
-    this.saveWidgets(widgets);
+    this.saveWidgets(userId, widgets);
     return widgets;
   }
 
   /**
    * Remove a widget by ID
    */
-  static removeWidget(id: string): Widget[] {
-    const widgets = this.loadWidgets();
+  static removeWidget(userId: string, id: string): Widget[] {
+    const widgets = this.loadWidgets(userId);
     const filtered = widgets.filter(w => w.id !== id);
-    this.saveWidgets(filtered);
+    this.saveWidgets(userId, filtered);
     return filtered;
   }
 
   /**
    * Update widget position
    */
-  static updatePosition(id: string, x: number, y: number): Widget[] {
-    const widgets = this.loadWidgets();
+  static updatePosition(userId: string, id: string, x: number, y: number): Widget[] {
+    const widgets = this.loadWidgets(userId);
     const updated = widgets.map(w => 
       w.id === id ? { ...w, x, y } : w
     );
-    this.saveWidgets(updated);
+    this.saveWidgets(userId, updated);
     return updated;
   }
 
   /**
    * Update widget size
    */
-  static updateSize(id: string, width: number, height: number): Widget[] {
-    const widgets = this.loadWidgets();
+  static updateSize(userId: string, id: string, width: number, height: number): Widget[] {
+    const widgets = this.loadWidgets(userId);
     const updated = widgets.map(w => 
       w.id === id ? { ...w, width, height } : w
     );
-    this.saveWidgets(updated);
+    this.saveWidgets(userId, updated);
     return updated;
   }
 

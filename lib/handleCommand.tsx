@@ -122,10 +122,13 @@ export async function handleCommand({
     console.log('[Terminal Handler] 📺 Step 3: Displaying to terminal UI...')
     setHistory((prev) => [...prev, { type: "output", value: result.message }]);
     setCurrentInput("");
-        // 🔊 SOUND: Play "Job's Done" (Correct) when response is complete
+    // Play the command-specific reaction, or the success sound after completion.
     try {
       const { playById } = await import('@/lib/sound');
-      playById('correct', { volume: 0.6 }).catch(() => {});
+      const soundId = result.reactionSound || (result.success ? 'correct' : null);
+      if (soundId) {
+        playById(soundId, { volume: 0.6 }).catch(() => {});
+      }
     } catch (error) {
       // Silently fail - sound is enhancement, not requirement
     }

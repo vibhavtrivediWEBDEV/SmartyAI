@@ -15,6 +15,7 @@
 
 # next.js
 /.next/
+/.next-*/
 /out/
 
 
@@ -33,6 +34,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+.openwa.env
 
 # vercel
 .vercel
@@ -41,12 +43,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-
-# Ignore everything in assets
-
-# Allow ONLY the gaming room model
-!public/assets/gaming_room.glb
-!public/assets/Strut_Walking.glb
 
 *.gltf
 *.bin

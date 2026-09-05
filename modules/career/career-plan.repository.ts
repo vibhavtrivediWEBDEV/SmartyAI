@@ -12,8 +12,8 @@ import type { CareerPlan, PlanStep } from "@/lib/career/types";
 // COLLECTION INTERFACES
 // ============================================
 
-interface CareerPlanDocument extends Omit<CareerPlan, '_id'> {
-  _id: ObjectId;
+interface CareerPlanDocument extends Omit<CareerPlan, '_id' | 'missionId'> {
+  _id?: ObjectId;
   missionId: ObjectId;
   steps: PlanStep[];
 }
@@ -32,6 +32,8 @@ const serializePlan = (doc: WithId<CareerPlanDocument>): CareerPlan => ({
   generatedNotes: doc.generatedNotes,
   calendarEvents: doc.calendarEvents,
   learningResources: doc.learningResources,
+  jobProfile: doc.jobProfile,
+  skillGaps: doc.skillGaps,
   userProfile: doc.userProfile,
   createdAt: doc.createdAt,
   updatedAt: doc.updatedAt
@@ -108,7 +110,7 @@ export async function updatePlanStep(
   planId: string,
   stepId: string,
   update: {
-    status?: string;
+    status?: PlanStep['status'];
     progress?: number;
     output?: any;
     error?: string;
@@ -194,6 +196,17 @@ export async function createNote(note: any): Promise<string> {
     createdAt: new Date()
   });
   return result.insertedId.toHexString();
+}
+
+export async function findNotesByUserId(userId: string): Promise<any[]> {
+  const { notes } = await getCollections();
+  const userIds: Array<string | ObjectId> = [userId];
+
+  if (ObjectId.isValid(userId)) {
+    userIds.push(new ObjectId(userId));
+  }
+
+  return notes.find({ userId: { $in: userIds } }).sort({ createdAt: -1 }).toArray();
 }
 
 export async function createCalendarEvent(event: any): Promise<string> {

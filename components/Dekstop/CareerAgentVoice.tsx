@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import type { UserAIContext } from '@/lib/ai/userAIContext';
 import { vapi } from '@/lib/vapi.sdk'; // ← Use existing Vapi instance
 import { setVoiceMode, isDesktopVoiceActive } from '@/lib/voiceMode';
+import { useElevenTTS } from '@/hooks/ElevenLabs';
 
 interface CareerMissionData {
   company?: string;
@@ -44,10 +45,74 @@ export function CareerAgentVoice({
   });
   const [aiResponse, setAiResponse] = useState<string>('');
   const [activeMissions, setActiveMissions] = useState<any[]>([]);
-  const [currentMission, setCurrentMission] = useState<any>(null);
-  const [missionProgress, setMissionProgress] = useState<number>(0);
-  const [missionStatus, setMissionStatus] = useState<string>('idle');
   const [isCallActive, setIsCallActive] = useState(false); // ← Move up here
+  const isProcessingTranscript = useRef(false);
+  const executingMissionIds = useRef(new Set<string>());
+  const isStartingCall = useRef(false);
+  const fallbackAnnounced = useRef(false);
+  const browserRecognition = useRef<any>(null);
+  const usingBrowserFallback = useRef(false);
+  const { speakWithBrowserTTS } = useElevenTTS();
+
+  const startBrowserVoiceFallback = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      addLog('⚠️ Browser speech recognition is not supported');
+      return;
+    }
+
+    browserRecognition.current?.stop();
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+    recognition.onresult = (event: any) => {
+      const result = event.results[event.results.length - 1];
+      if (!result?.isFinal || !result[0]?.transcript?.trim() || isProcessingTranscript.current) return;
+
+      const transcript = result[0].transcript.trim();
+      addLog(`🎤 System speech heard: "${transcript}"`);
+      isProcessingTranscript.current = true;
+      void (conversation.stage === 'idle'
+        ? initiateCareerConversation(transcript)
+        : handleConversationInput(transcript)
+      ).finally(() => {
+        isProcessingTranscript.current = false;
+      });
+    };
+    recognition.onerror = (event: any) => addLog(`⚠️ System speech recognition: ${event.error}`);
+    recognition.onend = () => {
+      if (usingBrowserFallback.current) {
+        try {
+          recognition.start();
+        } catch {
+          // Recognition may already be restarting.
+        }
+      }
+    };
+    browserRecognition.current = recognition;
+    usingBrowserFallback.current = true;
+    setVoiceMode('career');
+    setIsCallActive(true);
+    recognition.start();
+    addLog('🎤 Mac system speech fallback is listening');
+  };
+
+  const announceVapiFallback = (error: any) => {
+    if (fallbackAnnounced.current) return;
+
+    fallbackAnnounced.current = true;
+    const errorMessage = error?.error?.message
+      || error?.response?.data?.message
+      || error?.message
+      || 'Voice service unavailable';
+    addLog(`❌ Vapi unavailable: ${errorMessage}`);
+    setAiResponse('Vapi is unavailable. I switched to Mac system speech. You can continue speaking to the Career Agent.');
+    speakWithBrowserTTS(
+      'Vapi is unavailable. I switched to the Mac system voice. You can continue speaking to the Career Agent.',
+      startBrowserVoiceFallback,
+    );
+  };
   
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -58,6 +123,9 @@ export function CareerAgentVoice({
   // Setup Vapi listeners for Career Agent
   useEffect(() => {
     const handleCallStart = () => {
+      isStartingCall.current = false;
+      fallbackAnnounced.current = false;
+
       // ❌ Check if Desktop Agent is active
       if (isDesktopVoiceActive()) {
         addLog("⚠️ Desktop Agent is active, cannot start Career Agent");
@@ -70,6 +138,7 @@ export function CareerAgentVoice({
     };
 
     const handleCallEnd = () => {
+      if (usingBrowserFallback.current) return;
       addLog("🎤 Career Agent voice deactivated");
       setVoiceMode('inactive');
       setIsCallActive(false);
@@ -83,24 +152,46 @@ export function CareerAgentVoice({
       
       // ONLY process transcript for career conversations
       if (message.type === 'transcript') {
-        const transcript = message.transcript;
-        addLog(`🎤 User said: "${transcript}"`);
-        
-        // Process career-related transcript ONLY
-        if (conversation.stage !== 'idle') {
-          handleConversationInput(transcript);
-        } else {
-          // Check for career keywords to start
-          const careerKeywords = /\b(interview|career|job|prep|company|role|mission)\b/i;
-          if (careerKeywords.test(transcript)) {
-            initiateCareerConversation(transcript);
-          }
+        if (message.transcriptType && message.transcriptType !== 'final') {
+          return;
         }
+
+        if (message.role && message.role !== 'user') {
+          return;
+        }
+
+        if (isProcessingTranscript.current || !message.transcript?.trim()) {
+          return;
+        }
+
+        const transcript = message.transcript.trim();
+        addLog(`🎤 User said: "${transcript}"`);
+
+        isProcessingTranscript.current = true;
+        void (async () => {
+          try {
+            // Process career-related transcript ONLY
+            if (conversation.stage !== 'idle') {
+              await handleConversationInput(transcript);
+            } else {
+              // Check for career keywords to start
+              const careerKeywords = /\b(interview|career|job|prep|company|role|mission)\b/i;
+              if (careerKeywords.test(transcript)) {
+                await initiateCareerConversation(transcript);
+              }
+            }
+          } finally {
+            isProcessingTranscript.current = false;
+          }
+        })();
       }
     };
 
     const handleError = (error: any) => {
-      addLog(`❌ Voice error: ${error?.message || 'Unknown error'}`);
+      if (!isCallActive && !isStartingCall.current) return;
+
+      isStartingCall.current = false;
+      announceVapiFallback(error);
       
       // Reset voice mode on error
       if (isCallActive) {
@@ -123,27 +214,26 @@ export function CareerAgentVoice({
     };
   }, [conversation.stage, isCallActive]);
 
+  useEffect(() => () => {
+    usingBrowserFallback.current = false;
+    browserRecognition.current?.stop();
+  }, []);
+
   // Load existing missions on mount
   useEffect(() => {
-    if (userId) {
-      loadActiveMissions();
-      const interval = setInterval(loadActiveMissions, 5000);
-      return () => clearInterval(interval);
-    }
+    if (!userId) return;
+    loadActiveMissions();
+    const handleProgress = () => loadActiveMissions();
+    window.addEventListener('career-progress', handleProgress);
+    return () => window.removeEventListener('career-progress', handleProgress);
   }, [userId]);
 
   const loadActiveMissions = async () => {
     try {
-      const response = await fetch('/api/career/mission');
+      const response = await fetch('/api/career/mission?status=active');
       if (response.ok) {
         const data = await response.json();
-        if (data.missions && data.missions.length > 0) {
-          setActiveMissions(data.missions);
-          setCurrentMission(data.missions[0]);
-          setMissionStatus(data.missions[0].status);
-          setMissionProgress(data.missions[0].progress || 0);
-          addLog(`📊 Found ${data.missions.length} active mission(s)`);
-        }
+        setActiveMissions(Array.isArray(data.missions) ? data.missions : []);
       }
     } catch (error) {
       console.error('Failed to load missions:', error);
@@ -155,6 +245,7 @@ export function CareerAgentVoice({
     response: string;
     nextState: ConversationState;
     shouldCreateMission: boolean;
+    missionId?: string;
   }> => {
     try {
       const response = await fetch('/api/career/ai', {
@@ -199,13 +290,10 @@ export function CareerAgentVoice({
     setAiResponse(result.response);
     addLog(`🤖 Agent: ${result.response}`);
     setConversation(result.nextState);
+    if (usingBrowserFallback.current) speakWithBrowserTTS(result.response);
     
-    if (result.shouldCreateMission) {
-      await createCareerMissionWithData(result.nextState.missionData);
-    }
-    
-    if (currentMission) {
-      loadActiveMissions();
+    if (result.shouldCreateMission && result.missionId) {
+      await finishCallAndExecute(result.missionId, result.nextState.missionData);
     }
   };
 
@@ -234,53 +322,82 @@ Would you like to continue, update, or create a new mission?`;
         awaitingInput: 'existing_mission_choice'
       });
       addLog(`🤖 Agent: Found existing active mission`);
+      if (usingBrowserFallback.current) speakWithBrowserTTS(contextMsg);
       return;
     }
     
-    setConversation({
+    const initialState: ConversationState = {
       stage: 'gathering',
       missionData: {},
       awaitingInput: 'intent'
-    });
+    };
+    setConversation(initialState);
 
-    const greeting = userContext?.name 
-      ? `Hi ${userContext.name}! Which company are you interviewing with?`
-      : "Hi! Which company are you interviewing with?";
+    const result = await processWithAI(initialInput, initialState);
 
-    setAiResponse(greeting);
-    addLog(`🤖 Agent: ${greeting}`);
+    setAiResponse(result.response);
+    setConversation(result.nextState);
+    addLog(`🤖 Agent: ${result.response}`);
+    if (usingBrowserFallback.current) speakWithBrowserTTS(result.response);
+
+    if (result.shouldCreateMission && result.missionId) {
+      await finishCallAndExecute(result.missionId, result.nextState.missionData);
+    }
   };
 
-  const createCareerMissionWithData = async (data: CareerMissionData) => {
-    addLog("🚀 Creating career mission...");
-    addLog(`   Company: ${data.company || 'Not specified'}`);
-    addLog(`   Role: ${data.role || 'Not specified'}`);
-    addLog(`   Interview Date: ${data.interviewDate || 'Not specified'}`);
-    
+  const finishCallAndExecute = async (missionId: string, data: CareerMissionData) => {
+    if (executingMissionIds.current.has(missionId)) {
+      return;
+    }
+
+    executingMissionIds.current.add(missionId);
+    setConversation({ stage: 'creating', missionData: data, awaitingInput: null });
+    setAiResponse('Mission confirmed. I am creating your preparation workspace now.');
+    addLog('🛑 Information complete - ending the Career Agent call');
+
     try {
-      const response = await fetch('/api/career/mission', {
+      await Promise.resolve(vapi.stop());
+    } catch {
+      // The call may already have ended while confirmation was processed.
+    }
+
+    setVoiceMode('inactive');
+    setIsCallActive(false);
+    await executeCareerPlan(missionId, data);
+  };
+
+  const executeCareerPlan = async (missionId: string, data: CareerMissionData) => {
+    addLog("🚀 Creating your personalized preparation plan...");
+    try {
+      const response = await fetch('/api/career/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          company: data.company || 'Unknown Company',
-          role: data.role || 'Software Engineer',
-          jobDescription: data.jobDescription,
-          interviewDate: data.interviewDate,
-          priority: data.priority || 'medium'
-        })
+        body: JSON.stringify({ missionId })
       });
       
-      if (!response.ok) throw new Error('Failed to create mission');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to execute career plan');
+      }
       
       const result = await response.json();
-      
-      addLog("✅ Mission created successfully!");
-      addLog(`📝 Mission ID: ${result.mission.id}`);
-      addLog(`📊 Status: ${result.mission.status}`);
-      
-      setCurrentMission(result.mission);
-      setMissionStatus(result.mission.status);
-      setMissionProgress(0);
+      if (!result.success) {
+        const failedStep = result.executionResults?.find((step: any) => step.status === 'failed');
+        throw new Error(failedStep?.error || 'Career plan did not complete');
+      }
+
+      addLog(`✅ Plan stored and executed for ${data.company || 'your interview'}`);
+      addLog(`📊 Progress: ${result.plan?.overallProgress || 0}%`);
+
+      result.executionResults?.forEach((step: any) => {
+        addLog(step.status === 'completed'
+          ? `✅ ${step.stepName}`
+          : `❌ ${step.stepName}: ${step.error}`);
+      });
+
+      openApplication('Notes', 80, 80);
+      openApplication('Calendar', 260, 110);
+      addLog('✅ Notes and Calendar are ready. Scheduled learning apps will open at their start time.');
       
       setConversation({
         stage: 'complete',
@@ -288,53 +405,32 @@ Would you like to continue, update, or create a new mission?`;
         awaitingInput: null
       });
       
-      loadActiveMissions();
-      
-      // Start orchestration
-      executeCareerOrchestration(result.mission.id);
+      await loadActiveMissions();
       
     } catch (error: any) {
-      addLog(`❌ Error creating mission: ${error.message}`);
+      addLog(`❌ Plan execution failed: ${error.message}`);
     }
-  };
-
-  const executeCareerOrchestration = async (missionId: string) => {
-    addLog("📊 Starting app orchestration...");
-    
-    try {
-      addLog("📝 Opening Notes for study materials...");
-      openApplication('notes', 100, 100);
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      addLog("📅 Opening Calendar to schedule events...");
-      openApplication('calendar', 350, 100);
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      addLog("🤖 Opening Interview app for mock practice...");
-      openApplication('interview', 600, 100);
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      addLog("📚 Opening Teacher app for learning...");
-      openApplication('teacher', 850, 100);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      addLog("✅ All 4 apps launched!");
-      
-    } catch (error: any) {
-      addLog(`❌ Error: ${error.message}`);
-    }
-    
-    addLog("🎉 Career Agent workflow complete!");
-    addLog(`💾 Mission saved in MongoDB (ID: ${missionId.slice(0, 8)}...)`);
   };
 
   const handleMicClick = async () => {
     try {
       if (isCallActive) {
         addLog("🛑 Stopping Career Agent call...");
-        vapi.stop(); // handleCallEnd will set voice mode to 'inactive'
+        if (usingBrowserFallback.current) {
+          usingBrowserFallback.current = false;
+          browserRecognition.current?.stop();
+          browserRecognition.current = null;
+          window.speechSynthesis?.cancel();
+          setVoiceMode('inactive');
+          setIsCallActive(false);
+        } else {
+          vapi.stop(); // handleCallEnd will set voice mode to 'inactive'
+        }
       } else {
         addLog("🎤 Starting Career Agent call...");
+        isStartingCall.current = true;
+        fallbackAnnounced.current = false;
+        usingBrowserFallback.current = false;
         // Note: handleCallStart event will set voice mode to 'career' and isCallActive to true
         
         // ✅ Use complete Vapi configuration matching Desktop Agent
@@ -368,44 +464,38 @@ Would you like to continue, update, or create a new mission?`;
         });
       }
     } catch (error: any) {
-      addLog(`❌ Failed to start call: ${error.message}`);
+      isStartingCall.current = false;
+      announceVapiFallback(error);
       setVoiceMode('inactive');
       setIsCallActive(false);
     }
   };
 
+  const careerWindowOpen = openWindows.some(
+    (window) => window.appName === 'Career' && !window.isMinimized
+  );
+
   return (
     <>
-      {/* Status Panel */}
-      {currentMission && (
-        <div className="fixed z-[9998] top-4 right-4 w-80 bg-black/80 backdrop-blur-xl rounded-2xl p-4 border border-white/20">
-          <div className="text-white font-bold text-sm mb-2">
-            {currentMission.company} - {currentMission.role}
-          </div>
-          <div className="text-xs text-white/60 mb-2">Status: {missionStatus}</div>
-          <div className="w-full h-2 bg-white/10 rounded-full">
-            <div className="h-full bg-blue-500" style={{ width: `${missionProgress}%` }} />
-          </div>
-        </div>
-      )}
-      
       {/* MIC Button - Dedicated Career Agent */}
-      <button
-        onClick={handleMicClick}
-        className={`fixed z-[9999] bottom-8 right-8 w-[100px] h-[100px] rounded-full
-          ${isCallActive ? 'bg-green-500 shadow-[0_0_30px_rgba(34,197,94,0.8)]' : 'bg-gradient-to-br from-blue-500 to-purple-600 shadow-[0_0_20px_rgba(59,130,246,0.6)]'}
-          flex items-center justify-center text-white font-bold
-          hover:scale-110 transition-all duration-300 border-4 border-white/50`}
-        title="Talk to Career Agent"
-      >
-        <div className="text-center">
-          <div className="text-3xl">🎤</div>
-          <div className="text-xs mt-1">CAREER</div>
-        </div>
-      </button>
+      {!careerWindowOpen && (
+        <button
+          onClick={handleMicClick}
+          className={`fixed z-[9999] bottom-24 right-3 h-16 w-16 rounded-full sm:bottom-8 sm:right-8 sm:h-25 sm:w-25
+            ${isCallActive ? 'bg-green-500 shadow-[0_0_30px_rgba(34,197,94,0.8)]' : 'bg-gradient-to-br from-blue-500 to-purple-600 shadow-[0_0_20px_rgba(59,130,246,0.6)]'}
+            flex items-center justify-center text-white font-bold
+            hover:scale-110 transition-all duration-300 border-4 border-white/50`}
+          title="Talk to Career Agent"
+        >
+          <div className="text-center">
+            <div className="text-xl sm:text-3xl">🎤</div>
+            <div className="mt-0.5 text-[9px] sm:mt-1 sm:text-xs">CAREER</div>
+          </div>
+        </button>
+      )}
 
       {/* Conversation Display */}
-      {aiResponse && (
+      {aiResponse && !careerWindowOpen && (
         <div className="fixed z-[9997] bottom-32 right-8 w-96 bg-black/90 backdrop-blur-xl rounded-2xl p-4 border border-white/20">
           <div className="text-white text-sm whitespace-pre-wrap">{aiResponse}</div>
         </div>

@@ -4,6 +4,7 @@
  */
 
 const { createServer } = require('http')
+const { randomBytes } = require('crypto')
 const { parse } = require('url')
 const next = require('next')
 const { Server } = require('socket.io')
@@ -12,6 +13,8 @@ const { resolvePendingCommand } = require('./lib/socket-cjs')
 const dev = process.env.NODE_ENV !== 'production'
 const hostname = 'localhost'
 const port = parseInt(process.env.PORT || '3001', 10)
+const careerCronSecret = process.env.CAREER_CRON_SECRET || randomBytes(32).toString('hex')
+process.env.CAREER_CRON_SECRET = careerCronSecret
 
 console.log('🚀 Starting SmartyAI custom server...')
 console.log(`📍 Port: ${port}`)
@@ -20,7 +23,7 @@ console.log(`🌐 Mode: ${dev ? 'development' : 'production'}`)
 // Desktop session registry (global so lib/socket.ts can access it)
 global.desktopSessions = global.desktopSessions || new Map()
 
-const app = next({ dev, hostname, port })
+const app = next({ dev, hostname, port, dir: __dirname })
 const handle = app.getRequestHandler()
 
 // Store io instance globally for lib/socket.ts and lib/telegram/ai.ts
@@ -71,11 +74,15 @@ app.prepare().then(() => {
       console.log(`   Room: user:${userId}`)
       console.log('▶'.repeat(80) + '\n')
       
-      // Register desktop session in global registry
+      // Register every socket so closing one tab does not mark the user offline.
+      const existingSession = global.desktopSessions.get(userId)
+      const socketIds = new Set(existingSession?.socketIds || [])
+      socketIds.add(socket.id)
       global.desktopSessions.set(userId, {
         socketId: socket.id,
+        socketIds,
         userId,
-        connectedAt: Date.now(),
+        connectedAt: existingSession?.connectedAt || Date.now(),
         lastActivity: Date.now(),
         status: 'online'
       })
@@ -83,6 +90,7 @@ app.prepare().then(() => {
       console.log('💻 [WebSocket] Desktop session registered:')
       console.log(`   UserId: ${userId}`)
       console.log(`   Socket: ${socket.id}`)
+      console.log(`   User Sockets: ${socketIds.size}`)
       console.log(`   Status: online`)
       console.log(`   Active Sessions: ${global.desktopSessions.size}`)
       
@@ -92,7 +100,7 @@ app.prepare().then(() => {
     // Update lastActivity on any socket event (heartbeat)
     socket.onAny(() => {
       const userId = Array.from(global.desktopSessions.entries())
-        .find(([_, session]) => session.socketId === socket.id)?.[0];
+        .find(([_, session]) => session.socketIds?.has(socket.id) || session.socketId === socket.id)?.[0];
       
       if (userId && global.desktopSessions.has(userId)) {
         const session = global.desktopSessions.get(userId);
@@ -116,7 +124,7 @@ app.prepare().then(() => {
       
       // Update lastActivity
       const userId = Array.from(global.desktopSessions.entries())
-        .find(([_, session]) => session.socketId === socket.id)?.[0];
+        .find(([_, session]) => session.socketIds?.has(socket.id) || session.socketId === socket.id)?.[0];
       
       if (userId && global.desktopSessions.has(userId)) {
         const session = global.desktopSessions.get(userId);
@@ -154,9 +162,22 @@ app.prepare().then(() => {
       
       // Remove desktop session from global registry
       for (const [userId, session] of global.desktopSessions.entries()) {
-        if (session.socketId === socket.id) {
-          global.desktopSessions.delete(userId)
-          console.log(`   Removed session for user: ${userId}`)
+        if (session.socketIds?.has(socket.id) || session.socketId === socket.id) {
+          const socketIds = new Set(session.socketIds || [session.socketId])
+          socketIds.delete(socket.id)
+
+          if (socketIds.size === 0) {
+            global.desktopSessions.delete(userId)
+            console.log(`   Removed session for user: ${userId}`)
+          } else {
+            global.desktopSessions.set(userId, {
+              ...session,
+              socketId: socketIds.values().next().value,
+              socketIds,
+              lastActivity: Date.now()
+            })
+            console.log(`   User remains online with ${socketIds.size} socket(s): ${userId}`)
+          }
           console.log(`   Active Sessions: ${global.desktopSessions.size}`)
           break
         }
@@ -182,6 +203,22 @@ app.prepare().then(() => {
     console.log(`🔌 Socket.io WebSocket enabled`)
     console.log(`✅ global.socketIO initialized`) // ← ADDED
     console.log(`📱 Desktop clients can connect via WebSocket`)
+
+    const runCareerScheduler = async () => {
+      try {
+        const response = await fetch(`http://${hostname}:${port}/api/cron/career-scheduler`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${careerCronSecret}` }
+        })
+        if (!response.ok) console.error(`[Career Scheduler] Run failed with HTTP ${response.status}`)
+      } catch (error) {
+        console.error('[Career Scheduler] Run failed:', error)
+      }
+    }
+    runCareerScheduler()
+    const careerSchedulerInterval = setInterval(runCareerScheduler, 60 * 1000)
+    careerSchedulerInterval.unref?.()
+    console.log('⏰ Career Scheduler fallback enabled (60 seconds)')
   })
 })
 

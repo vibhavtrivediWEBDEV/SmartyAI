@@ -59,7 +59,7 @@ export const calendarAdapter = {
         description: getDailyTopic(day, jobProfile),
         location: 'SmartyAI Career Agent',
         source: 'ai',
-        reminder: 30
+        reminder: 10
       });
       
       events.push(morningEvent);

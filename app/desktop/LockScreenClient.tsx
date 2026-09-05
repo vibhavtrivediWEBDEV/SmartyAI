@@ -16,8 +16,8 @@ export default function DesktopClientLayout({
 
   return (
     <>
-      {isLocked && <LockScreen onUnlock={handleUnlock} />}
       {children}
+      {isLocked && <LockScreen onUnlock={handleUnlock} />}
     </>
   );
 }

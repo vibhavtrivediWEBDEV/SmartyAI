@@ -31,6 +31,7 @@ export interface CommandResult {
   message: string | JSX.Element;
   automation?: any[];
   events: CommandEvent[];
+  reactionSound?: string;
 }
 
 export interface CommandEvent {
@@ -139,6 +140,17 @@ export async function executeSmartyCommand(
       console.log(`   Parameters:`, resolvedIntent.parameters);
       console.log(`   Confidence: ${resolvedIntent.confidence}`);
       console.log(`   Source: ${resolvedIntent.source}\n`);
+
+      if (resolvedIntent.intent === 'system.unknown_app') {
+        emit('error', `Unknown app: ${resolvedIntent.parameters.appName}`);
+        emit('complete', 'Command not understood');
+        return {
+          success: false,
+          message: resolvedIntent.parameters.message,
+          events,
+          reactionSound: resolvedIntent.parameters.reactionSound
+        };
+      }
       
       // ============================================
       // EXPLICIT BRANCH: ai.chat (conversation)

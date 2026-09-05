@@ -1,7 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
-import { DEFAULT_DOCK_APPS } from '@/lib/desktopApps'
+import { DEFAULT_DOCK_APPS, migratePinnedDockApps } from '@/lib/desktopApps'
 import { usePathname } from 'next/navigation'
 
 export interface DesktopSettings {
@@ -163,7 +163,18 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           return
         }
         const result = await response.json()
-        if (!cancelled) setSettings((current) => ({ ...current, ...result.data }))
+        if (!cancelled) {
+          const pinnedDockApps = migratePinnedDockApps(result.data?.pinnedDockApps)
+          setSettings((current) => ({ ...current, ...result.data, pinnedDockApps }))
+
+          if (JSON.stringify(pinnedDockApps) !== JSON.stringify(result.data?.pinnedDockApps)) {
+            void fetch('/api/settings', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pinnedDockApps }),
+            })
+          }
+        }
       } catch (error) {
         console.error('Error loading desktop settings:', error)
       } finally {

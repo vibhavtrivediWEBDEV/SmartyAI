@@ -281,6 +281,21 @@ export default function AppStoreApp({ onClose, onMinimize, onMaximize, maximized
       featured: true,
       downloaded: false,
     },
+    {
+      id: "14",
+      name: "Telegram",
+      developer: "Telegram FZ-LLC",
+      category: "social",
+      rating: 5,
+      reviews: 182000,
+      price: "Free",
+      icon: "https://cdn.simpleicons.org/telegram/26A5E4",
+      description: "Chat with your Telegram contacts and control Smarty automation from your linked account.",
+      size: "18.6 MB",
+      ageRating: "12+",
+      featured: true,
+      downloaded: false,
+    },
   ]
 
   const filteredApps = apps.filter((app) => {
@@ -292,14 +307,15 @@ export default function AppStoreApp({ onClose, onMinimize, onMaximize, maximized
 
   const featuredApps = apps.filter((app) => app.featured)
 
+  const openInstalledApp = (appName?: string) => {
+    if (!openApplication) return
+    if (appName === "Career Agent") openApplication("Career")
+    if (appName === "Telegram") openApplication("Telegram")
+  }
+
   const handleDownload = (appId: string, appName?: string) => {
     setDownloadedApps((prev) => new Set(prev).add(appId))
-    
-    // Handle special apps
-    if (appName === "Career Agent" && openApplication) {
-      // Open the Career app
-      openApplication('Career')
-    }
+    openInstalledApp(appName)
   }
 
   return (
@@ -436,8 +452,8 @@ export default function AppStoreApp({ onClose, onMinimize, onMaximize, maximized
                         e.stopPropagation()
                         if (!downloadedApps.has(app.id) && !app.downloaded) {
                           handleDownload(app.id, app.name)
-                        } else if (openApplication && app.name === "Career Agent") {
-                          openApplication('Career')
+                        } else {
+                          openInstalledApp(app.name)
                         }
                       }}
                       className={`px-4 py-1 rounded-full text-sm font-medium transition ${
@@ -493,8 +509,8 @@ export default function AppStoreApp({ onClose, onMinimize, onMaximize, maximized
               onClick={() => {
                 if (!downloadedApps.has(selectedApp.id) && !selectedApp.downloaded) {
                   handleDownload(selectedApp.id, selectedApp.name)
-                } else if (openApplication && selectedApp.name === "Career Agent") {
-                  openApplication('Career')
+                } else {
+                  openInstalledApp(selectedApp.name)
                 }
               }}
               className={`w-full py-2 rounded-lg font-semibold text-lg mb-6 transition ${

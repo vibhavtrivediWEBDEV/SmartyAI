@@ -449,13 +449,14 @@ export function useCursorAutomation(
   const openWindow = useCallback(async (
     appName: string,
     x?: number,
-    y?: number
+    y?: number,
+    arg?: Record<string, unknown>
   ): Promise<boolean> => {
     try {
       log(`Opening window: ${appName}`, 'info');
       speak?.(`${appName} Opening.`)
 
-      openApplication(appName, x, y);
+      openApplication(appName, x, y, undefined, arg);
 
       // ⬇️ WAIT for DOM window element to appear instead of checking state
       let retries = 0;
@@ -741,7 +742,7 @@ export function useCursorAutomation(
         case 'open':
           if (command.target) {
             const { x, y } = command.params || {};
-            result = await openWindow(command.target, x, y);
+            result = await openWindow(command.target, x, y, command.params);
           }
           break;
 
@@ -1292,8 +1293,9 @@ export function useCursorAutomation(
 
   // Execute sequence of commands
   const executeSequence = useCallback(async (commands: AutomationCommand[]): Promise<any> => {
-    // Check for required capabilities attached to the sequence
-    const missingCaps = (commands as any)._missingCapabilities || [];
+    // Recheck current grants because queued sequences retain their original metadata.
+    const requiredCaps = (commands as any)._requiredCapabilities || (commands as any)._missingCapabilities || [];
+    const missingCaps = capabilityManager.checkCapabilities(requiredCaps).missing;
 
     if (missingCaps && missingCaps.length > 0) {
       // Request capabilities and queue the operation

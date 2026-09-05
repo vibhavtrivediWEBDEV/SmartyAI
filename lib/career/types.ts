@@ -37,8 +37,19 @@ export interface CareerPlan {
     topics: string[];
     courses: string[];
     practiceProblems: string[];
-    focusAreas: string[];
+    focusAreas?: string[];
+    lessons?: any[];
+    codingExercises?: any[];
+    youtubeResources?: Array<{ title: string; searchQuery: string; url: string }>;
+    teacherSessionIds?: string[];
+    workspaceFiles?: Array<{ path: string; language: string; content: string }>;
+    workspaceId?: string;
+    sessionId?: string;
   };
+
+  jobProfile?: any;
+  userProfile?: any;
+  skillGaps?: any[];
   
   createdAt: Date;
   updatedAt: Date;

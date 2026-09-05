@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requireFinderSubscription } from "@/lib/auth/finder-access";
 import { 
   createWorkspace, 
-  listWorkspaces 
+  listWorkspaceSummaries,
 } from "@/modules/workspace/workspace.repository";
 
 /**
@@ -13,7 +13,7 @@ import {
 const createSchema = z.object({
   name: z.string().trim().min(1).max(100),
   description: z.string().max(500).optional(),
-  runtime: z.enum(["react", "react-ts", "html", "node", "python", "java"]).optional(),
+  runtime: z.enum(["react", "react-ts", "html", "node", "typescript", "python", "java", "sql", "mongodb"]).optional(),
   template: z.string().optional(),
   files: z.array(z.object({
     path: z.string(),
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
   const limit = parseInt(searchParams.get("limit") || "50");
   const includePublic = searchParams.get("public") === "true";
 
-  const workspaces = await listWorkspaces(user.id, {
+  const workspaces = await listWorkspaceSummaries(user.id, {
     limit,
     includePublic,
   });

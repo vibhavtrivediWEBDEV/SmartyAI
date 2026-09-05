@@ -148,8 +148,10 @@ function TreeNode({
   return (
     <div>
       <div
-        className={`group flex cursor-pointer items-center justify-between px-2 py-1 hover:bg-[#2a2d2e] ${
-          isActive ? "bg-[#37373d]" : ""
+        className={`group relative mx-1 flex min-h-7 cursor-pointer items-center justify-between rounded-md border px-2 py-1 transition-all ${
+          isActive
+            ? "border-cyan-300/15 bg-linear-to-r from-cyan-400/16 via-blue-500/8 to-transparent text-white shadow-[inset_3px_0_0_#22d3ee]"
+            : "border-transparent text-slate-400 hover:bg-white/5 hover:text-slate-100"
         }`}
         style={{ paddingLeft: `${level * 12 + 8}px` }}
         onClick={() => {
@@ -169,14 +171,14 @@ function TreeNode({
               ) : (
                 <ChevronRight size={14} className="text-gray-500" />
               )}
-              <Folder size={16} className="text-yellow-500" />
-              <span className="text-sm text-gray-200">{node.name}</span>
+              <Folder size={16} className={isExpanded ? "text-amber-300" : "text-amber-500/75"} />
+              <span className="truncate text-[13px] font-medium">{node.name}</span>
             </>
           ) : (
             <>
               <span style={{ width: 14 }} />
               {getFileIcon(node.name)}
-              <span className="text-sm text-gray-200">{node.name}</span>
+              <span className={`truncate text-[13px] ${isActive ? "font-medium text-cyan-50" : "text-slate-300"}`}>{node.name}</span>
             </>
           )}
         </div>
@@ -187,7 +189,7 @@ function TreeNode({
             e.stopPropagation();
             handleContextMenu(e);
           }}
-          className="rounded p-0.5 opacity-0 group-hover:opacity-100 hover:bg-[#1e1e1e]"
+          className="rounded p-0.5 opacity-0 transition hover:bg-white/10 group-hover:opacity-100"
         >
           <MoreVertical size={12} className="text-gray-500" />
         </button>
@@ -323,10 +325,10 @@ export default function FileTree({
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* Header */}
-      <div className="flex h-9 items-center justify-between border-b border-[#2d2d2d] px-3">
-        <span className="text-xs font-medium uppercase text-gray-400">Files</span>
+      <div className="flex h-9 shrink-0 items-center justify-between border-y border-white/6 bg-black/10 px-3">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">Project files</span>
         {!readOnly && (
           <div className="flex gap-1">
             <button
@@ -336,10 +338,10 @@ export default function FileTree({
                   onFolderCreate(folderName);
                 }
               }}
-              className="rounded p-1 hover:bg-[#2a2d2e]"
+              className="rounded-md border border-transparent p-1 text-slate-500 transition hover:border-amber-300/15 hover:bg-amber-400/8 hover:text-amber-300"
               title="New folder"
             >
-              <Folder size={14} className="text-gray-400" />
+              <Folder size={14} />
             </button>
             <button
               onClick={() => {
@@ -348,17 +350,17 @@ export default function FileTree({
                   onFileAdd(fileName);
                 }
               }}
-              className="rounded p-1 hover:bg-[#2a2d2e]"
+              className="rounded-md border border-transparent p-1 text-slate-500 transition hover:border-cyan-300/15 hover:bg-cyan-400/8 hover:text-cyan-300"
               title="New file"
             >
-              <Plus size={14} className="text-gray-400" />
+              <Plus size={14} />
             </button>
           </div>
         )}
       </div>
 
       {/* Tree */}
-      <div className="flex-1 overflow-y-auto py-1">
+      <div className="min-h-0 flex-1 overflow-y-auto py-1.5">
         {tree.map(node => (
           <TreeNode
             key={node.path}

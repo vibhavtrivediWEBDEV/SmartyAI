@@ -5,6 +5,24 @@
  */
 
 import type { PlayOptions } from './types';
+import { getAllSoundsFlat } from './soundSettingsSchema';
+import { SOUND_REACTION_EVENT, type SoundReactionDetail } from './soundReactionEvent';
+
+const REACTION_COLORS: Record<string, string> = {
+  success: '#30D158',
+  error: '#FF453A',
+  neutral: '#5AC8FA',
+  celebration: '#FFD60A',
+  dramatic: '#FF9F0A',
+};
+
+const SOUND_REACTIONS = new Map(
+  getAllSoundsFlat().map(sound => [sound.id, {
+    emoji: sound.emoji,
+    label: sound.name,
+    color: REACTION_COLORS[sound.category] ?? '#5AC8FA',
+  }]),
+);
 
 /**
  * Audio cache for preloaded sounds
@@ -150,6 +168,15 @@ export async function playSound(soundId: string, options: PlayOptions = {}): Pro
     
     // Play
     await audioToPlay.play();
+
+    const reaction = SOUND_REACTIONS.get(soundId);
+    if (reaction) {
+      const detail: SoundReactionDetail = {
+        soundId,
+        ...reaction,
+      };
+      window.dispatchEvent(new CustomEvent(SOUND_REACTION_EVENT, { detail }));
+    }
     
     console.log(`[SoundEngine] Played: ${soundId}`);
     

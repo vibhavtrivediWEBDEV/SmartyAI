@@ -21,6 +21,10 @@ export interface InterviewDocument {
   techstack: string[];
   questions: InterviewQuestion[];
   userId: ObjectId;
+  missionId?: ObjectId;
+  careerTaskId?: ObjectId;
+  scheduledAt?: Date;
+  calendarEventId?: string;
   jobDescription?: string;
   resumeSnapshot?: { headline?: string; skills: string[]; projects: string[] };
   finalized: boolean;
@@ -85,6 +89,14 @@ async function collections() {
   const feedback = db.collection<FeedbackDocument>("interviewFeedback");
   await Promise.all([
     interviews.createIndex({ userId: 1, createdAt: -1 }, { name: "interviews_user_created" }),
+    interviews.createIndex(
+      { userId: 1, careerTaskId: 1 },
+      {
+        unique: true,
+        name: "interviews_user_career_task_unique",
+        partialFilterExpression: { careerTaskId: { $exists: true } },
+      },
+    ),
     interviews.createIndex({ finalized: 1, createdAt: -1 }, { name: "interviews_public_created" }),
     feedback.createIndex({ interviewId: 1, userId: 1 }, { unique: true, name: "feedback_interview_user_unique" }),
   ]);
@@ -98,10 +110,34 @@ export async function createInterview(input: Omit<InterviewDocument, "createdAt"
   return result.insertedId.toHexString();
 }
 
+export async function upsertCareerInterview(
+  input: Omit<InterviewDocument, "createdAt" | "updatedAt"> & { careerTaskId: ObjectId },
+) {
+  const { interviews } = await collections();
+  const now = new Date();
+  const result = await interviews.findOneAndUpdate(
+    { userId: input.userId, careerTaskId: input.careerTaskId },
+    { $set: { ...input, updatedAt: now }, $setOnInsert: { createdAt: now } },
+    { upsert: true, returnDocument: "after" },
+  );
+  if (!result) throw new Error("Unable to persist career interview.");
+  return result._id.toHexString();
+}
+
 export async function findInterviewById(id: string) {
   if (!ObjectId.isValid(id)) return null;
   const { interviews } = await collections();
   const interview = await interviews.findOne({ _id: new ObjectId(id) });
+  return interview ? serializeInterview(interview) : null;
+}
+
+export async function findOwnedInterviewById(id: string, userId: string) {
+  if (!ObjectId.isValid(id) || !ObjectId.isValid(userId)) return null;
+  const { interviews } = await collections();
+  const interview = await interviews.findOne({
+    _id: new ObjectId(id),
+    userId: new ObjectId(userId),
+  });
   return interview ? serializeInterview(interview) : null;
 }
 
