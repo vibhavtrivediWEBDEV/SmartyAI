@@ -1,7 +1,9 @@
 {
   "persistent": [
     "filesystem.read",
-    "browser.control"
+    "browser.control",
+    "system.command",
+    "finder.control"
   ],
   "ephemeral": []
 }

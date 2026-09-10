@@ -202,5 +202,35 @@
     "capability": "calendar.write",
     "actor": "user",
     "at": 1788569000984
+  },
+  {
+    "action": "grant",
+    "capability": "system.command",
+    "actor": "user",
+    "at": 1788855391989
+  },
+  {
+    "action": "grant",
+    "capability": "system.command",
+    "actor": "user",
+    "at": 1788946347623
+  },
+  {
+    "action": "grant",
+    "capability": "browser.control",
+    "actor": "user",
+    "at": 1789032883788
+  },
+  {
+    "action": "grant",
+    "capability": "finder.control",
+    "actor": "user",
+    "at": 1789032883789
+  },
+  {
+    "action": "grant",
+    "capability": "filesystem.read",
+    "actor": "user",
+    "at": 1789032883790
   }
 ]
