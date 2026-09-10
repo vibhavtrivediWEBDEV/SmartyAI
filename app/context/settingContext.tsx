@@ -17,6 +17,9 @@ export interface DesktopSettings {
   darkMode: boolean
   themeColor: string
   backgroundImage: string
+  lockScreenImage: string
+  lockScreenDepthEffect: boolean
+  lockScreenDepthSubjectTop: number
   isMobile: boolean
   wallpaperQuery: string
   githubProfile: string
@@ -50,6 +53,9 @@ export interface DesktopSettings {
   appLockEnabled: boolean
   lockedApps: string[]
   hasAppLockPassword: boolean
+  careerEmailReminders: boolean
+  careerTelegramReminders: boolean
+  customAIInstructions: string
 }
 
 const DEFAULT_SETTINGS: DesktopSettings = {
@@ -66,6 +72,9 @@ const DEFAULT_SETTINGS: DesktopSettings = {
   themeColor: '211 100% 50%',
   // backgroundImage: 'https://4kwallpapers.com/images/walls/thumbs_3t/14776.jpg',
   backgroundImage: '',
+  lockScreenImage: '',
+  lockScreenDepthEffect: false,
+  lockScreenDepthSubjectTop: 30,
 
   isMobile: false,
   wallpaperQuery: 'wallpaper',
@@ -100,6 +109,9 @@ const DEFAULT_SETTINGS: DesktopSettings = {
   appLockEnabled: false,
   lockedApps: [],
   hasAppLockPassword: false,
+  careerEmailReminders: false,
+  careerTelegramReminders: false,
+  customAIInstructions: '',
 }
 
 interface SettingsContextType {
@@ -205,7 +217,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     const persistedKeys: Array<keyof DesktopSettings> = [
       'fontSize', 'dockPosition', 'pinnedDockApps', 'dockSize', 'dockMagnification',
       'autoHideDock', 'folderColor', 'backgroundColor', 'darkMode', 'themeColor',
-      'backgroundImage', 'wallpaperQuery', 'githubProfile', 'gestureControl',
+      'backgroundImage', 'lockScreenImage', 'lockScreenDepthEffect',
+      'lockScreenDepthSubjectTop', 'wallpaperQuery', 'githubProfile', 'gestureControl',
       'tapToClick', 'naturalScrolling', 'threeFingerDrag', 'reduceMotion',
       'reduceTransparency', 'increaseContrast', 'screenBrightness', 'soundVolume',
       'muted', 'interfaceSounds', 'notificationsEnabled', 'notificationPreview',
@@ -213,6 +226,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       'locationServices', 'analyticsSharing', 'showBatteryPercentage', 'lowPowerMode',
       'keyboardBrightness', 'keyRepeat', 'language', 'region', 'use24HourTime',
       'automaticBrightness', 'preferredSearchEngine', 'appLockEnabled', 'lockedApps',
+      'careerEmailReminders', 'careerTelegramReminders', 'customAIInstructions',
     ]
     const persistedUpdates = Object.fromEntries(
       Object.entries(updates).filter(([key]) => persistedKeys.includes(key as keyof DesktopSettings)),

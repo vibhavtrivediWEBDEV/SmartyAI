@@ -21,8 +21,8 @@ vi.mock('@/modules/career/career.repository', () => ({
   createCareerMission: mocks.createCareerMission
 }));
 
-vi.mock('@/lib/ai', () => ({
-  getAIService: vi.fn(async () => ({ complete: mocks.complete }))
+vi.mock('@/lib/ai/metered', () => ({
+  createMeteredAIService: vi.fn(() => ({ complete: mocks.complete }))
 }));
 
 import { CareerSessionManager } from './CareerSessionManager';

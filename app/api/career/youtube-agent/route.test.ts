@@ -8,11 +8,22 @@ const mocks = vi.hoisted(() => ({
   updateMission: vi.fn(),
   updateTask: vi.fn(),
   emitCareerProgress: vi.fn(),
+  recordVerifiedCareerEvidence: vi.fn(),
+  consumePlanUsage: vi.fn(),
+  refundPlanUsage: vi.fn(),
 }));
 
 vi.mock('@/lib/auth/session', () => ({ getSessionUserId: mocks.getSessionUserId }));
-vi.mock('@/lib/ai', () => ({ getAIService: () => ({ complete: mocks.complete }) }));
+vi.mock('@/lib/ai/metered', () => ({
+  createMeteredAIService: () => ({ complete: mocks.complete }),
+  CreditLimitError: class CreditLimitError extends Error { readonly status = 402 },
+}));
 vi.mock('@/lib/career/careerEvents', () => ({ emitCareerProgress: mocks.emitCareerProgress }));
+vi.mock('@/lib/career/recordCareerFeedback', () => ({ recordVerifiedCareerEvidence: mocks.recordVerifiedCareerEvidence }));
+vi.mock('@/modules/users/user.repository', () => ({
+  consumePlanUsage: mocks.consumePlanUsage,
+  refundPlanUsage: mocks.refundPlanUsage,
+}));
 vi.mock('@/modules/career/career.repository', () => ({
   findMissionById: mocks.findMissionById,
   findTasksByMission: mocks.findTasksByMission,
@@ -56,6 +67,8 @@ describe('YouTube Agent route', () => {
     vi.clearAllMocks();
     mocks.getSessionUserId.mockResolvedValue('user-1');
     mocks.findMissionById.mockResolvedValue({ id: 'mission-1', userId: 'user-1' });
+    mocks.recordVerifiedCareerEvidence.mockResolvedValue({ missionProgress: 100 });
+    mocks.consumePlanUsage.mockResolvedValue({ allowed: true, used: 1, remaining: 99, limit: 100, period: '2099-09' });
   });
 
   it('rejects unauthenticated requests', async () => {
@@ -74,6 +87,31 @@ describe('YouTube Agent route', () => {
 
     expect(response.status).toBe(409);
     expect(mocks.complete).not.toHaveBeenCalled();
+  });
+
+  it('rejects question generation when the monthly limit is exhausted', async () => {
+    mocks.findTasksByMission.mockResolvedValue([task({
+      youtubeEvidence: { related: true, status: 'watched', title: 'React Fundamentals Tutorial' },
+    })]);
+    mocks.consumePlanUsage.mockResolvedValue({ allowed: false, used: 100, remaining: 0, limit: 100, period: '2099-09' });
+
+    const response = await POST(request('questions'));
+    const body = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(body.code).toBe('YOUTUBE_LIMIT_REACHED');
+    expect(mocks.complete).not.toHaveBeenCalled();
+  });
+
+  it('refunds reserved usage when question generation fails', async () => {
+    mocks.findTasksByMission.mockResolvedValue([task({
+      youtubeEvidence: { related: true, status: 'watched', title: 'React Fundamentals Tutorial' },
+    })]);
+    mocks.complete.mockRejectedValue(new Error('AI unavailable'));
+
+    await expect(POST(request('questions'))).rejects.toThrow('AI unavailable');
+
+    expect(mocks.refundPlanUsage).toHaveBeenCalledWith('user-1', 'youtubeSuggestions');
   });
 
   it('records skipped video evidence without completing the task', async () => {
@@ -105,7 +143,7 @@ describe('YouTube Agent route', () => {
 
     expect(body).toMatchObject({ score: 0, passed: false });
     expect(mocks.updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({ status: 'pending' }));
-    expect(mocks.updateMission).not.toHaveBeenCalled();
+    expect(mocks.recordVerifiedCareerEvidence).not.toHaveBeenCalled();
   });
 
   it('completes the task and mission progress only after a passing quiz', async () => {
@@ -120,7 +158,8 @@ describe('YouTube Agent route', () => {
     const body = await response.json();
 
     expect(body).toMatchObject({ score: 100, passed: true, progress: 100 });
-    expect(mocks.updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({ status: 'completed' }));
-    expect(mocks.updateMission).toHaveBeenCalledWith('mission-1', expect.objectContaining({ progress: 100, status: 'COMPLETED' }));
+    expect(mocks.recordVerifiedCareerEvidence).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1', missionId: 'mission-1', taskId: 'task-1', tool: 'youtube', progress: 100,
+    }));
   });
 });

@@ -5,10 +5,9 @@ import { useRouter } from "next/navigation";
 import MacPowerScreen from "./MacPowerScreen";
 import MacCreateAccount from "./MacCreateAccount";
 import MacSignIn from "./MacSignIn";
-import MacLockScreen from "./MacLockScreen";
 import { isAuthenticated } from "@/lib/actions/auth.action";
 
-type AuthStage = "power" | "signin" | "createaccount" | "lock" | "desktop";
+type AuthStage = "power" | "signin" | "createaccount";
 
 export default function MacAuthFlow() {
   const [stage, setStage] = useState<AuthStage | null>(null);
@@ -19,11 +18,7 @@ export default function MacAuthFlow() {
     const checkAuthState = async () => {
       // Check if user is already authenticated
       const isUserAuthenticated = await isAuthenticated();
-      
-      // Check if setup was completed
-      const setupCompleted = localStorage.getItem("setup_completed") === "true";
-      const savedState = localStorage.getItem("os_auth_state") as AuthStage | null;
-      const savedTime = localStorage.getItem("os_auth_state_time");
+      localStorage.removeItem("lock_password");
       
       // If user is authenticated, go directly to desktop
       if (isUserAuthenticated) {
@@ -31,22 +26,7 @@ export default function MacAuthFlow() {
         return;
       }
       
-      // If setup completed, start from lock screen
-      if (setupCompleted && savedState === "lock") {
-        setStage("lock");
-        setIsChecking(false);
-        return;
-      }
-      
-      // If user has been through auth before, show lock screen
-      if (setupCompleted) {
-        setStage("lock");
-        setIsChecking(false);
-        return;
-      }
-      
-      // Otherwise, start from power screen
-      setStage("power");
+      setStage(localStorage.getItem("setup_completed") === "true" ? "signin" : "power");
       setIsChecking(false);
     };
 
@@ -62,13 +42,7 @@ export default function MacAuthFlow() {
   }, [stage]);
 
   const handlePowerComplete = () => {
-    // Check if setup completed
-    const setupCompleted = localStorage.getItem("setup_completed") === "true";
-    if (setupCompleted) {
-      setStage("lock");
-    } else {
-      setStage("signin");
-    }
+    setStage("signin");
   };
 
   const handleSignInSuccess = () => {
@@ -81,12 +55,7 @@ export default function MacAuthFlow() {
   };
 
   const handleAccountCreated = () => {
-    // Mark setup as completed
     localStorage.setItem("setup_completed", "true");
-    setStage("lock");
-  };
-
-  const handleUnlock = () => {
     router.push("/desktop");
     router.refresh();
   };
@@ -126,19 +95,6 @@ export default function MacAuthFlow() {
         />
       )}
 
-      {/* Lock Screen */}
-      {stage === "lock" && (
-        <>
-          {/* Desktop renders behind lock screen */}
-          <div className="absolute inset-0 opacity-50 bg-gradient-to-br from-gray-900 to-black" />
-          
-          {/* Lock screen slides up */}
-          <MacLockScreen
-            goNext={handleUnlock}
-            isLocked={stage === "lock"}
-          />
-        </>
-      )}
     </div>
   );
 }

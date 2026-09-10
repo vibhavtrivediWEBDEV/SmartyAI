@@ -99,7 +99,10 @@ export default function EnhancedCalendarApp({ userId, openApplication }: Calenda
   const now = useCareerClock();
 
   const loadCareerTasks = useCallback(async () => {
-    const response = await fetch("/api/career/tasks");
+    const start = new Date(cursor.year, cursor.month, 1);
+    const end = new Date(cursor.year, cursor.month + 1, 1);
+    const params = new URLSearchParams({ start: start.toISOString(), end: end.toISOString(), limit: "200" });
+    const response = await fetch(`/api/career/tasks?${params}`);
     if (!response.ok) return;
     const data = await response.json();
     const tasks = Array.isArray(data.tasks) ? data.tasks : [];
@@ -108,7 +111,7 @@ export default function EnhancedCalendarApp({ userId, openApplication }: Calenda
       playedTodayTaskSoundRef.current = true;
       void playById('ab-tu-gaya-beta-ab-dekh-tu-puneet').catch(() => {});
     }
-  }, []);
+  }, [cursor.month, cursor.year]);
 
   useEffect(() => {
     void loadCareerTasks();

@@ -24,19 +24,16 @@ const schedulerStatus: SchedulerStatus = {
 };
 
 function validSecret(request: Request): boolean {
-  const configured = process.env.CAREER_CRON_SECRET;
   const supplied = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!configured || !supplied) return false;
-  const expected = Buffer.from(configured);
-  const actual = Buffer.from(supplied);
-  return expected.length === actual.length && timingSafeEqual(expected, actual);
+  if (!supplied) return false;
+  return [process.env.CRON_SECRET, process.env.CAREER_CRON_SECRET].filter(Boolean).some((configured) => {
+    const expected = Buffer.from(configured!);
+    const actual = Buffer.from(supplied);
+    return expected.length === actual.length && timingSafeEqual(expected, actual);
+  });
 }
 
-export async function POST(request: Request) {
-  if (!validSecret(request) && !await getSessionUserId()) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+async function executeScheduler() {
   if (schedulerStatus.running) {
     return NextResponse.json({ success: false, error: "Career scheduler is already running" }, { status: 409 });
   }
@@ -59,11 +56,19 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
+export async function POST(request: Request) {
+  if (!validSecret(request) && !await getSessionUserId()) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  return executeScheduler();
+}
+
+export async function GET(request?: Request) {
+  if (request && validSecret(request)) return executeScheduler();
   return NextResponse.json({
     success: true,
-    configured: Boolean(process.env.CAREER_CRON_SECRET),
-    intervalSeconds: 60,
+    configured: Boolean(process.env.CRON_SECRET || process.env.CAREER_CRON_SECRET),
+    schedule: "*/10 * * * *",
     ...schedulerStatus,
   });
 }

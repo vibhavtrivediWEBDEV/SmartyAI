@@ -114,7 +114,7 @@ export async function upsertWhatsAppConversations(records: WhatsAppConversationR
 export async function listWhatsAppConversations(userId: string) {
   const db = await database()
   return db.collection<WhatsAppConversationRecord>('whatsappConversations')
-    .find({ userId }).sort({ lastMessageAt: -1 }).toArray()
+    .find({ userId }).sort({ lastMessageAt: -1 }).limit(15).toArray()
 }
 
 export async function upsertWhatsAppMessages(records: WhatsAppMessageRecord[]) {
@@ -148,10 +148,10 @@ export async function updateWhatsAppMessageStatus(
   )
 }
 
-export async function listWhatsAppMessages(userId: string, chatId: string, limit = 100) {
+export async function listWhatsAppMessages(userId: string, chatId: string, limit = 20) {
   const db = await database()
   const messages = await db.collection<WhatsAppMessageRecord>('whatsappMessages')
-    .find({ userId, chatId }).sort({ sentAt: -1 }).limit(Math.min(limit, 200)).toArray()
+    .find({ userId, chatId }).sort({ sentAt: -1 }).limit(Math.min(limit, 20)).toArray()
   return messages.reverse()
 }
 

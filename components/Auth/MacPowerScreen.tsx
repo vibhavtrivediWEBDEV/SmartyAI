@@ -27,17 +27,19 @@ export default function MacPowerScreen({ goNext, autoBoot = false }: MacPowerScr
 
     const timer = setInterval(() => {
       setProgress((prev) => {
-        const next = prev + increment + (Math.random() * 2 - 1);
-        if (next >= 100) {
-          clearInterval(timer);
-          setIsComplete(true);
-          return 100;
-        }
-        return next;
+        return Math.min(95, prev + increment + (Math.random() * 2 - 1));
       });
     }, interval);
 
-    return () => clearInterval(timer);
+    const completionTimer = setTimeout(() => {
+      setProgress(100);
+      setIsComplete(true);
+    }, duration);
+
+    return () => {
+      clearInterval(timer);
+      clearTimeout(completionTimer);
+    };
   }, [bootStarted]);
 
   useEffect(() => {

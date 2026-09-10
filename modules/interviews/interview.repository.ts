@@ -141,6 +141,20 @@ export async function findOwnedInterviewById(id: string, userId: string) {
   return interview ? serializeInterview(interview) : null;
 }
 
+export async function findOwnedCareerInterviewContext(id: string, userId: string) {
+  if (!ObjectId.isValid(id) || !ObjectId.isValid(userId)) return null;
+  const { interviews } = await collections();
+  const interview = await interviews.findOne(
+    { _id: new ObjectId(id), userId: new ObjectId(userId) },
+    { projection: { careerTaskId: 1, missionId: 1 } },
+  );
+  if (!interview) return null;
+  return {
+    taskId: interview.careerTaskId?.toHexString() ?? null,
+    missionId: interview.missionId?.toHexString() ?? null,
+  };
+}
+
 export async function findInterviewsByUserId(userId: string, limit = 100) {
   if (!ObjectId.isValid(userId)) return [];
   const { interviews } = await collections();

@@ -44,19 +44,58 @@ describe('Career tasks route', () => {
       { id: 'task-1', missionId: 'mission-1', status: 'completed' },
       { id: 'task-2', missionId: 'mission-1', status: 'pending' }
     ]);
-    mocks.findMissionsByUserId.mockResolvedValue([{ id: 'mission-1', priority: 'urgent' }]);
+    mocks.findMissionById.mockResolvedValue({
+      id: 'mission-1',
+      userId: '507f1f77bcf86cd799439011',
+      priority: 'urgent',
+    });
 
     const response = await GET(new Request('http://localhost/api/career/tasks'));
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(mocks.findTasksByUserId).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
+    expect(mocks.findTasksByUserId).toHaveBeenCalledWith('507f1f77bcf86cd799439011', {
+      start: undefined,
+      end: undefined,
+      limit: undefined,
+    });
     expect(mocks.findTasksByMission).not.toHaveBeenCalled();
     expect(body).toMatchObject({ completed: 1, total: 2, progress: 50 });
     expect(body.tasks).toEqual([
       expect.objectContaining({ id: 'task-1', priority: 'urgent' }),
       expect.objectContaining({ id: 'task-2', priority: 'urgent' })
     ]);
+  });
+
+  it('preserves a coding task workspace mapping when plan resources are stale', async () => {
+    mocks.getSessionUserId.mockResolvedValue('507f1f77bcf86cd799439011');
+    mocks.findTasksByUserId.mockResolvedValue([{
+      id: 'task-1',
+      missionId: 'mission-1',
+      type: 'coding',
+      status: 'pending',
+      result: { workspaceId: 'live-workspace', filePath: 'src/App.tsx', exerciseIndex: 4 },
+    }]);
+    mocks.findMissionById.mockResolvedValue({
+      id: 'mission-1',
+      userId: '507f1f77bcf86cd799439011',
+      priority: 'medium',
+    });
+    mocks.findPlanByMission.mockResolvedValue({
+      learningResources: {
+        workspaceId: 'stale-workspace',
+        workspaceFiles: [{ path: 'exercises/old.tsx' }],
+      },
+    });
+
+    const response = await GET(new Request('http://localhost/api/career/tasks'));
+    const body = await response.json();
+
+    expect(body.tasks[0].result).toMatchObject({
+      workspaceId: 'live-workspace',
+      filePath: 'src/App.tsx',
+      exerciseIndex: 4,
+    });
   });
 
   it('keeps mission reads ownership checked', async () => {

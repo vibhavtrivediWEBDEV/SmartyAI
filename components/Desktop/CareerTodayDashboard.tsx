@@ -112,7 +112,7 @@ export function CareerTodayDashboard({ tasks, now, openApplication }: CareerToda
               <div className="mt-auto pt-4">
                 {task ? <CareerTaskMeta task={task} now={now} /> : <span className="text-[10px] text-white/25">Available after scheduling</span>}
                 <button type="button" disabled={!launchReady && lane.kind !== 'notes'} onClick={() => openApplication?.(lane.app, 80, 60, undefined, launchArgs)} className="mt-3 flex h-9 w-full items-center justify-between rounded-md border border-white/10 px-3 text-xs font-semibold text-white/70 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-35">
-                  {task && lane.kind === 'interview' && !task.result?.interviewId ? 'Preparing interview' : 'Open workspace'} <ArrowUpRight size={13} style={{ color: lane.accent }} />
+                  {task && lane.kind === 'interview' && !task.result?.interviewId ? 'Preparing interview' : `Open ${lane.app}`} <ArrowUpRight size={13} style={{ color: lane.accent }} />
                 </button>
               </div>
             </article>

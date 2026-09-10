@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/career-scheduler",
+      "schedule": "*/10 * * * *"
+    }
+  ]
+}

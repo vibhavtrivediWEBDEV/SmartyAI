@@ -398,6 +398,22 @@ function bundleHTML(html: string, css: string, js: string): string {
  * Generate React preview HTML
  */
 function generateReactPreview(reactCode: string, cssContent: string): string {
+  const previewSource = `${reactCode}
+
+// Auto-render with proper root management
+if (typeof App !== 'undefined') {
+  const container = document.getElementById('root');
+  if (window._reactRoot) {
+    window._reactRoot.unmount();
+    window._reactRoot = null;
+  }
+  window._reactRoot = ReactDOM.createRoot(container);
+  window._reactRoot.render(<App />);
+} else {
+  console.warn('No App component found. Make sure you export a component named "App"');
+}`;
+  const serializedPreviewSource = JSON.stringify(previewSource).replace(/</g, "\\u003c");
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -406,7 +422,7 @@ function generateReactPreview(reactCode: string, cssContent: string): string {
   <title>React Preview</title>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.26.9/babel.min.js"></script>
   ${cssContent ? `<style>${cssContent}</style>` : ''}
   <style>
     body {
@@ -456,24 +472,16 @@ function generateReactPreview(reactCode: string, cssContent: string): string {
     })()
   </script>
   
-  <script type="text/babel">
-    ${reactCode}
-    
-    // Auto-render with proper root management
-    if (typeof App !== 'undefined') {
-      // Clean up any existing root before creating new one
-      const container = document.getElementById('root');
-      if (window._reactRoot) {
-        // Unmount existing root
-        window._reactRoot.unmount();
-        window._reactRoot = null;
-      }
-      // Create fresh root
-      window._reactRoot = ReactDOM.createRoot(container);
-      window._reactRoot.render(<App />);
-    } else {
-      // Try to find default export or last defined component
-      console.warn('No App component found. Make sure you export a component named "App"');
+  <script>
+    try {
+      const source = ${serializedPreviewSource};
+      const transformed = Babel.transform(source, {
+        filename: 'preview.tsx',
+        presets: ['typescript', 'react'],
+      }).code;
+      (0, eval)(transformed);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
     }
   </script>
 </body>

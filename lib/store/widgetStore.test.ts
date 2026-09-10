@@ -40,6 +40,23 @@ describe('WidgetStore user scoping', () => {
     ]);
   });
 
+  it('persists reaction widgets only for the user who added them', () => {
+    WidgetStore.addWidget('user-a', {
+      id: 'reaction-1',
+      category: 'native',
+      type: 'reaction',
+      x: 100,
+      y: 100,
+      width: 58,
+      height: 58
+    });
+
+    expect(WidgetStore.loadWidgets('user-a')).toEqual([
+      expect.objectContaining({ id: 'reaction-1', type: 'reaction' })
+    ]);
+    expect(WidgetStore.loadWidgets('user-b')).toEqual([]);
+  });
+
   it('does not remove malformed legacy data', () => {
     storage.set('os_desktop_widgets', '{bad json');
 

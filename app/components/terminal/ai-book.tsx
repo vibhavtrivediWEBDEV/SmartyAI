@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { BookOpen, ChevronLeftIcon, ChevronRightIcon, Code2, DownloadIcon, Globe2, History, ImageIcon, LibraryBig, LoaderCircle, LockKeyhole, Sparkles } from "lucide-react"
+import { BookOpen, ChevronLeftIcon, ChevronRightIcon, Code2, DownloadIcon, Globe2, History, ImageIcon, LibraryBig, LoaderCircle, LockKeyhole, Search, Sparkles } from "lucide-react"
 import { jsPDF } from "jspdf"
 import AsyncImageFromDescription from "./asyncImageDesc"
 import type { LessonContext } from "@/modules/teaching/lesson.schema"
@@ -15,7 +15,7 @@ type BookPage = {
 }
 type Book = { id: string; sessionId?: string; subject: string; title: string; model?: string; messages?: Message[]; pages: BookPage[]; status: string; isPublic?: boolean; createdAt?: string }
 type Usage = { used: number; limit: number; remaining: number }
-type ScienceBookProps = { name?: string; subject?: string; context?: LessonContext; messages?: Message[]; callStart?: boolean | null; status?: string; sessionId?: string; bookId?: string; focusRequest?: number; openApplication?: (appName: string, initialX?: number, initialY?: number, commandToRun?: string, arg?: Record<string, unknown>) => void | Promise<void> }
+type ScienceBookProps = { name?: string; subject?: string; context?: LessonContext; messages?: Message[]; callStart?: boolean | null; status?: string; sessionId?: string; bookId?: string; taskId?: string; missionId?: string; focusRequest?: number; openApplication?: (appName: string, initialX?: number, initialY?: number, commandToRun?: string, arg?: Record<string, unknown>) => void | Promise<void> }
 
 function buildLivePages(name: string, subject: string, messages: Message[]): BookPage[] {
   const pages: BookPage[] = [{ type: "cover", content: { title: subject || "Live Lesson", subtitle: "Your questions and teacher's explanations", author: name } }]
@@ -31,7 +31,7 @@ function buildLivePages(name: string, subject: string, messages: Message[]): Boo
   return pages
 }
 
-export function ScienceBook({ name = "Student", subject = "", context, messages = [], status = "NOT_STARTED", sessionId, bookId, focusRequest = 0, openApplication }: ScienceBookProps) {
+export function ScienceBook({ name = "Student", subject = "", context, messages = [], status = "NOT_STARTED", sessionId, bookId, taskId, missionId, focusRequest = 0, openApplication }: ScienceBookProps) {
   const [currentPage, setCurrentPage] = useState(0)
   const [book, setBook] = useState<Book | null>(null)
   const [history, setHistory] = useState<Book[]>([])
@@ -39,38 +39,88 @@ export function ScienceBook({ name = "Student", subject = "", context, messages 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [historyLoaded, setHistoryLoaded] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historySearch, setHistorySearch] = useState("")
   const [openingExercise, setOpeningExercise] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [todayNotes, setTodayNotes] = useState<TodayLearningContext | null>(null)
+  const [todayNotesLoaded, setTodayNotesLoaded] = useState(false)
   const finalizedRef = useRef<string | null>(null)
   const enrichingRef = useRef(new Set<string>())
+  const historyRequestRef = useRef(0)
   const livePages = useMemo(() => buildLivePages(name, subject, messages), [name, subject, messages])
   const pages = book?.pages?.length ? book.pages : livePages
   const totalPages = pages.length
 
-  const loadHistory = useCallback(async () => {
+  const loadHistory = useCallback(async (query = "", options?: { all?: boolean; selectFirst?: boolean }) => {
+    const requestId = ++historyRequestRef.current
+    setHistoryLoading(true)
     try {
-      const response = await fetch("/api/book-pages", { cache: "no-store" })
+      const params = new URLSearchParams({ limit: "20" })
+      if (query.trim()) {
+        params.set("query", query.trim())
+      } else if (sessionId && !options?.all) {
+        params.set("sessionId", sessionId)
+      }
+      const response = await fetch(`/api/book-pages?${params}`, { cache: "no-store" })
+      if (requestId !== historyRequestRef.current) return
       if (!response.ok) {
         const data = await response.json().catch(() => null)
         if (response.status !== 401) setError(data?.error || "Book history is temporarily unavailable.")
         return
       }
       const data = await response.json()
-      setHistory(data.books || [])
+      const books = Array.isArray(data.books) ? data.books as Book[] : []
+      setHistory(books)
+      if ((query.trim() || options?.selectFirst) && books.length > 0) {
+        setBook((current) => books.find((item) => item.id === current?.id) || books[0])
+        setCurrentPage(0)
+        setError("")
+      }
       setUsage(data.usage || null)
     } catch (historyError) {
       setError(historyError instanceof Error && historyError.message === "Failed to fetch"
         ? "AI Book cannot reach the server. Restart the SmartyAI server and try again."
         : "Book history is temporarily unavailable.")
     } finally {
-      setHistoryLoaded(true)
+      if (requestId === historyRequestRef.current) {
+        setHistoryLoaded(true)
+        setHistoryLoading(false)
+      }
     }
-  }, [])
+  }, [sessionId])
 
-  useEffect(() => { void loadHistory() }, [loadHistory])
-  useEffect(() => { void loadTodayLearningContext().then(setTodayNotes) }, [])
+  useEffect(() => {
+    if (bookId) return
+    const timer = window.setTimeout(() => void loadHistory(historySearch), historySearch.trim() ? 300 : 0)
+    return () => window.clearTimeout(timer)
+  }, [bookId, historySearch, loadHistory])
+  useEffect(() => {
+    if (bookId) {
+      setTodayNotesLoaded(true)
+      return
+    }
+    void loadTodayLearningContext()
+      .then(setTodayNotes)
+      .finally(() => setTodayNotesLoaded(true))
+  }, [bookId])
   useEffect(() => { setCurrentPage((page) => Math.min(page, Math.max(0, totalPages - 1))) }, [totalPages])
+  useEffect(() => {
+    if (!book?.id || !taskId || !missionId || totalPages < 1) return
+    let cancelled = false
+    const observe = async () => {
+      const response = await fetch(`/api/book-pages/${encodeURIComponent(book.id)}/read`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId, missionId, pageIndex: currentPage }),
+      }).catch(() => null)
+      if (!response?.ok || cancelled) return
+      await response.json()
+    }
+    void observe()
+    const timer = window.setTimeout(() => void observe(), 3_200)
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [book?.id, currentPage, missionId, taskId, totalPages])
   useEffect(() => {
     if (!focusRequest || totalPages < 1) return
     setCurrentPage(totalPages - 1)
@@ -116,16 +166,28 @@ export function ScienceBook({ name = "Student", subject = "", context, messages 
       body: JSON.stringify({ name, prompt: generationSubject.slice(0, 300), messages: sourceMessages, sessionId: dailySessionId }),
     }).then(async (response) => {
       const data = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(data?.error || "Book generation failed")
+      if (!response.ok) {
+        setUsage(data?.usage || null)
+        if (data?.code === "BOOK_LIMIT_REACHED") await loadHistory("", { all: true, selectFirst: true })
+        throw new Error(data?.error || "Book generation failed")
+      }
       setBook(data)
       setUsage(data.usage || null)
       setCurrentPage(0)
       await loadHistory()
     }).catch((generationError) => {
       setError(generationError instanceof Error ? generationError.message : "Book generation failed")
-      finalizedRef.current = null
     }).finally(() => setLoading(false))
   }, [book, bookId, history, historyLoaded, loadHistory, loading, name, sessionId, subject, todayNotes])
+
+  useEffect(() => {
+    if (bookId || sessionId || book || loading || !historyLoaded || !todayNotesLoaded || todayNotes || historySearch.trim()) return
+    const latestBook = history[0]
+    if (!latestBook) return
+    setBook(latestBook)
+    setCurrentPage(0)
+    setError("")
+  }, [book, bookId, history, historyLoaded, historySearch, loading, sessionId, todayNotes, todayNotesLoaded])
 
   useEffect(() => {
     if (!sessionId || book?.sessionId === sessionId) return
@@ -139,13 +201,15 @@ export function ScienceBook({ name = "Student", subject = "", context, messages 
   useEffect(() => {
     if (!book?.id || !["generating", "enriching"].includes(book.status)) return
     const timer = window.setInterval(() => {
-      void fetch("/api/book-pages", { cache: "no-store" }).then(async (response) => {
+      void fetch(`/api/book-pages?bookId=${encodeURIComponent(book.id)}`, { cache: "no-store" }).then(async (response) => {
         if (!response.ok) return
         const data = await response.json()
-        const updated = (data.books as Book[] | undefined)?.find((item) => item.id === book.id)
+        const updated = (data.books as Book[] | undefined)?.[0]
         if (updated) {
           setBook(updated)
-          setHistory(data.books || [])
+          setHistory((current) => current.some((item) => item.id === updated.id)
+            ? current.map((item) => item.id === updated.id ? updated : item)
+            : [updated, ...current])
           setUsage(data.usage || null)
         }
       }).catch(() => undefined)
@@ -167,15 +231,17 @@ export function ScienceBook({ name = "Student", subject = "", context, messages 
       body: JSON.stringify({ name, prompt: subject, context, messages, sessionId: key }),
       }).then(async (response) => {
       const data = await response.json()
-      if (!response.ok) throw new Error(data.error || "Book generation failed")
+      if (!response.ok) {
+      setUsage(data?.usage || null)
+      if (data?.code === "BOOK_LIMIT_REACHED") await loadHistory("", { all: true, selectFirst: true })
+      throw new Error(data.error || "Book generation failed")
+      }
       setBook(data)
       setUsage(data.usage || null)
       setCurrentPage(0)
       await loadHistory()
       }).catch((generationError) => {
       setError(generationError instanceof Error ? generationError.message : "Book generation failed")
-      finalizedRef.current = null
-      void loadHistory()
       }).finally(() => setLoading(false))
     }, 1200)
     return () => window.clearTimeout(finalizeTimer)
@@ -186,6 +252,9 @@ export function ScienceBook({ name = "Student", subject = "", context, messages 
     setBook((current) => current ? { ...current, pages: current.pages.map((page, index) => index === pageIndex ? { ...page, content: { ...page.content, imageUrl } } : page) } : current)
     void fetch("/api/book-pages", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bookId: book.id, pageIndex, imageUrl }) })
   }, [book?.id])
+  const resolveCurrentImage = useCallback((imageUrl: string) => {
+    persistImage(currentPage, imageUrl)
+  }, [currentPage, persistImage])
 
   useEffect(() => {
     if (bookId || !book?.id) return
@@ -260,6 +329,7 @@ export function ScienceBook({ name = "Student", subject = "", context, messages 
       if (!response.ok) throw new Error(data?.error || "Unable to update publication.")
       setBook((current) => current ? { ...current, isPublic: data.isPublic } : current)
       setHistory((current) => current.map((item) => item.id === book.id ? { ...item, isPublic: data.isPublic } : item))
+      window.dispatchEvent(new Event("library-books-changed"))
     } catch (publicationError) {
       setError(publicationError instanceof Error ? publicationError.message : "Unable to update publication.")
     } finally {
@@ -329,6 +399,10 @@ export function ScienceBook({ name = "Student", subject = "", context, messages 
           <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-[#ffd666]/20 bg-[#ffd666]/10"><LibraryBig className="size-4.5 text-[#ffd666]" /></div>
           <div className="min-w-0"><p className="text-[9px] font-semibold uppercase tracking-[.2em] text-white/35">Private AI Library</p><span className="block truncate font-serif text-base font-medium">{book?.title || `${subject || todayNotes?.topic || "Today’s Notes"} Book`}</span></div>
         </div>
+        <label className="relative flex items-center">
+          {historyLoading ? <LoaderCircle className="pointer-events-none absolute left-2.5 size-3.5 animate-spin text-[#63e6be]" /> : <Search className="pointer-events-none absolute left-2.5 size-3.5 text-white/35" />}
+          <input aria-label="Search book history" value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} placeholder="Search history" className="h-8 w-36 rounded-md border border-white/10 bg-[#222429] pl-8 pr-2 text-[11px] text-white outline-none placeholder:text-white/30 focus:border-[#63e6be]" />
+        </label>
         {history.length > 0 && <label className="relative flex items-center gap-1.5"><History className="size-3.5 text-white/40" /><select aria-label="Book history" value={book?.id || ""} onChange={(event) => loadSavedBook(event.target.value)} className="h-8 max-w-44 rounded-md border border-white/10 bg-[#222429] px-2 text-[11px] text-white outline-none transition focus:border-[#63e6be]"><option value="">Book history</option>{history.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>}
         {usage && <span className="rounded-full border border-white/10 bg-white/4 px-2.5 py-1 text-[10px] text-white/45">{usage.used} of {usage.limit}</span>}
         {book?.status === "complete" && !bookId && <button onClick={() => void togglePublication()} disabled={publishing} title={book.isPublic ? "Remove this book from the public Library" : "Publish this book to the public Library"} className="flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-3 text-[11px] font-semibold text-white/75 transition hover:bg-white/10 disabled:opacity-40">{publishing ? <LoaderCircle className="size-3.5 animate-spin" /> : book.isPublic ? <LockKeyhole className="size-3.5" /> : <Globe2 className="size-3.5" />}{book.isPublic ? "Make private" : "Publish"}</button>}
@@ -343,7 +417,7 @@ export function ScienceBook({ name = "Student", subject = "", context, messages 
         {!page ? <div className="flex h-full flex-col items-center justify-center text-white/35"><BookOpen className="mb-3 size-10" /><p className="text-sm">Start the lesson to build your book live.</p></div> : page.type === "cover" ? (
           <div className="relative flex h-full flex-col items-center justify-center overflow-hidden bg-[linear-gradient(135deg,#13231e,#16181c_58%,#272113)] p-8 text-center"><div className="absolute inset-y-0 left-0 w-2 bg-[#63e6be]" /><div className="absolute left-8 right-8 top-8 flex items-center justify-between text-[9px] font-semibold uppercase tracking-[.22em] text-white/30"><span>Personal edition</span><span>{new Date().getFullYear()}</span></div><div className="mb-7 flex size-16 items-center justify-center rounded-md border border-[#63e6be]/25 bg-[#63e6be]/10"><BookOpen className="size-8 text-[#63e6be]" /></div><h1 className="max-w-2xl font-serif text-4xl font-medium leading-tight text-white sm:text-5xl">{page.content.title}</h1><div className="mt-5 h-px w-16 bg-[#ffd666]" /><p className="mt-5 max-w-xl text-sm leading-6 text-white/55 sm:text-base">{page.content.subtitle}</p><p className="mt-8 text-[10px] font-semibold uppercase tracking-[.2em] text-[#ffd666]">Prepared for {page.content.author || name}</p></div>
         ) : page.type === "image" ? (
-          <AsyncImageFromDescription description={page.content.src || subject} alt={page.content.alt || page.content.caption || "Educational illustration"} caption={page.content.caption} initialUrl={page.content.imageUrl} onResolved={(url) => persistImage(currentPage, url)} />
+          <AsyncImageFromDescription description={page.content.src || subject} alt={page.content.alt || page.content.caption || "Educational illustration"} caption={page.content.caption} initialUrl={page.content.imageUrl} resolveMissing={!bookId} onResolved={bookId ? undefined : resolveCurrentImage} />
         ) : page.type === "end" ? (
           <div className="flex h-full flex-col items-center justify-center bg-[linear-gradient(145deg,#191b1f,#111315)] p-8 text-center"><div className="mb-6 flex size-14 items-center justify-center rounded-md border border-[#ffd666]/20 bg-[#ffd666]/10"><Sparkles className="size-7 text-[#ffd666]" /></div><p className="font-serif text-3xl font-medium">{page.content.message || "Keep learning."}</p><p className="mt-3 text-sm text-white/40">Your complete lesson is saved in Book History.</p></div>
         ) : (

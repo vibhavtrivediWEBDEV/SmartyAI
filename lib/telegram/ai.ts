@@ -32,7 +32,7 @@ export async function processMessageThroughAI(
     await bot.sendChatAction(chatId, 'typing')
 
     // Import AI services dynamically to avoid circular dependencies
-    const { createAIService } = await import('@/lib/ai')
+    const { createMeteredAIService } = await import('@/lib/ai/metered')
     const { getUserAIContextByUserId } = await import('@/lib/ai/userAIContext.byUserId')
     const { generateDesktopAssistantPrompt } = await import('@/lib/ai/userAIContext')
     
@@ -48,7 +48,7 @@ export async function processMessageThroughAI(
     await logToTelegram.success('User context loaded', 'AI', userId)
 
     // Step 3: Initialize AI
-    const ai = createAIService()
+    const ai = createMeteredAIService(userId, { source: 'telegram', feature: 'chat' })
 
     // Step 4: Generate response
     logToTelegram.info('Calling AI service...', 'AI', userId)
@@ -351,7 +351,7 @@ To enable:
         console.log('[Telegram] ✅ User profile loaded')
       }
     } catch (error) {
-      console.log('[Telegram] ⚠️ User profile not available, continuing without it:', error.message || error);
+      console.log('[Telegram] ⚠️ User profile not available, continuing without it:', error instanceof Error ? error.message : error);
     }
     
     // Step 3: Get Socket.io for automation execution

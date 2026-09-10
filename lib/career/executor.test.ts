@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   findPlanById: vi.fn(),
@@ -16,7 +16,12 @@ const mocks = vi.hoisted(() => ({
   updateTask: vi.fn(),
   findTasksByMission: vi.fn(),
   upsertCareerInterview: vi.fn(),
-  createInterviewSession: vi.fn()
+  createInterviewSession: vi.fn(),
+  findUserById: vi.fn(),
+  getPlanUsageBalance: vi.fn(),
+  consumePlanUsage: vi.fn(),
+  refundPlanUsage: vi.fn(),
+  countTeacherBooksForPeriod: vi.fn()
 }));
 
 vi.mock('@/modules/career/career-plan.repository', () => ({
@@ -58,7 +63,18 @@ vi.mock('@/modules/career/career.repository', () => ({
 }));
 
 vi.mock('@/modules/users/user.repository', () => ({
-  findUserById: vi.fn()
+  findUserById: mocks.findUserById,
+  getPlanUsageBalance: mocks.getPlanUsageBalance,
+  consumePlanUsage: mocks.consumePlanUsage,
+  refundPlanUsage: mocks.refundPlanUsage
+}));
+
+vi.mock('@/modules/teacher-books/teacher-book.repository', () => ({
+  countTeacherBooksForPeriod: mocks.countTeacherBooksForPeriod
+}));
+
+vi.mock('@/modules/subscription/plans', () => ({
+  SUBSCRIPTION_PLANS: { free: { teacherBooksPerMonth: 3 } }
 }));
 
 vi.mock('@/modules/profile/atsDraft.repository', () => ({
@@ -100,6 +116,8 @@ describe('Career coding workspace inference', () => {
 
 describe('CareerPlanExecutor learning artifacts', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2099-09-03T14:00:00.000Z'));
     vi.clearAllMocks();
     mocks.findPlanById.mockResolvedValue({
       steps: [{ id: 'learning', name: 'Learning', stepType: 'setup_learning' }]
@@ -115,6 +133,14 @@ describe('CareerPlanExecutor learning artifacts', () => {
     mocks.createWorkspace.mockResolvedValue({ id: 'workspace-1' });
     mocks.createLearningSession.mockResolvedValue('learning-session-1');
     mocks.findTasksByMission.mockResolvedValue([]);
+    mocks.findUserById.mockResolvedValue({ plan: 'free' });
+    mocks.getPlanUsageBalance.mockResolvedValue({ allowed: true, used: 0, remaining: 20, limit: 20, period: '2099-09' });
+    mocks.consumePlanUsage.mockResolvedValue({ allowed: true, used: 1, remaining: 19, limit: 20, period: '2099-09' });
+    mocks.countTeacherBooksForPeriod.mockResolvedValue(0);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('creates an owned preparation task for every scheduled calendar event', async () => {
@@ -156,9 +182,64 @@ describe('CareerPlanExecutor learning artifacts', () => {
     }));
   });
 
+  it('uses a stable title when AI returns an untitled schedule event', async () => {
+    mocks.findPlanById.mockResolvedValue({
+      steps: [{ id: 'schedule', name: 'Schedule', stepType: 'schedule_sessions' }]
+    });
+    mocks.findCalendarsByUserId.mockResolvedValue([{ _id: { toHexString: () => 'calendar-1' } }]);
+    mocks.generateCalendarEventsDirect.mockResolvedValue({
+      events: [{ title: null, startTime: '18:00', endTime: '19:00', description: 'Practice responsive layouts.' }]
+    });
+    mocks.createEvent.mockResolvedValue('event-1');
+
+    await careerPlanExecutor.executeStep('schedule', 'plan-1', {
+      planId: 'plan-1',
+      missionId: '507f1f77bcf86cd799439012',
+      userId: '507f1f77bcf86cd799439011',
+      interviewDate: new Date('2099-09-10T00:00:00.000Z')
+    });
+
+    expect(mocks.createEvent).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Day 1 - Interview Preparation'
+    }));
+    expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Day 1 - Interview Preparation',
+      topic: 'Day 1 - Interview Preparation'
+    }));
+  });
+
+  it('does not plan more AI Book tasks than the monthly subscription quota', async () => {
+    mocks.findPlanById.mockResolvedValue({ steps: [{ id: 'schedule', name: 'Schedule', stepType: 'schedule_sessions' }] });
+    mocks.findCalendarsByUserId.mockResolvedValue([{ _id: { toHexString: () => 'calendar-1' } }]);
+    mocks.generateCalendarEventsDirect.mockResolvedValue({
+      events: Array.from({ length: 4 }, (_, index) => ({
+        title: `Book review ${index + 1}`,
+        date: `2099-09-0${index + 4}`,
+        startTime: '18:00',
+        endTime: '19:00',
+        taskType: 'calendar',
+        openIn: ['ai-book', 'career']
+      }))
+    });
+    mocks.createEvent.mockImplementation(async () => `event-${mocks.createEvent.mock.calls.length}`);
+
+    await careerPlanExecutor.executeStep('schedule', 'plan-1', {
+      planId: 'plan-1',
+      missionId: '507f1f77bcf86cd799439012',
+      userId: '507f1f77bcf86cd799439011',
+      interviewDate: new Date('2099-09-10T00:00:00.000Z')
+    });
+
+    const plannedTargets = mocks.createTask.mock.calls.map(([task]) => task.openIn);
+    expect(plannedTargets.slice(0, 3)).toEqual([
+      ['ai-book', 'career'],
+      ['ai-book', 'career'],
+      ['ai-book', 'career']
+    ]);
+    expect(plannedTargets[3]).toEqual(['notes', 'career']);
+  });
+
   it('moves stale AI event dates into the preparation window', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2099-09-03T14:00:00.000Z'));
     mocks.findPlanById.mockResolvedValue({
       steps: [{ id: 'schedule', name: 'Schedule', stepType: 'schedule_sessions' }]
     });
@@ -179,9 +260,8 @@ describe('CareerPlanExecutor learning artifacts', () => {
     });
 
     expect(mocks.createEvent).toHaveBeenNthCalledWith(1, expect.objectContaining({ date: '2099-09-03' }));
-    expect(mocks.createEvent).toHaveBeenNthCalledWith(2, expect.objectContaining({ date: '2099-09-03' }));
-    expect(mocks.createEvent).toHaveBeenNthCalledWith(3, expect.objectContaining({ date: '2099-09-04' }));
-    vi.useRealTimers();
+    expect(mocks.createEvent).toHaveBeenNthCalledWith(2, expect.objectContaining({ date: '2099-09-04' }));
+    expect(mocks.createEvent).toHaveBeenNthCalledWith(3, expect.objectContaining({ date: '2099-09-05' }));
   });
 
   it('creates mock interview events as explicitly linked interview tasks', async () => {
@@ -203,7 +283,7 @@ describe('CareerPlanExecutor learning artifacts', () => {
 
     expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({
       type: 'interview',
-      result: { calendarEventId: 'event-1', scheduledAt: new Date('2099-09-08T18:00:00.000Z') }
+      result: { calendarEventId: 'event-1', scheduledAt: new Date('2099-09-03T18:00:00.000Z') }
     }));
   });
 
@@ -233,15 +313,18 @@ describe('CareerPlanExecutor learning artifacts', () => {
       interviewDate: new Date('2099-09-10T00:00:00.000Z')
     });
 
-    expect(mocks.updateEvent).toHaveBeenCalledWith('event-1', expect.objectContaining({ date: '2099-09-08' }));
+    expect(mocks.updateEvent).toHaveBeenCalledWith('event-1', expect.objectContaining({ date: '2099-09-03' }));
     expect(mocks.createEvent).not.toHaveBeenCalled();
     expect(mocks.updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({
-      scheduledDate: new Date('2099-09-08T18:00:00.000Z')
+      scheduledDate: new Date('2099-09-03T18:00:00.000Z')
     }));
     expect(mocks.createTask).not.toHaveBeenCalled();
   });
 
   it('creates visible Teacher sessions and a coding workspace for one mission', async () => {
+    mocks.findTasksByMission.mockResolvedValue([
+      { id: 'teacher-task-1', type: 'teacher', openIn: ['teacher', 'ai-book', 'career'], scheduledDate: new Date('2099-09-08T18:00:00.000Z'), result: {} }
+    ]);
     const result = await careerPlanExecutor.executeStep('learning', 'plan-1', {
       planId: 'plan-1',
       missionId: '507f1f77bcf86cd799439012',
@@ -256,6 +339,12 @@ describe('CareerPlanExecutor learning artifacts', () => {
       userId: '507f1f77bcf86cd799439011',
       missionId: '507f1f77bcf86cd799439012',
       topic: 'React rendering'
+    }));
+    expect(mocks.createCareerTeachingSession).toHaveBeenCalledWith(expect.objectContaining({
+      careerTaskId: 'teacher-task-1'
+    }));
+    expect(mocks.updateTask).toHaveBeenCalledWith('teacher-task-1', expect.objectContaining({
+      result: expect.objectContaining({ sessionId: 'teacher-session-1' })
     }));
     expect(mocks.createWorkspace).toHaveBeenCalledWith(
       '507f1f77bcf86cd799439011',
@@ -280,8 +369,16 @@ describe('CareerPlanExecutor learning artifacts', () => {
     expect(result).toMatchObject({
       sessionId: 'learning-session-1',
       teacherSessionIds: ['teacher-session-1'],
-      workspaceId: 'workspace-1'
+      workspaceId: 'workspace-1',
+      youtubeResources: expect.arrayContaining([
+        expect.objectContaining({
+          title: 'React interview preparation',
+          searchQuery: 'React interview preparation'
+        })
+      ])
     });
+    expect(result.youtubeResources[0].searchQuery).not.toContain('Acme');
+    expect(result.youtubeResources[0].searchQuery).not.toContain('Frontend Engineer');
   });
 
   it('persists an interview against the exact owned task and calendar event', async () => {

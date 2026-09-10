@@ -188,6 +188,17 @@ export async function playSound(soundId: string, options: PlayOptions = {}): Pro
 }
 
 /**
+ * Stop a specific sound by ID
+ */
+export function stopSound(soundId: string): void {
+  const audio = audioCache.get(soundId);
+  if (audio) {
+    audio.pause();
+    audio.currentTime = 0;
+  }
+}
+
+/**
  * Stop all sounds (cleanup)
  */
 export function stopAllSounds(): void {

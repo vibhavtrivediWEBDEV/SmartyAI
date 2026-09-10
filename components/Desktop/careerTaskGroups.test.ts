@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { careerTaskLaunchArgs, findCareerTaskForCalendarEvent, getCareerTaskDestinations, getCareerTaskKind, getCareerTaskTiming, groupCareerTasks, type CareerTaskItem } from './careerTaskGroups';
+import { describe, expect, it, vi } from 'vitest';
+import { careerTaskLaunchArgs, findCareerTaskForCalendarEvent, findCareerTaskForWorkspaceFile, getCareerTaskDestinations, getCareerTaskKind, getCareerTaskTiming, groupCareerTasks, prepareCareerTaskLaunch, type CareerTaskItem } from './careerTaskGroups';
 
 describe('groupCareerTasks', () => {
   it('sorts and groups tasks into overdue, current, and upcoming dates', () => {
@@ -81,6 +81,23 @@ describe('groupCareerTasks', () => {
     expect(careerTaskLaunchArgs({ ...task, result: { interviewId: 'interview-record' } })).toMatchObject({ interviewId: 'interview-record' });
   });
 
+  it('uses a task-specific session for AI Books', () => {
+    const task: CareerTaskItem = {
+      id: 'book-task-1',
+      missionId: 'mission-1',
+      title: 'Review Redux Toolkit',
+      topic: 'Redux Toolkit and state management',
+      scheduledDate: '2026-09-03T09:00:00.000Z',
+      status: 'pending',
+      openIn: ['ai-book'],
+    };
+
+    expect(careerTaskLaunchArgs(task)).toMatchObject({
+      sessionId: 'career-task:book-task-1',
+      topic: 'Redux Toolkit and state management',
+    });
+  });
+
   it('passes generated workspace and file identity for coding tasks', () => {
     const task: CareerTaskItem = {
       id: 'coding-task',
@@ -98,6 +115,65 @@ describe('groupCareerTasks', () => {
     });
   });
 
+  it('uses an explicit notes type even when the title mentions practice', () => {
+    const task: CareerTaskItem = {
+      id: 'notes-task',
+      missionId: 'mission-1',
+      title: 'Practice notes for React problems',
+      type: 'notes',
+      scheduledDate: '2026-09-03T09:00:00.000Z',
+      status: 'pending',
+    };
+
+    expect(getCareerTaskKind(task)).toBe('notes');
+    expect(getCareerTaskDestinations(task)).toEqual([
+      { id: 'notes', app: 'Notes', label: 'Notes' },
+    ]);
+  });
+
+  it('passes the generated YouTube resource to the video app', () => {
+    const task: CareerTaskItem = {
+      id: 'youtube-task',
+      missionId: 'mission-1',
+      title: 'React hooks interview preparation',
+      type: 'youtube',
+      openIn: ['youtube', 'career'],
+      scheduledDate: '2026-09-03T09:00:00.000Z',
+      status: 'pending',
+      result: {
+        searchQuery: 'React hooks interview preparation',
+        resourceUrl: 'https://www.youtube.com/results?search_query=React',
+      },
+    };
+
+    expect(getCareerTaskKind(task)).toBe('video');
+    expect(careerTaskLaunchArgs(task)).toMatchObject({
+      searchQuery: 'React hooks interview preparation',
+      resourceUrl: 'https://www.youtube.com/results?search_query=React',
+    });
+  });
+
+  it('launches an existing coding workspace without another API request', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const task: CareerTaskItem = {
+      id: 'coding-task',
+      missionId: 'mission-1',
+      title: 'React hooks practice',
+      type: 'coding',
+      scheduledDate: '2026-09-03T09:00:00.000Z',
+      status: 'pending',
+      result: { workspaceId: 'workspace-1', filePath: 'src/App.tsx' },
+    };
+
+    await expect(prepareCareerTaskLaunch(task)).resolves.toMatchObject({
+      workspaceId: 'workspace-1',
+      initialFile: 'src/App.tsx',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
   it('matches a Calendar event to its exact persisted task ID', () => {
     const tasks = [
       { id: 'wrong-task', missionId: 'mission-1', title: 'Same title', scheduledDate: '2026-09-04T09:00:00.000Z', status: 'pending', result: { calendarEventId: 'event-1' } },
@@ -105,6 +181,17 @@ describe('groupCareerTasks', () => {
     ] satisfies CareerTaskItem[];
 
     expect(findCareerTaskForCalendarEvent(tasks, { _id: 'event-2', date: '2026-09-04', title: 'Same title' })?.id).toBe('selected-task');
+  });
+
+  it('only matches coding tasks with exact persisted workspace and file identity', () => {
+    const tasks = [
+      { id: 'linked-task', missionId: 'mission-1', title: 'Day 2', scheduledDate: '2026-09-04T09:00:00.000Z', status: 'pending', result: { workspaceId: 'workspace-2', filePath: 'src/App.tsx' } },
+      { id: 'incomplete-task', missionId: 'mission-1', title: 'Legacy task', scheduledDate: '2026-09-04T10:00:00.000Z', status: 'pending' },
+    ] satisfies CareerTaskItem[];
+
+    expect(findCareerTaskForWorkspaceFile(tasks, 'workspace-1', 'src/App.tsx')).toBeUndefined();
+    expect(findCareerTaskForWorkspaceFile(tasks, 'workspace-2', 'src/App.tsx')?.id).toBe('linked-task');
+    expect(findCareerTaskForWorkspaceFile(tasks, undefined, 'src/App.tsx')).toBeUndefined();
   });
 
   it('uses every explicit app target and removes duplicates', () => {

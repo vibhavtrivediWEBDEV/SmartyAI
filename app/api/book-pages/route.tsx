@@ -3,14 +3,16 @@ import { after, NextRequest, NextResponse } from "next/server";
 import { chatOpenAIFirst } from "@/lib/ai/fallback";
 import { resolveEducationalImage } from "@/lib/ai/educationalImage";
 import { getCurrentUser } from "@/lib/actions/auth.action";
-import { SUBSCRIPTION_PLANS } from "@/modules/subscription/plans";
+import { consumePlanUsage, getPlanUsageBalance, reconcilePlanUsageFloor, refundPlanUsage } from "@/modules/users/user.repository";
 import { lessonContextSchema } from "@/modules/teaching/lesson.schema";
 import {
   countTeacherBooksForPeriod,
   createTeacherBook,
+  findTeacherBook,
   findTeacherBookBySession,
   listTeacherBooks,
   failTeacherBook,
+  prepareTeacherBookRegeneration,
   setTeacherBookImage,
   updateTeacherBookTranscript,
   updateTeacherBookContent,
@@ -25,7 +27,7 @@ const monthStart = () => {
 
 const serializeBook = (book: Awaited<ReturnType<typeof listTeacherBooks>>[number]) => ({
   id: book._id.toHexString(), sessionId: book.sessionId, subject: book.subject, title: book.title, provider: book.provider || "unknown", model: book.model,
-  messages: book.messages, pages: book.pages, status: book.status,
+  messages: book.messages, pages: book.pages, status: book.status === "failed" && !book.lastError ? "complete" : book.status,
   isPublic: book.isPublic === true,
   publicMetadata: book.publicMetadata,
   context: book.context,
@@ -66,7 +68,7 @@ Build a coherent progression: editorial introduction, foundations, key terms, de
   try {
     const response = await chatOpenAIFirst(
       [{ role: "system", content: systemPrompt }, ...input.messages],
-      { temperature: 0.45, maxTokens: 7000, openAIModel: "gpt-5.6-sol" },
+      { temperature: 0.45, maxTokens: 7000, openAIModel: "gpt-5.6-sol", metering: { userId: input.userId, source: "teacher", feature: "study-book" } },
     );
     const pages = parseBookPages(response.content);
     const title = pages.find((page) => page.type === "cover")?.content.title || `${input.subject} Learning Book`;
@@ -85,10 +87,9 @@ Build a coherent progression: editorial introduction, foundations, key terms, de
           return page;
         }
       }));
-      const allImagesFinished = illustratedPages.filter((page) => page.type === "image").every((page) => Boolean(page.content.imageUrl));
       await updateTeacherBookContent(input.userId, input.bookId, {
         title, provider: response.provider, model: response.model, pages: illustratedPages,
-        status: allImagesFinished ? "complete" : "failed",
+        status: "complete",
       });
     }
   } catch (error) {
@@ -98,13 +99,36 @@ Build a coherent progression: editorial introduction, foundations, key terms, de
   }
 }
 
-export async function GET() {
+function parseDate(value: string | null) {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const [books, used] = await Promise.all([listTeacherBooks(user.id), countTeacherBooksForPeriod(user.id, monthStart())]);
-    const limit = SUBSCRIPTION_PLANS[user.plan].teacherBooksPerMonth;
-    return NextResponse.json({ books: books.map(serializeBook), usage: { used, limit, remaining: Math.max(0, limit - used) } });
+    const params = request.nextUrl.searchParams;
+    const bookId = params.get("bookId");
+    const sessionId = params.get("sessionId");
+    const booksPromise = bookId
+      ? findTeacherBook(user.id, bookId).then((book) => book ? [book] : [])
+      : sessionId
+        ? findTeacherBookBySession(user.id, sessionId).then((book) => book ? [book] : [])
+      : listTeacherBooks(user.id, {
+          start: parseDate(params.get("start")),
+          end: parseDate(params.get("end")),
+          query: params.get("query") || undefined,
+          limit: Number(params.get("limit")) || undefined,
+        });
+    const [books, storedBooks, meteredUsage] = await Promise.all([
+      booksPromise,
+      countTeacherBooksForPeriod(user.id, monthStart()),
+      getPlanUsageBalance(user.id, "teacherBooks"),
+    ]);
+    const used = Math.max(storedBooks, meteredUsage.used);
+    return NextResponse.json({ books: books.map(serializeBook), usage: { ...meteredUsage, used, remaining: Math.max(0, meteredUsage.limit - used) } });
   } catch (error) {
     console.error("Teacher book history failed:", error);
     return NextResponse.json({ error: "Book history is temporarily unavailable.", books: [] }, { status: 500 });
@@ -112,6 +136,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  let reservedUserId: string | null = null;
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -129,14 +154,26 @@ export async function POST(request: NextRequest) {
     const existing = await findTeacherBookBySession(user.id, stableSessionId);
     if (existing) {
       const updated = await updateTeacherBookTranscript(user.id, stableSessionId, cleanMessages, parsedContext?.success ? parsedContext.data : undefined);
-      return NextResponse.json(serializeBook(updated || existing));
+      const saved = updated || existing;
+      if (existing.generationSource === "career" && existing.pages.length <= 3) {
+        await prepareTeacherBookRegeneration(user.id, existing._id.toHexString());
+        after(() => enrichBook({
+          userId: user.id,
+          bookId: existing._id.toHexString(),
+          subject: prompt.trim(),
+          studentName: name?.trim().slice(0, 100) || user.name,
+          messages: cleanMessages,
+        }));
+        return NextResponse.json(serializeBook({ ...saved, status: "generating" }));
+      }
+      return NextResponse.json(serializeBook(saved));
     }
 
-    const limit = SUBSCRIPTION_PLANS[user.plan].teacherBooksPerMonth;
-    const used = await countTeacherBooksForPeriod(user.id, monthStart());
-    if (used >= limit) {
-      return NextResponse.json({ error: `Your ${user.plan} plan includes ${limit} teacher books per month.`, code: "BOOK_LIMIT_REACHED", usage: { used, limit, remaining: 0 } }, { status: 429 });
-    }
+    const storedBooks = await countTeacherBooksForPeriod(user.id, monthStart());
+    await reconcilePlanUsageFloor(user.id, "teacherBooks", storedBooks);
+    const usage = await consumePlanUsage(user.id, "teacherBooks");
+    if (!usage.allowed) return NextResponse.json({ error: `Your ${user.plan} plan includes ${usage.limit} teacher books per month.`, code: "BOOK_LIMIT_REACHED", usage }, { status: 429 });
+    reservedUserId = user.id;
 
     const livePages: TeacherBookPage[] = [
       { type: "cover", content: { title: `${prompt} Learning Book`, subtitle: "Complete live lesson transcript", author: name || user.name } },
@@ -159,8 +196,9 @@ export async function POST(request: NextRequest) {
       status: "generating",
     });
     after(() => enrichBook({ userId: user.id, bookId: pendingId, subject: prompt.trim(), studentName: name?.trim().slice(0, 100) || user.name, messages: cleanMessages }));
-    return NextResponse.json({ id: pendingId, subject: prompt.trim(), title: `${prompt.trim()} Learning Book`, provider: "pending", model: "pending", messages: cleanMessages, pages: livePages, status: "generating", usage: { used: used + 1, limit, remaining: Math.max(0, limit - used - 1) } }, { status: 201 });
+    return NextResponse.json({ id: pendingId, subject: prompt.trim(), title: `${prompt.trim()} Learning Book`, provider: "pending", model: "pending", messages: cleanMessages, pages: livePages, status: "generating", usage }, { status: 201 });
   } catch (error) {
+    if (reservedUserId) await refundPlanUsage(reservedUserId, "teacherBooks");
     console.error("Teacher book generation failed:", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Book generation failed." }, { status: 500 });
   }

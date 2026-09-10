@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { createAIService } from '@/lib/ai';
+import { createMeteredAIService, CreditLimitError } from '@/lib/ai/metered';
 import { requireFinderSubscription } from '@/lib/auth/finder-access';
+import { consumePlanUsage, refundPlanUsage } from '@/modules/users/user.repository';
 import {
   buildCodingAssistantPrompt,
   parseCodingAssistantResponse,
@@ -29,8 +30,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Describe what you want to generate' }, { status: 400 });
   }
 
+  const usage = await consumePlanUsage(access.user!.id, 'vscodeQuestions');
+  if (!usage.allowed) {
+    return NextResponse.json({ error: `Your plan includes ${usage.limit} VS Code AI questions per month.`, code: 'VSCODE_LIMIT_REACHED', usage }, { status: 429 });
+  }
+
   try {
-    const aiService = createAIService();
+    const aiService = createMeteredAIService(access.user!.id, { source: 'vscode', feature: 'coding-assistant' });
     const response = await aiService.complete(buildCodingAssistantPrompt(parsed.data), {
       temperature: 0.2,
       maxTokens: 3000,
@@ -44,6 +50,10 @@ export async function POST(request: Request) {
       model: response.model,
     });
   } catch (error) {
+    await refundPlanUsage(access.user!.id, 'vscodeQuestions');
+    if (error instanceof CreditLimitError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : 'Coding assistant failed';
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }

@@ -2,17 +2,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getSessionUserId: vi.fn(),
-  findTasksByUserId: vi.fn(),
+  findTaskByIdForUser: vi.fn(),
   updateTask: vi.fn(),
   chat: vi.fn(),
 }));
 
 vi.mock('@/lib/auth/session', () => ({ getSessionUserId: mocks.getSessionUserId }));
 vi.mock('@/modules/career/career.repository', () => ({
-  findTasksByUserId: mocks.findTasksByUserId,
+  findTaskByIdForUser: mocks.findTaskByIdForUser,
   updateTask: mocks.updateTask,
 }));
-vi.mock('@/lib/ai', () => ({ createAIService: () => ({ chat: mocks.chat }) }));
+vi.mock('@/lib/ai/metered', () => ({
+  createMeteredAIService: () => ({ chat: mocks.chat }),
+  CreditLimitError: class CreditLimitError extends Error { readonly status = 402 },
+}));
 
 import { POST } from './route';
 
@@ -39,7 +42,7 @@ describe('career task preparation detail route', () => {
 
   it('does not expose another users task', async () => {
     mocks.getSessionUserId.mockResolvedValue('user-1');
-    mocks.findTasksByUserId.mockResolvedValue([]);
+    mocks.findTaskByIdForUser.mockResolvedValue(null);
     const response = await POST(new Request('http://localhost'), context('other-task'));
     expect(response.status).toBe(404);
     expect(mocks.chat).not.toHaveBeenCalled();
@@ -47,7 +50,7 @@ describe('career task preparation detail route', () => {
 
   it('generates and stores a structured brief', async () => {
     mocks.getSessionUserId.mockResolvedValue('user-1');
-    mocks.findTasksByUserId.mockResolvedValue([{ id: 'task-1', title: 'React rendering', type: 'coding', duration: 60, result: { existing: true } }]);
+    mocks.findTaskByIdForUser.mockResolvedValue({ id: 'task-1', title: 'React rendering', type: 'coding', duration: 60, result: { existing: true } });
     mocks.chat.mockResolvedValue({ content: JSON.stringify(brief) });
 
     const response = await POST(new Request('http://localhost'), context());
@@ -59,7 +62,7 @@ describe('career task preparation detail route', () => {
 
   it('repairs minor JSON syntax errors from the AI response', async () => {
     mocks.getSessionUserId.mockResolvedValue('user-1');
-    mocks.findTasksByUserId.mockResolvedValue([{ id: 'task-1', title: 'React rendering', type: 'coding', duration: 60 }]);
+    mocks.findTaskByIdForUser.mockResolvedValue({ id: 'task-1', title: 'React rendering', type: 'coding', duration: 60 });
     mocks.chat.mockResolvedValue({ content: `${JSON.stringify(brief).replace(/}$/, ',}')}` });
 
     const response = await POST(new Request('http://localhost'), context());
@@ -70,7 +73,7 @@ describe('career task preparation detail route', () => {
 
   it('trims generated text to the persisted brief limits', async () => {
     mocks.getSessionUserId.mockResolvedValue('user-1');
-    mocks.findTasksByUserId.mockResolvedValue([{ id: 'task-1', title: 'React rendering', type: 'coding', duration: 60 }]);
+    mocks.findTaskByIdForUser.mockResolvedValue({ id: 'task-1', title: 'React rendering', type: 'coding', duration: 60 });
     mocks.chat.mockResolvedValue({ content: JSON.stringify({ ...brief, encouragement: 'a'.repeat(301) }) });
 
     const response = await POST(new Request('http://localhost'), context());
@@ -83,7 +86,7 @@ describe('career task preparation detail route', () => {
 
   it('reuses a cached brief without calling AI', async () => {
     mocks.getSessionUserId.mockResolvedValue('user-1');
-    mocks.findTasksByUserId.mockResolvedValue([{ id: 'task-1', title: 'React rendering', result: { preparationBrief: brief } }]);
+    mocks.findTaskByIdForUser.mockResolvedValue({ id: 'task-1', title: 'React rendering', result: { preparationBrief: brief } });
 
     const response = await POST(new Request('http://localhost'), context());
 

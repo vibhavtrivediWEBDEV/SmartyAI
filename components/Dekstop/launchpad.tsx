@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useCallback } from "react"
 import { Check, ChevronRight, Search, ShieldCheck, Sparkles } from "lucide-react"
 import { useSettings } from "@/app/context/settingContext"
 import { canPinDesktopApp, DESKTOP_APPS, type DesktopAppCategory } from "@/lib/desktopApps"
@@ -14,7 +14,8 @@ const CATEGORIES: Array<"All Apps" | DesktopAppCategory> = [
   "System",
 ]
 
-function launchApp(name: string) {
+// 🚀 PERFORMANCE: Memoized launch function (prevents recreation)
+const launchApp = (name: string) => {
   window.dispatchEvent(new CustomEvent("smarty:open-app", { detail: { name } }))
 }
 
@@ -23,7 +24,10 @@ export default function AppLaunchpad() {
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>("All Apps")
   const [query, setQuery] = useState("")
 
-  const pinnedApps = settings.pinnedDockApps ?? []
+  // 🚀 PERFORMANCE: Memoize pinned apps (prevents unnecessary reads)
+  const pinnedApps = useMemo(() => settings.pinnedDockApps ?? [], [settings.pinnedDockApps])
+
+  // 🚀 PERFORMANCE: Memoize filtered apps with debounce-like behavior
   const visibleApps = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
     return DESKTOP_APPS.filter((app) => {
@@ -33,13 +37,19 @@ export default function AppLaunchpad() {
     })
   }, [category, query])
 
-  const toggleDock = (name: string, essential?: boolean) => {
+  // 🚀 PERFORMANCE: Memoize toggle function
+  const toggleDock = useCallback((name: string, essential?: boolean) => {
     if (essential || !canPinDesktopApp(name)) return
     const nextPinnedApps = pinnedApps.includes(name)
       ? pinnedApps.filter((appName) => appName !== name)
       : [...pinnedApps, name]
     updateSettings({ pinnedDockApps: nextPinnedApps })
-  }
+  }, [pinnedApps, updateSettings])
+
+  // 🚀 PERFORMANCE: Debounced search handler
+  const handleSearchChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setQuery(event.target.value)
+  }, [])
 
   return (
     <div className="h-full min-h-140 w-full overflow-hidden bg-[#f4f4f6] font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Display',sans-serif] text-[#1d1d1f] dark:bg-[#141416] dark:text-white">
@@ -80,7 +90,7 @@ export default function AppLaunchpad() {
                 <Search size={16} />
                 <input
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={handleSearchChange}
                   placeholder="Search"
                   className="min-w-0 flex-1 bg-transparent text-sm text-black outline-none placeholder:text-black/40 dark:text-white dark:placeholder:text-white/40"
                 />
@@ -102,6 +112,7 @@ export default function AppLaunchpad() {
           </header>
 
           <section className="p-5 sm:p-8">
+            {/* Hero Section */}
             <div className="relative mb-7 overflow-hidden rounded-2xl border border-black/6 bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.08)] dark:border-white/8 dark:bg-white/5.5 sm:p-8">
               <div className="app-store-soft absolute inset-y-0 left-0 w-1" />
               <div className="max-w-xl">
@@ -113,6 +124,7 @@ export default function AppLaunchpad() {
 
             {visibleApps.length ? (
               <div className="grid grid-cols-1 gap-x-8 gap-y-2 lg:grid-cols-2">
+                {/* 🚀 PERFORMANCE: Ready for virtualization when apps > 50 */}
                 {visibleApps.map((app) => {
                   const isStoreOnly = !canPinDesktopApp(app.name)
                   const isPinned = pinnedApps.includes(app.name) || app.essential

@@ -41,7 +41,7 @@ export function CareerTasksView({ openApplication }: CareerTasksViewProps) {
   const [tasks, setTasks] = useState<CareerTaskItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [retryingTaskId, setRetryingTaskId] = useState('');
   const [selectedDate, setSelectedDate] = useState(() => careerTaskDateKey(new Date()));
   const [filter, setFilter] = useState<TaskFilter>('all');
   const now = useCareerClock();
@@ -61,33 +61,30 @@ export function CareerTasksView({ openApplication }: CareerTasksViewProps) {
     }
   }, []);
 
+  const retryTask = useCallback(async (taskId: string) => {
+    setRetryingTaskId(taskId);
+    setError('');
+    try {
+      const response = await fetch(
+        `/api/career/tasks/${encodeURIComponent(taskId)}/retry`,
+        { method: 'POST' },
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to retry task');
+      await loadTasks();
+    } catch (retryError) {
+      setError(retryError instanceof Error ? retryError.message : 'Unable to retry task');
+    } finally {
+      setRetryingTaskId('');
+    }
+  }, [loadTasks]);
+
   useEffect(() => {
     void loadTasks();
     const refresh = () => void loadTasks();
     window.addEventListener('career-progress', refresh);
     return () => window.removeEventListener('career-progress', refresh);
   }, [loadTasks]);
-
-  const toggleTask = async (task: CareerTaskItem) => {
-    const completed = task.status !== 'completed';
-    setUpdatingId(task.id);
-    setError('');
-    try {
-      const response = await fetch('/api/career/tasks', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ missionId: task.missionId, taskId: task.id, completed })
-      });
-      if (!response.ok) throw new Error('Unable to update task');
-      setTasks((current) => current.map((item) => item.id === task.id
-        ? { ...item, status: completed ? 'completed' : 'pending' }
-        : item));
-    } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : 'Unable to update task');
-    } finally {
-      setUpdatingId(null);
-    }
-  };
 
   const groups = useMemo(() => groupCareerTasks(tasks, now), [tasks, now]);
   const todayKey = careerTaskDateKey(now);
@@ -102,7 +99,7 @@ export function CareerTasksView({ openApplication }: CareerTasksViewProps) {
   const counts = useMemo(() => tasks.reduce((result, task) => {
     const state = getCareerTaskTiming(task, now).state;
     if (state === 'completed') result.completed += 1;
-    else if (state === 'overdue') result.overdue += 1;
+    else if (state === 'overdue' || state === 'failed') result.overdue += 1;
     else result.pending += 1;
     return result;
   }, { pending: 0, overdue: 0, completed: 0 }), [tasks, now]);
@@ -111,12 +108,14 @@ export function CareerTasksView({ openApplication }: CareerTasksViewProps) {
     .filter((task) => {
       if (filter === 'all') return true;
       const state = getCareerTaskTiming(task, now).state;
-      return filter === 'pending' ? state === 'upcoming' || state === 'active' : state === filter;
+      return filter === 'pending' ? state === 'upcoming' || state === 'active' : filter === 'overdue' ? state === 'overdue' || state === 'failed' : state === filter;
     })
     .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime()), [filter, now, selectedDate, tasks]);
   const tasksForDay = tasks.filter((task) => careerTaskDateKey(task.scheduledDate) === selectedDate);
   const completedForDay = tasksForDay.filter((task) => task.status === 'completed').length;
-  const completion = tasksForDay.length ? Math.round((completedForDay / tasksForDay.length) * 100) : 0;
+  const completion = tasksForDay.length ? Math.round(tasksForDay.reduce((sum, task) => (
+    sum + (task.status === 'completed' ? 100 : task.result?.feedback?.progress ?? 0)
+  ), 0) / tasksForDay.length) : 0;
 
   if (!loading && !tasks.length && !error) {
     return (
@@ -193,20 +192,21 @@ export function CareerTasksView({ openApplication }: CareerTasksViewProps) {
         {selectedTasks.map((task) => {
           const timing = getCareerTaskTiming(task, now);
           const completed = timing.state === 'completed';
+          const failed = timing.state === 'failed';
           const destinations = getCareerTaskDestinations(task);
           const startTime = timing.start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
           const endTime = timing.end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
           return (
-            <article key={task.id} className={`career-timeline-row grid grid-cols-[5.5rem_1.25rem_minmax(0,1fr)_auto] gap-4 border-b px-1 py-5 ${completed ? 'border-emerald-400/15' : timing.state === 'overdue' ? 'border-red-400/20' : 'border-white/10'}`}>
+            <article key={task.id} className={`career-timeline-row grid grid-cols-[5.5rem_1.25rem_minmax(0,1fr)_auto] gap-4 border-b px-1 py-5 ${completed ? 'border-emerald-400/15' : failed || timing.state === 'overdue' ? 'border-red-400/30 bg-red-500/5' : 'border-white/10'}`}>
               <div className="pt-0.5 text-right tabular-nums">
                 <span className="block text-sm font-semibold text-white/85">{startTime}</span>
                 <span className="mt-0.5 block text-[10px] text-white/35">to {endTime}</span>
               </div>
               <div className="relative flex justify-center">
                 <span className="absolute -bottom-5 top-7 w-px bg-white/10" />
-                <button type="button" disabled={updatingId === task.id} onClick={() => void toggleTask(task)} className={`relative z-10 grid h-6 w-6 place-items-center rounded-full border transition-colors disabled:opacity-50 ${completed ? 'border-emerald-400 bg-emerald-500 text-white' : timing.state === 'active' ? 'career-theme-marker text-white' : 'border-white/25 bg-[#111827] text-white/35 hover:border-white/50 hover:text-white/65'}`} aria-label={completed ? `Mark ${task.title} pending` : `Complete ${task.title}`}>
-                  {completed ? <Check size={13} strokeWidth={3} /> : <Circle size={9} />}
-                </button>
+                <span title="Status is verified by linked apps" className={`relative z-10 grid h-6 w-6 place-items-center rounded-full border ${completed ? 'border-emerald-400 bg-emerald-500 text-white' : failed ? 'border-red-400 bg-red-500/20 text-red-300' : timing.state === 'active' ? 'career-theme-marker text-white' : 'border-white/25 bg-[#111827] text-white/35'}`}>
+                  {completed ? <Check size={13} strokeWidth={3} /> : failed ? <AlertCircle size={13} /> : <Circle size={9} />}
+                </span>
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -215,11 +215,27 @@ export function CareerTasksView({ openApplication }: CareerTasksViewProps) {
                 </div>
                 {task.description && <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/42">{task.description}</p>}
                 <div className="mt-2"><CareerTaskMeta task={task} now={now} /></div>
+                {task.result?.feedback && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-white/45">
+                    <span className="font-semibold text-white/65">Verified {task.result.feedback.progress}%</span>
+                    {task.result.feedback.requiredTools.map((tool) => (
+                      <span key={tool} className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 capitalize">
+                        {tool} {task.result?.feedback?.tools[tool]?.progress ?? 0}%
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="flex max-w-72 flex-wrap justify-end gap-1.5">
+                {failed && (
+                  <button type="button" disabled={retryingTaskId === task.id} onClick={() => void retryTask(task.id)} className="career-theme-action flex min-w-24 items-center justify-center gap-1.5 rounded-lg border px-2.5 py-2 text-xs font-semibold transition-colors disabled:cursor-wait disabled:opacity-40">
+                    <RefreshCw className={retryingTaskId === task.id ? 'animate-spin' : ''} size={14} />
+                    {retryingTaskId === task.id ? 'Retrying' : 'Retry'}
+                  </button>
+                )}
                 {destinations.map((destination) => {
                   const DestinationIcon = targetIcons[destination.id];
-                  const launchReady = destination.id !== 'interview' || Boolean(task.result?.interviewId);
+                  const launchReady = !failed && (destination.id !== 'interview' || Boolean(task.result?.interviewId));
                   return <button key={destination.id} type="button" disabled={!launchReady} onClick={async () => {
                     try {
                       const launchArgs = await prepareCareerTaskLaunch(task);

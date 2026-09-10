@@ -1,5 +1,7 @@
 import { Metadata } from "next";
+import { redirect } from "next/navigation";
 import DesktopClientLayout from "./LockScreenClient";
+import { isAuthenticated } from "@/lib/actions/auth.action";
 
 export const metadata: Metadata = {
   title: "VibhavMacOS - Desktop",
@@ -13,10 +15,9 @@ export default async function DesktopLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Auth check temporarily disabled for testing map functionality
-  // if (!(await isAuthenticated())) {
-  //   redirect("/sign-in?redirect=/desktop");
-  // }
+  if (!(await isAuthenticated())) {
+    redirect("/sign-in?redirect=/desktop");
+  }
 
   return (
     <DesktopClientLayout>

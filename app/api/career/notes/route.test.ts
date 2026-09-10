@@ -21,7 +21,7 @@ describe('Career notes route', () => {
   it('rejects unauthenticated reads', async () => {
     mocks.getSessionUserId.mockResolvedValue(null);
 
-    const response = await GET();
+    const response = await GET(new Request('http://localhost/api/career/notes'));
 
     expect(response.status).toBe(401);
     expect(mocks.findNotesByUserId).not.toHaveBeenCalled();
@@ -38,11 +38,16 @@ describe('Career notes route', () => {
       missionId: '507f1f77bcf86cd799439013'
     }]);
 
-    const response = await GET();
+    const response = await GET(new Request('http://localhost/api/career/notes'));
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(mocks.findNotesByUserId).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
+    expect(mocks.findNotesByUserId).toHaveBeenCalledWith('507f1f77bcf86cd799439011', {
+      start: undefined,
+      end: undefined,
+      query: undefined,
+      limit: undefined,
+    });
     expect(body.notes[0]).toMatchObject({
       id: '507f1f77bcf86cd799439012',
       subject: 'Google React preparation',

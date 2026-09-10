@@ -5,6 +5,7 @@ import { MongoServerError, ObjectId, type Db } from "mongodb";
 import { getDatabase } from "@/lib/db/mongodb";
 import { syncCareerDailyTeacherBooks, syncCareerTasksToFinder } from "./careerProjections";
 import { emitCareerLaunch, emitCareerReminder, type CareerLaunchEvent } from "./careerEvents";
+import { calculateCareerFeedback } from "./feedbackAgent";
 import { serverMailService, type ServerMailMessage, type ServerMailResult } from "../mail/serverMailService";
 
 const TEN_MINUTES_MS = 10 * 60 * 1000;
@@ -30,6 +31,7 @@ export interface LaunchCandidate extends Omit<CareerLaunchEvent, "timestamp" | "
 }
 
 export interface CareerAutomationRepository {
+  failExpiredTasks(now: Date): Promise<number>;
   listReminderCandidates(now: Date): Promise<ReminderCandidate[]>;
   listLaunchCandidates(now: Date): Promise<LaunchCandidate[]>;
   claim(candidate: ReminderCandidate, now: Date): Promise<boolean>;
@@ -56,10 +58,11 @@ export interface CareerAutomationResult {
   failed: number;
   launches: number;
   feedbackSynced: number;
+  tasksFailed: number;
 }
 
-function careerBookSessionId(task: any, scheduledAt: Date): string {
-  return `career:${task.missionId.toString()}:${scheduledAt.toISOString().slice(0, 10)}`;
+function careerBookSessionId(task: any): string {
+  return `career-task:${task._id.toString()}`;
 }
 
 export function taskLaunchCandidate(task: any, now: Date): LaunchCandidate | null {
@@ -90,7 +93,7 @@ export function taskLaunchCandidate(task: any, now: Date): LaunchCandidate | nul
     args = { ...args, interviewId: String(interviewId) };
   } else if (hint.includes("book") || hint.includes("read") || hint.includes("review")) {
     appName = "AI Book";
-    args = { ...args, sessionId: String(task.result?.sessionId || careerBookSessionId(task, scheduledAt)), topic: String(task.topic || task.title || "Career preparation") };
+    args = { ...args, sessionId: String(task.result?.sessionId || careerBookSessionId(task)), topic: String(task.topic || task.title || "Career preparation") };
   } else if (task.type === "teacher" || hint.includes("learn") || hint.includes("study") || hint.includes("concept")) {
     appName = "Smarty Teacher";
     args = { ...args, sessionId: String(task.result?.sessionId || `career-task:${taskId}`), topic: String(task.topic || task.title || "Career preparation") };
@@ -126,6 +129,22 @@ export function taskReminderCandidate(task: any, now: Date): ReminderCandidate |
     userId: task.userId.toString(),
     title: task.title || "Career preparation task",
     scheduledAt,
+  };
+}
+
+export function finalizeExpiredTaskFeedback(task: any, now: Date) {
+  const calculated = calculateCareerFeedback(task, []);
+  const current = task.result?.feedback;
+  const progress = Number(current?.progress);
+
+  return {
+    ...calculated,
+    ...(current && typeof current === "object" ? current : {}),
+    progress: Number.isFinite(progress) ? Math.min(100, Math.max(0, Math.round(progress))) : calculated.progress,
+    completed: false,
+    locked: true,
+    outcome: "time_expired" as const,
+    finalizedAt: now.toISOString(),
   };
 }
 
@@ -170,23 +189,33 @@ export async function runCareerAutomation(options: {
   remindersEnabled: boolean;
   now?: Date;
   resolveUserEmail?: (userId: string) => Promise<string | null>;
+  resolveUserPreferences?: (userId: string) => Promise<{ emailReminders: boolean; telegramReminders: boolean } | null>;
   telegramNotifier?: TelegramNotifier;
   launch?: (userId: string, event: Omit<CareerLaunchEvent, "timestamp">) => void;
 }): Promise<CareerAutomationResult> {
   const now = options.now || new Date();
   const resolveUserEmail = options.resolveUserEmail || getUserEmail;
+  const resolveUserPreferences = options.resolveUserPreferences || getUserCareerPreferences;
+  const tasksFailed = await options.repository.failExpiredTasks(now);
   const candidates = await options.repository.listReminderCandidates(now);
-  const result: CareerAutomationResult = { candidates: candidates.length, claimed: 0, sent: 0, skipped: 0, failed: 0, launches: 0, feedbackSynced: 0 };
+  const result: CareerAutomationResult = { candidates: candidates.length, claimed: 0, sent: 0, skipped: 0, failed: 0, launches: 0, feedbackSynced: 0, tasksFailed };
 
   for (const candidate of candidates) {
     if (!await options.repository.claim(candidate, now)) continue;
     result.claimed += 1;
-    if (!options.remindersEnabled && !options.telegramNotifier) {
-      await options.repository.finish(candidate.dedupeKey, { status: "skipped", reason: "reminders_disabled", updatedAt: now });
+
+    // Check user preferences for this candidate
+    const userPreferences = await resolveUserPreferences(candidate.userId);
+    const emailEnabled = userPreferences?.emailReminders ?? false;
+    const telegramEnabled = userPreferences?.telegramReminders ?? false;
+
+    if (!emailEnabled && !telegramEnabled && !options.remindersEnabled) {
+      await options.repository.finish(candidate.dedupeKey, { status: "skipped", reason: "user_preferences_disabled", updatedAt: now });
       result.skipped += 1;
       continue;
     }
-    if (options.remindersEnabled && !options.mailer.isConfigured() && !options.telegramNotifier) {
+
+    if (emailEnabled && !options.mailer.isConfigured()) {
       await options.repository.finish(candidate.dedupeKey, { status: "skipped", reason: "smtp_not_configured", updatedAt: now });
       result.skipped += 1;
       continue;
@@ -196,7 +225,7 @@ export async function runCareerAutomation(options: {
       const message = formatReminder(candidate);
       const channels: Record<string, Record<string, string>> = {};
 
-      if (options.remindersEnabled) {
+      if (emailEnabled) {
         if (!options.mailer.isConfigured()) {
           channels.email = { status: "skipped", reason: "smtp_not_configured" };
         } else {
@@ -214,11 +243,13 @@ export async function runCareerAutomation(options: {
           }
         }
       } else {
-        channels.email = { status: "skipped", reason: "reminders_disabled" };
+        channels.email = { status: "skipped", reason: "email_reminders_disabled" };
       }
 
-      if (options.telegramNotifier) {
+      if (telegramEnabled && options.telegramNotifier) {
         channels.telegram = await options.telegramNotifier.send(candidate.userId, `${message.subject}\n\n${message.body}`);
+      } else if (!telegramEnabled) {
+        channels.telegram = { status: "skipped", reason: "telegram_reminders_disabled" };
       }
 
       const sentChannel = Object.values(channels).find((channel) => channel.status === "sent");
@@ -268,6 +299,20 @@ async function getUserEmail(userId: string): Promise<string | null> {
   return resolveCareerReminderEmail(user);
 }
 
+async function getUserCareerPreferences(userId: string): Promise<{ emailReminders: boolean; telegramReminders: boolean } | null> {
+  if (!ObjectId.isValid(userId)) return null;
+  const db = await getDatabase();
+  const settings = await db.collection("desktopSettings").findOne(
+    { userId: new ObjectId(userId) },
+    { projection: { careerEmailReminders: 1, careerTelegramReminders: 1 } },
+  );
+  if (!settings) return null;
+  return {
+    emailReminders: Boolean(settings.careerEmailReminders),
+    telegramReminders: Boolean(settings.careerTelegramReminders),
+  };
+}
+
 export function resolveCareerReminderEmail(user: any): string | null {
   const candidates = [user?.email, user?.resumeProfile?.email];
   const email = candidates.find((value) => typeof value === "string" && value.includes("@"));
@@ -290,6 +335,31 @@ export function createMongoCareerAutomationRepository(db: Db): CareerAutomationR
   const deliveries = db.collection("career_notification_deliveries");
 
   return {
+    async failExpiredTasks(now) {
+      const tasks = await db.collection("career_tasks").find({
+        status: { $in: ACTIVE_TASK_STATUSES },
+        $expr: {
+          $lt: [
+            { $add: ["$scheduledDate", { $multiply: [{ $ifNull: ["$duration", 60] }, 60_000] }] },
+            now,
+          ],
+        },
+      }).toArray();
+      const results = await Promise.all(tasks.map((task) => db.collection("career_tasks").updateOne(
+        { _id: task._id, status: { $in: ACTIVE_TASK_STATUSES } },
+        {
+          $set: {
+            status: "failed",
+            failedAt: now,
+            error: "Scheduled window expired without verified completion.",
+            "result.feedback": finalizeExpiredTaskFeedback(task, now),
+            updatedAt: now,
+          },
+        },
+      )));
+      return results.reduce((total, result) => total + result.modifiedCount, 0);
+    },
+
     async listReminderCandidates(now) {
       await deliveries.createIndex({ dedupeKey: 1 }, { unique: true, name: "career_notification_dedupe_unique" });
       await deliveries.createIndex({ createdAt: -1 }, { name: "career_notification_created" });
@@ -386,6 +456,7 @@ export async function runCareerAutomationFromEnvironment(now = new Date()): Prom
     mailer: serverMailService,
     remindersEnabled: process.env.CAREER_EMAIL_REMINDERS_ENABLED === "true",
     telegramNotifier: { send: sendTelegramReminder },
+    resolveUserPreferences: getUserCareerPreferences,
     now,
   });
 }

@@ -1,5 +1,5 @@
 import { Toaster } from "sonner";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Mona_Sans } from "next/font/google";
 import ErrorSoundHandler from "./components/ErrorSoundHandler";
 
@@ -13,6 +13,12 @@ const monaSans = Mona_Sans({
   variable: "--font-mona-sans",
   subsets: ["latin"],
 });
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(getSiteUrl()),

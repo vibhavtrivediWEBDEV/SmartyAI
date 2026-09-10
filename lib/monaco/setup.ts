@@ -4,12 +4,29 @@
  */
 
 import { loader } from "@monaco-editor/react";
+import { parse } from "@babel/parser";
+import traverse from "@babel/traverse";
+import MonacoJSXHighlighter, { makeBabelParse } from "monaco-jsx-highlighter";
+
+const configuredMonacoInstances = new WeakSet<object>();
+
+export function attachJSXHighlighter(monaco: any, editor: any): () => void {
+  const highlighter = new MonacoJSXHighlighter(
+    monaco,
+    makeBabelParse(parse, true),
+    traverse,
+    editor
+  );
+  return highlighter.highlightOnDidChangeModelContent(100, undefined, () => {}, undefined, () => {});
+}
 
 /**
  * Configure TypeScript/JavaScript for JSX support
  * Note: Called after monaco is loaded
  */
 export function configureJSXSupport(monaco: any) {
+  if (configuredMonacoInstances.has(monaco)) return;
+
   try {
     // Configure TypeScript compiler options for JSX
     monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
@@ -53,8 +70,8 @@ export function configureJSXSupport(monaco: any) {
       
       declare namespace React {
         // React Elements
-        interface ReactElement<P = any> {
-          type: string | ComponentType<P>;
+        interface ReactElement<P = any, T = string | ComponentType<P>> {
+          type: T;
           props: P;
           key: Key | null;
         }
@@ -160,6 +177,16 @@ export function configureJSXSupport(monaco: any) {
       declare type FunctionComponent<P = {}> = React.FunctionComponent<P>;
       declare type ReactElement = React.ReactElement;
       declare type ReactNode = React.ReactNode;
+
+      declare namespace JSX {
+        type Element = React.ReactElement<any, any>;
+        interface ElementClass extends React.Component<any> {
+          render(): React.ReactNode;
+        }
+        interface IntrinsicElements {
+          [elementName: string]: any;
+        }
+      }
     `;
 
     monaco.languages.typescript.typescriptDefaults.addExtraLib(reactDts, "file:///node_modules/@types/react/index.d.ts");
@@ -215,6 +242,7 @@ export function configureJSXSupport(monaco: any) {
       noFallthroughCasesInSwitch: true,
     });
 
+    configuredMonacoInstances.add(monaco);
     console.log("[Monaco] JSX support configured with full React types and semantic highlighting");
   } catch (error) {
     console.error("[Monaco] Failed to configure JSX support:", error);

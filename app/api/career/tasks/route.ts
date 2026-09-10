@@ -2,34 +2,44 @@ import { NextResponse } from 'next/server';
 import { getSessionUserId } from '@/lib/auth/session';
 import {
   findMissionById,
-  findMissionsByUserId,
   findTasksByMission,
-  findTasksByUserId,
-  updateMission,
-  updateTask
+  findTasksByUserId
 } from '@/modules/career/career.repository';
 import { findPlanByMission } from '@/modules/career/career-plan.repository';
 import type { WorkspaceFile } from '@/lib/types/workspace';
-import { emitCareerProgress } from '../../../../lib/career/careerEvents';
 
 async function ownedMission(userId: string, missionId: string) {
   const mission = await findMissionById(missionId);
   return mission?.userId === userId ? mission : null;
 }
 
+function parseDate(value: string | null) {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
 export async function GET(request: Request) {
   const userId = await getSessionUserId();
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const missionId = new URL(request.url).searchParams.get('missionId');
+  const params = new URL(request.url).searchParams;
+  const missionId = params.get('missionId');
   const mission = missionId ? await ownedMission(userId, missionId) : null;
   if (missionId && !mission) return NextResponse.json({ error: 'Mission not found' }, { status: 404 });
 
   const tasks = missionId
     ? await findTasksByMission(missionId)
-    : await findTasksByUserId(userId);
-  const missions = mission ? [mission] : await findMissionsByUserId(userId);
-  const priorityByMission = new Map(missions.map((item) => [item.id, item.priority]));
+    : await findTasksByUserId(userId, {
+        start: parseDate(params.get('start')),
+        end: parseDate(params.get('end')),
+        limit: Number(params.get('limit')) || undefined,
+      });
   const missionIds = Array.from(new Set(tasks.map((task) => task.missionId)));
+  const missions = mission
+    ? [mission]
+    : (await Promise.all(missionIds.map((id) => findMissionById(id))))
+        .filter((item) => item?.userId === userId);
+  const priorityByMission = new Map(missions.map((item) => [item!.id, item!.priority]));
   const plans = await Promise.all(missionIds.map((id) => findPlanByMission(id)));
   const resourcesByMission = new Map(
     missionIds.map((id, index) => [id, plans[index]?.learningResources])
@@ -46,9 +56,9 @@ export async function GET(request: Request) {
       return {
         result: {
           ...task.result,
-          workspaceId: resources?.workspaceId,
-          filePath: files[index]?.path,
-          exerciseIndex: index,
+          workspaceId: task.result?.workspaceId ?? resources?.workspaceId,
+          filePath: task.result?.filePath ?? files[index]?.path,
+          exerciseIndex: task.result?.exerciseIndex ?? index,
         },
       };
     })() : {}),
@@ -62,28 +72,16 @@ export async function PATCH(request: Request) {
   const userId = await getSessionUserId();
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const body = await request.json().catch(() => null);
-  const { missionId, taskId, completed } = body || {};
-  if (!missionId || !taskId || typeof completed !== 'boolean') {
-    return NextResponse.json({ error: 'Mission ID, task ID, and completed state are required' }, { status: 400 });
+  const { missionId, taskId } = body || {};
+  if (!missionId || !taskId) {
+    return NextResponse.json({ error: 'Mission ID and task ID are required' }, { status: 400 });
   }
   if (!await ownedMission(userId, missionId)) return NextResponse.json({ error: 'Mission not found' }, { status: 404 });
 
   const tasks = await findTasksByMission(missionId);
   if (!tasks.some((task) => task.id === taskId)) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
-  await updateTask(taskId, {
-    status: completed ? 'completed' : 'pending',
-    completedAt: completed ? new Date() : null
-  });
-
-  const updatedTasks = await findTasksByMission(missionId);
-  const completedCount = updatedTasks.filter((task) => task.status === 'completed').length;
-  const progress = updatedTasks.length > 0 ? Math.round((completedCount / updatedTasks.length) * 100) : 0;
-  await updateMission(missionId, {
-    progress,
-    status: progress === 100 ? 'COMPLETED' : 'READY',
-    completedAt: progress === 100 ? new Date() : null
-  });
-  emitCareerProgress(userId, { missionId, reason: 'task', progress });
-
-  return NextResponse.json({ tasks: updatedTasks, progress, completed: completedCount, total: updatedTasks.length });
+  return NextResponse.json({
+    error: 'Career task status is read-only. Complete the required work inside its linked apps.',
+    code: 'VERIFIED_FEEDBACK_REQUIRED',
+  }, { status: 409 });
 }

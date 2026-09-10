@@ -1,12 +1,35 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import type { UserAIContext } from '@/lib/ai/userAIContext';
 import type { PlanStep } from '@/lib/career/types';
 import { playById } from '@/lib/sound';
 import { BriefcaseBusiness, Check, Clock3, LoaderCircle, LockKeyhole, Sparkles } from 'lucide-react';
-import { CareerProgressCard } from '../Desktop/CareerProgressCard';
-import { CareerTasksView } from '../Desktop/CareerTasksView';
+import { CareerOnboardingVoice, type CareerVoiceFormData } from './CareerOnboardingVoice';
+import {
+  saveDraftToSession,
+  loadDraftFromSession,
+  clearDraftFromSession,
+  measurePerformance,
+  dedupeRequest
+} from '@/lib/career/performance';
+
+// 🚀 PERFORMANCE: Lazy load heavy components
+const CareerProgressCard = dynamic(() => import('../Desktop/CareerProgressCard').then(m => ({ default: m.CareerProgressCard })), {
+  ssr: false,
+  loading: () => <div className="animate-pulse bg-white/5 rounded-xl h-48" />
+});
+
+const CareerTasksView = dynamic(() => import('../Desktop/CareerTasksView').then(m => ({ default: m.CareerTasksView })), {
+  ssr: false,
+  loading: () => <div className="animate-pulse bg-white/5 rounded-xl h-64" />
+});
+
+const CareerFeedbackView = dynamic(() => import('../Desktop/CareerFeedbackView').then(m => ({ default: m.CareerFeedbackView })), {
+  ssr: false,
+  loading: () => <div className="animate-pulse bg-white/5 rounded-xl h-64" />
+});
 
 interface CareerMission {
   id: string;
@@ -70,15 +93,6 @@ const waitingMessages = [
   'Every completed stage is saved automatically.'
 ];
 
-const careerProgressSounds = [
-  { threshold: 10, soundId: 'eh-eh-ehhhh' },
-  { threshold: 30, soundId: 'tf_nemesis' },
-  { threshold: 60, soundId: 'a-few-moments-later-sponge-bob-sfx-fun' },
-  { threshold: 80, soundId: 'run-vine-sound-effect' },
-  { threshold: 90, soundId: 'abhi-maza-ayagga' },
-  { threshold: 100, soundId: 'anime-wow-sound-effect' }
-] as const;
-
 async function parseApiResponse<T>(response: Response): Promise<T> {
   const body = await response.text();
   let data: any;
@@ -100,17 +114,24 @@ async function parseApiResponse<T>(response: Response): Promise<T> {
 }
 
 export function CareerApp({ openApplication, userContext, userId }: CareerAppProps) {
-  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const playedProgressSoundsRef = useRef<Set<number>>(new Set());
-  const [activeView, setActiveView] = useState<'mission' | 'tasks'>('tasks');
+  const requestCacheRef = useRef<Map<string, Promise<any>>>(new Map());
+
+  const [activeView, setActiveView] = useState<'mission' | 'tasks' | 'feedback'>('tasks');
   const [currentStep, setCurrentStep] = useState<Step>('loading');
-  const [formData, setFormData] = useState({
-    company: '',
-    role: '',
-    jobDescription: '',
-    interviewDays: 7,
-    interviewDate: ''
+  const [formData, setFormData] = useState(() => {
+    // 🚀 PERFORMANCE: Load draft from session storage on mount
+    const draft = loadDraftFromSession();
+    return draft || {
+      company: '',
+      role: '',
+      jobDescription: '',
+      interviewDays: 7,
+      interviewDate: '',
+      enableEmailReminders: false,
+      enableTelegramReminders: false
+    };
   });
+
   const [activeMissions, setActiveMissions] = useState<CareerMission[]>([]);
   const [selectedMission, setSelectedMission] = useState<CareerMission | null>(null);
   const [error, setError] = useState<string>('');
@@ -118,19 +139,23 @@ export function CareerApp({ openApplication, userContext, userId }: CareerAppPro
   const [missionProgress, setMissionProgress] = useState<MissionProgress>(initialMissionProgress);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  const addLog = (message: string) => {
+  // 🚀 PERFORMANCE: Memoized log function
+  const addLog = useCallback((message: string) => {
     const timestamp = new Date().toLocaleTimeString();
     setLogs(prev => [`[${timestamp}] ${message}`, ...prev].slice(0, 50));
-  };
+  }, []);
+
+  // 🚀 PERFORMANCE: Save draft to session storage on change
+  useEffect(() => {
+    if (currentStep !== 'loading' && currentStep !== 'creating') {
+      saveDraftToSession(formData);
+    }
+  }, [formData, currentStep]);
 
   // Load active missions on mount - Run once immediately
   useEffect(() => {
     loadActiveMissions();
   }, []); // Empty array ensures this runs once on mount
-
-  useEffect(() => () => {
-    if (progressTimerRef.current) clearInterval(progressTimerRef.current);
-  }, []);
 
   useEffect(() => {
     if (currentStep !== 'creating') {
@@ -155,18 +180,26 @@ export function CareerApp({ openApplication, userContext, userId }: CareerAppPro
   }, [currentStep]);
 
   const loadActiveMissions = async () => {
+    const perf = measurePerformance('loadActiveMissions');
+
     try {
-      const response = await fetch('/api/career/mission');
+      // 🚀 PERFORMANCE: Dedupe requests to prevent duplicate calls
+      const response = await dedupeRequest(
+        'load-missions',
+        () => fetch('/api/career/mission', { cache: 'no-store' }),
+        requestCacheRef.current
+      );
+
       if (response.ok) {
         const data = await response.json();
         const missions = data.missions || [];
         setActiveMissions(missions);
-        
+
         // If there's an active (non-completed) mission, show progress directly
-        const activeMission = missions.find((m: CareerMission) => 
+        const activeMission = missions.find((m: CareerMission) =>
           m.status !== 'COMPLETED' && m.status !== 'CANCELLED'
         );
-        
+
         if (activeMission) {
           addLog(`✅ Active Mission: ${activeMission.company} - ${activeMission.role}`);
           setSelectedMission(activeMission);
@@ -182,6 +215,8 @@ export function CareerApp({ openApplication, userContext, userId }: CareerAppPro
     } catch (error) {
       addLog('❌ Failed to load missions');
       setCurrentStep('company');
+    } finally {
+      perf.end();
     }
   };
 
@@ -209,8 +244,19 @@ export function CareerApp({ openApplication, userContext, userId }: CareerAppPro
     }
   };
 
+  const handleVoiceComplete = useCallback((voiceData: CareerVoiceFormData) => {
+    const interviewDate = new Date(`${voiceData.interviewDate}T00:00:00`);
+    const interviewDays = Math.max(1, Math.ceil((interviewDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+    setFormData((current: typeof formData) => ({
+      ...current,
+      ...voiceData,
+      interviewDays
+    }));
+    setError('');
+    setCurrentStep('review');
+  }, []);
+
   const handleSubmit = async () => {
-    playedProgressSoundsRef.current.clear();
     void playById('punch-gaming-sound-effect-hd_RzlG1GE').catch(() => {});
     setMissionProgress(initialMissionProgress);
     setCurrentStep('creating');
@@ -237,6 +283,23 @@ export function CareerApp({ openApplication, userContext, userId }: CareerAppPro
       const missionId = result.mission.id;
       addLog(`✅ Mission created: ${missionId.slice(0, 8)}...`);
 
+      // Save notification preferences
+      try {
+        await fetch('/api/settings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            careerEmailReminders: formData.enableEmailReminders,
+            careerTelegramReminders: formData.enableTelegramReminders
+          })
+        });
+        if (formData.enableEmailReminders || formData.enableTelegramReminders) {
+          addLog('✅ Notification preferences saved');
+        }
+      } catch (error) {
+        addLog('⚠️ Could not save notification preferences');
+      }
+
       // Step 2: Execute career plan (create notes, calendar, learning resources)
       addLog('🚀 Starting career plan execution...');
       addLog('📊 Analyzing profile...');
@@ -248,62 +311,11 @@ export function CareerApp({ openApplication, userContext, userId }: CareerAppPro
         activeStepType: 'analyze_profile'
       }));
 
-      const pollProgress = async () => {
-        try {
-          const progressResponse = await fetch(`/api/career/execute/progress?missionId=${missionId}`, {
-            cache: 'no-store'
-          });
-          if (!progressResponse.ok) return;
-
-          const progressResult = await progressResponse.json() as {
-            overallProgress?: number;
-            steps?: PlanStep[];
-          };
-          const steps = progressResult.steps || [];
-          const stepByType = (stepType: PlanStep['stepType']) =>
-            steps.find(step => step.stepType === stepType);
-          const activeStep = steps.find(step => step.status === 'in_progress');
-          const confirmedProgress = progressResult.overallProgress || 0;
-
-          careerProgressSounds.forEach(({ threshold, soundId }) => {
-            if (confirmedProgress >= threshold && !playedProgressSoundsRef.current.has(threshold)) {
-              playedProgressSoundsRef.current.add(threshold);
-              void playById(soundId).catch(() => {});
-            }
-          });
-
-          setMissionProgress(prev => ({
-            extractingProfile: stepByType('analyze_profile')?.status === 'completed',
-            generatingPlan: stepByType('generate_notes')?.status === 'completed',
-            creatingTasks: stepByType('setup_learning')?.status === 'completed',
-            schedulingCalendar: stepByType('schedule_sessions')?.status === 'completed',
-            creatingNotes: stepByType('mock_interview')?.status === 'completed',
-            progress: Math.max(prev.progress, confirmedProgress),
-            confirmedProgress: Math.max(prev.confirmedProgress, confirmedProgress),
-            activeStep: activeStep?.name || (steps.length ? 'Finalizing your preparation workflow' : prev.activeStep),
-            activeStepType: activeStep?.stepType || prev.activeStepType
-          }));
-        } catch {
-          // The execution request remains authoritative; retry transient polling failures.
-        }
-      };
-
-      await pollProgress();
-      if (progressTimerRef.current) clearInterval(progressTimerRef.current);
-      progressTimerRef.current = setInterval(pollProgress, 1000);
-
-      let executeResponse: Response;
-      try {
-        executeResponse = await fetch('/api/career/execute', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ missionId })
-        });
-        await pollProgress();
-      } finally {
-        if (progressTimerRef.current) clearInterval(progressTimerRef.current);
-        progressTimerRef.current = null;
-      }
+      const executeResponse = await fetch('/api/career/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ missionId })
+      });
 
       const executionResult = await parseApiResponse<any>(executeResponse);
       addLog('✅ Career plan execution completed');
@@ -330,6 +342,9 @@ export function CareerApp({ openApplication, userContext, userId }: CareerAppPro
       }));
       addLog('🎉 Career preparation workflow complete!');
 
+      // 🚀 PERFORMANCE: Clear draft after successful creation
+      clearDraftFromSession();
+
       setCurrentStep('success');
       loadActiveMissions();
 
@@ -350,7 +365,18 @@ export function CareerApp({ openApplication, userContext, userId }: CareerAppPro
               <h2 className="text-2xl font-bold text-white">Which company are you interviewing with?</h2>
               <p className="text-gray-400 mt-2">We'll customize your preparation for this company</p>
             </div>
-            
+
+            <CareerOnboardingVoice
+              onComplete={handleVoiceComplete}
+              onError={setError}
+            />
+
+            {error && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
+                {error}
+              </div>
+            )}
+
             <input
               type="text"
               value={formData.company}
@@ -378,7 +404,7 @@ export function CareerApp({ openApplication, userContext, userId }: CareerAppPro
               <h2 className="text-2xl font-bold text-white">What role are you applying for?</h2>
               <p className="text-gray-400 mt-2">This helps us tailor interview prep materials</p>
             </div>
-            
+
             <input
               type="text"
               value={formData.role}
@@ -414,7 +440,7 @@ export function CareerApp({ openApplication, userContext, userId }: CareerAppPro
               <h2 className="text-2xl font-bold text-white">Paste the job description</h2>
               <p className="text-gray-400 mt-2">We'll analyze it to create a customized prep plan</p>
             </div>
-            
+
             <textarea
               value={formData.jobDescription}
               onChange={(e) => setFormData({ ...formData, jobDescription: e.target.value })}
@@ -542,9 +568,9 @@ export function CareerApp({ openApplication, userContext, userId }: CareerAppPro
               <div className="flex justify-between items-center py-3 border-b border-white/10">
                 <span className="text-gray-400">Interview Date</span>
                 <span className="text-white font-bold">
-                  {new Date(formData.interviewDate).toLocaleDateString('en-US', { 
+                  {new Date(formData.interviewDate).toLocaleDateString('en-US', {
                     weekday: 'short',
-                    month: 'short', 
+                    month: 'short',
                     day: 'numeric',
                     year: 'numeric'
                   })}
@@ -564,6 +590,39 @@ export function CareerApp({ openApplication, userContext, userId }: CareerAppPro
                   </p>
                 </div>
               )}
+            </div>
+
+            <div className="career-app-panel border rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">📢 Notification Preferences</h3>
+              <p className="text-gray-400 text-sm mb-4">Get reminders for your career preparation tasks and interviews</p>
+
+              <div className="space-y-3">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.enableEmailReminders}
+                    onChange={(e) => setFormData({ ...formData, enableEmailReminders: e.target.checked })}
+                    className="w-5 h-5 rounded bg-white/10 border-white/30 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+                  />
+                  <div>
+                    <span className="text-white font-medium">Email Reminders</span>
+                    <p className="text-gray-400 text-xs">Receive task reminders via email</p>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.enableTelegramReminders}
+                    onChange={(e) => setFormData({ ...formData, enableTelegramReminders: e.target.checked })}
+                    className="w-5 h-5 rounded bg-white/10 border-white/30 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+                  />
+                  <div>
+                    <span className="text-white font-medium">Telegram Notifications</span>
+                    <p className="text-gray-400 text-xs">Get reminders through Telegram (requires connection in Settings)</p>
+                  </div>
+                </label>
+              </div>
             </div>
 
             {error && (
@@ -669,7 +728,7 @@ export function CareerApp({ openApplication, userContext, userId }: CareerAppPro
               <h2 className="text-2xl font-bold text-white">Loading your career data...</h2>
               <p className="text-gray-400 mt-2">Checking for active missions</p>
             </div>
-            
+
             {logs.length > 0 && (
               <div className="bg-black/30 rounded-lg p-4">
                 {logs.map((log, i) => (
@@ -689,7 +748,7 @@ export function CareerApp({ openApplication, userContext, userId }: CareerAppPro
             <div className="flex-1 overflow-y-auto -mx-2 px-2">
               {selectedMission && (
                 <>
-                  <CareerProgressCard 
+                  <CareerProgressCard
                     missionId={selectedMission.id}
                     openApplication={openApplication}
                     missionData={{
@@ -751,7 +810,7 @@ export function CareerApp({ openApplication, userContext, userId }: CareerAppPro
 
             {/* Real Progress Card */}
             {selectedMission && (
-              <CareerProgressCard 
+              <CareerProgressCard
                 missionId={selectedMission.id}
                 openApplication={openApplication}
                 missionData={{
@@ -765,7 +824,7 @@ export function CareerApp({ openApplication, userContext, userId }: CareerAppPro
 
             {/* Show progress from first mission if none selected */}
             {!selectedMission && activeMissions.length > 0 && (
-              <CareerProgressCard 
+              <CareerProgressCard
                 missionId={activeMissions[0].id}
                 openApplication={openApplication}
                 missionData={{
@@ -813,90 +872,31 @@ export function CareerApp({ openApplication, userContext, userId }: CareerAppPro
   return (
     <div className="h-full bg-[#101012] rounded-2xl overflow-hidden flex flex-col">
       {/* Header - Fixed */}
-      <div className="flex-shrink-0 border-b border-white/10 bg-black/30 px-6 py-4 backdrop-blur-xl">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+      <div className="flex-shrink-0 border-b border-white/10 bg-black/30 px-4 py-4 backdrop-blur-xl sm:px-6">
+        <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-xl">
             🎯
           </div>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-white font-bold text-lg">Career Agent</h1>
-            <p className="text-white/70 text-sm">AI-Powered Interview Preparation</p>
+            <p className="truncate text-sm text-white/70">AI-Powered Interview Preparation</p>
           </div>
           </div>
-          <div className="flex rounded-lg bg-white/[0.07] p-1 text-xs font-medium">
-            <button onClick={() => setActiveView('mission')} className={`rounded-md px-3 py-1.5 transition-colors ${activeView === 'mission' ? 'career-app-active text-white shadow-sm' : 'text-white/45 hover:text-white/75'}`}>Mission</button>
-            <button onClick={() => setActiveView('tasks')} className={`rounded-md px-3 py-1.5 transition-colors ${activeView === 'tasks' ? 'career-app-active text-white shadow-sm' : 'text-white/45 hover:text-white/75'}`}>Career Tasks</button>
+          <div className="grid w-full grid-cols-3 rounded-lg bg-white/[0.07] p-1 text-xs font-medium sm:flex sm:w-auto">
+            <button onClick={() => setActiveView('mission')} className={`rounded-md px-2 py-1.5 transition-colors sm:px-3 ${activeView === 'mission' ? 'career-app-active text-white shadow-sm' : 'text-white/45 hover:text-white/75'}`}>Mission</button>
+            <button onClick={() => setActiveView('tasks')} className={`rounded-md px-2 py-1.5 transition-colors sm:px-3 ${activeView === 'tasks' ? 'career-app-active text-white shadow-sm' : 'text-white/45 hover:text-white/75'}`}>Career Tasks</button>
+            <button onClick={() => setActiveView('feedback')} className={`rounded-md px-2 py-1.5 transition-colors sm:px-3 ${activeView === 'feedback' ? 'career-app-active text-white shadow-sm' : 'text-white/45 hover:text-white/75'}`}>Feedback</button>
           </div>
         </div>
       </div>
 
       {/* Main Content - Scrollable */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden">
-        <div className={`mx-auto p-8 ${activeView === 'tasks' || currentStep === 'progress' || currentStep === 'success' ? 'w-full max-w-7xl' : 'max-w-2xl'}`}>
-          {activeView === 'tasks' ? <CareerTasksView openApplication={openApplication} /> : renderStep()}
+        <div className={`mx-auto p-4 sm:p-8 ${activeView !== 'mission' || currentStep === 'progress' || currentStep === 'success' ? 'w-full max-w-7xl' : 'max-w-2xl'}`}>
+          {activeView === 'tasks' ? <CareerTasksView openApplication={openApplication} /> : activeView === 'feedback' ? <CareerFeedbackView /> : renderStep()}
         </div>
       </div>
-
-      {/* Active Missions Sidebar */}
-      {activeView === 'mission' && currentStep !== 'progress' && currentStep !== 'success' && activeMissions.length > 0 && (
-        <div className="absolute top-20 right-0 bottom-0 w-80 bg-black/50 backdrop-blur-sm border-l border-white/10 overflow-y-auto">
-          <div className="p-4">
-            <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-              <span>📊</span>
-              Active Missions ({activeMissions.length})
-            </h3>
-            
-            <div className="space-y-3">
-              {activeMissions.map((mission) => (
-                <div
-                  key={mission.id}
-                  onClick={() => setSelectedMission(mission)}
-                  className={`p-4 rounded-lg cursor-pointer transition-all ${
-                    selectedMission?.id === mission.id
-                      ? 'career-app-selected border'
-                      : 'bg-white/5 hover:bg-white/10'
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <div className="text-white font-bold">{mission.company}</div>
-                      <div className="text-gray-400 text-sm">{mission.role}</div>
-                    </div>
-                    <div className={`px-2 py-1 rounded text-xs font-bold ${
-                      mission.status === 'CREATED' ? 'bg-green-500/20 text-green-400' :
-                      mission.status === 'EXECUTING' ? 'career-app-selected' :
-                      'bg-gray-500/20 text-gray-400'
-                    }`}>
-                      {mission.status}
-                    </div>
-                  </div>
-                  
-                  <div className="mt-3 pt-3 border-t border-white/10">
-                    <div className="flex justify-between text-xs text-gray-400 mb-2">
-                      <span>Progress</span>
-                      <span>{mission.progress}%</span>
-                    </div>
-                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full"
-                        style={{ width: `${mission.progress}%`, background: 'var(--theme-primary-color)' }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex justify-between items-center text-xs text-gray-400">
-                    <span>📅 {new Date(mission.interviewDate).toLocaleDateString()}</span>
-                    <span>
-                      {Math.ceil((new Date(mission.interviewDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))} days left
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Mission Log Panel */}
       {activeView === 'mission' && logs.length > 0 && currentStep !== 'creating' && (

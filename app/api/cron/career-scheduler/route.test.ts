@@ -14,6 +14,7 @@ describe("career scheduler cron route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.CAREER_CRON_SECRET;
+    delete process.env.CRON_SECRET;
   });
 
   it("rejects an unauthenticated request", async () => {
@@ -60,5 +61,17 @@ describe("career scheduler cron route", () => {
     expect(overlappingRun.status).toBe(409);
     finishRun();
     await firstRun;
+  });
+
+  it("runs from an authenticated Vercel cron GET request", async () => {
+    process.env.CRON_SECRET = "vercel-cron-secret";
+    mocks.runCareerAutomationFromEnvironment.mockResolvedValue({ tasksFailed: 2 });
+
+    const response = await GET(new Request("http://localhost/api/cron/career-scheduler", {
+      headers: { authorization: "Bearer vercel-cron-secret" },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ success: true, result: { tasksFailed: 2 } });
   });
 });

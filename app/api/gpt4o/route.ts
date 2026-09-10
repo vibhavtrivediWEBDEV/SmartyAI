@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAIService } from '@/lib/ai'
+import { createMeteredAIService, CreditLimitError } from '@/lib/ai/metered'
+import { getSessionUserId } from '@/lib/auth/session'
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getSessionUserId()
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const { messages, subject, grade, chapter, exercise, questionNumber, exactQuestion } = await request.json()
 
     // Validate required parameters
@@ -14,7 +17,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create AI service (auto-detects provider from env)
-    const aiService = createAIService()
+    const aiService = createMeteredAIService(userId, { source: 'teacher', feature: 'legacy-ncert' })
 
     // Create system message with context about NCERT
     const systemMessage = {
@@ -53,6 +56,9 @@ export async function POST(request: NextRequest) {
     })
     
   } catch (error: any) {
+    if (error instanceof CreditLimitError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error('Error getting AI response:', error)
     return NextResponse.json(
       { error: error.message || 'Failed to get response from AI' },

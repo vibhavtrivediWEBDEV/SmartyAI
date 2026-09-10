@@ -78,6 +78,21 @@ describe('runWorkspace', () => {
     }]);
   });
 
+  it('transforms TypeScript before executing the React preview', async () => {
+    bundleReact.mockResolvedValue({
+      code: 'function App(): React.ReactElement { const values = new Map<number, number>(); return <p>{values.size}</p>; }',
+    });
+
+    const result = await runWorkspace(
+      [{ path: 'src/App.tsx', content: '', language: 'typescript' }],
+      settings('react-ts', 'src/App.tsx')
+    );
+
+    expect(result.preview).toContain("Babel.transform(source");
+    expect(result.preview).toContain("presets: ['typescript', 'react']");
+    expect(result.preview).not.toContain('type="text/babel"');
+  });
+
   it('validates SQL playground statements', async () => {
     const result = await runWorkspace(
       [{ path: 'query.sql', content: 'SELECT * FROM users;', language: 'sql' }],

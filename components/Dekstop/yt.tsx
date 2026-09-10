@@ -31,7 +31,6 @@ import React, {
   type ReactElement,
   useState,
   useEffect,
-  useMemo,
   useCallback,
   useRef,
 } from "react";
@@ -48,8 +47,8 @@ import {
 import {
   buildLearningVideoQuery,
   extractLearningTopic,
-  isVideoTitleRelevant,
 } from "@/lib/youtubeLearningSearch";
+import PublishArtifactButton from "../Desktop/PublishArtifactButton";
 
 /* =============================================================================
  * YouTubeApple.tsx
@@ -70,6 +69,9 @@ const searchUrl = (q: string) =>
 
 const detailsUrl = (ids: string[]) =>
   `https://youtube.googleapis.com/youtube/v3/videos?part=snippet%2CcontentDetails%2Cstatistics&id=${ids.join(",")}&key=${YT_API_KEY}`;
+
+const exploreUrl =
+  `https://youtube.googleapis.com/youtube/v3/videos?part=snippet%2CcontentDetails%2Cstatistics&chart=mostPopular&maxResults=12&regionCode=IN&key=${YT_API_KEY}`;
 
 /* -----------------------------------------------------------------------
  * 1. Types
@@ -119,8 +121,17 @@ type NormalizedVideo = {
   views?: string;
 };
 
-type CareerResource = { title: string; searchQuery: string; url: string };
-type CareerPlaylist = { missionId: string; title: string; youtubeResources: CareerResource[] };
+type CareerPlaylistResource = {
+  title: string;
+  searchQuery?: string;
+  url?: string;
+};
+
+type CareerPlaylist = {
+  missionId: string;
+  title: string;
+  youtubeResources: CareerPlaylistResource[];
+};
 
 /* -----------------------------------------------------------------------
  * 2. Helpers
@@ -220,17 +231,21 @@ export default function YouTubeApple({
   const [searchResults, setSearchResults] = useState<NormalizedVideo[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [careerPlaylists, setCareerPlaylists] = useState<CareerPlaylist[]>([]);
-  const [careerTasks, setCareerTasks] = useState<CareerTaskItem[]>([]);
+  const [exploreVideos, setExploreVideos] = useState<NormalizedVideo[]>([]);
+  const [exploreLoading, setExploreLoading] = useState(true);
+  const [exploreError, setExploreError] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<CareerTaskItem | null>(null);
   const [lockedTopic, setLockedTopic] = useState("");
   const [selectedVideo, setSelectedVideo] = useState<NormalizedVideo | null>(null);
+  const [careerPlaylists, setCareerPlaylists] = useState<CareerPlaylist[]>([]);
+  const [activeMissionId, setActiveMissionId] = useState(initialCareerTask?.missionId ?? "");
+  const [playlistsLoading, setPlaylistsLoading] = useState(true);
   const requestId = useRef(0);
   const initializedTopic = useRef(false);
   const shouldAutoplay = useRef(autoplayFirst);
 
-  const runSearch = useCallback(async (q: string) => {
-    const topic = extractLearningTopic(q);
+  const runSearch = useCallback(async (q: string, careerFocused = false) => {
+    const topic = careerFocused ? extractLearningTopic(q) : q.trim();
     if (!topic) return;
     const myId = ++requestId.current;
     setSearchQuery(topic);
@@ -238,7 +253,7 @@ export default function YouTubeApple({
     setSearchLoading(true);
     setSearchError(null);
     try {
-      const res = await fetch(searchUrl(buildLearningVideoQuery(topic)));
+      const res = await fetch(searchUrl(careerFocused ? buildLearningVideoQuery(topic) : topic));
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         throw new Error(body?.error?.message ?? `Request failed (${res.status})`);
@@ -263,9 +278,7 @@ export default function YouTubeApple({
       );
       const videos = ids
         .map((id) => videosById.get(id))
-        .filter((video): video is HomeVideo =>
-          Boolean(video && isVideoTitleRelevant(topic, video.snippet.title))
-        );
+        .filter((video): video is HomeVideo => Boolean(video));
       const normalizedVideos = normalizeHome(videos);
       setSearchResults(normalizedVideos);
       if (shouldAutoplay.current && normalizedVideos[0]) {
@@ -280,61 +293,83 @@ export default function YouTubeApple({
     }
   }, []);
 
-  const loadCareerResources = useCallback(() => {
-    return Promise.all([fetch('/api/career/resources'), fetch('/api/career/tasks')])
-      .then(async ([resourcesResponse, tasksResponse]) => {
-        if (!resourcesResponse.ok || !tasksResponse.ok) {
-          throw new Error('Career learning schedule unavailable');
-        }
-        const [{ playlists }, { tasks }] = await Promise.all([
-          resourcesResponse.json(),
-          tasksResponse.json(),
-        ]);
-        setCareerPlaylists(Array.isArray(playlists) ? playlists : []);
-        setCareerTasks(Array.isArray(tasks) ? tasks : []);
-      })
-      .catch(() => undefined);
+  const loadExploreVideos = useCallback(async () => {
+    setExploreLoading(true);
+    setExploreError(null);
+    try {
+      const response = await fetch(exploreUrl);
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error?.message ?? `Request failed (${response.status})`);
+      }
+      const data = await response.json();
+      setExploreVideos(normalizeHome(Array.isArray(data.items) ? data.items : []));
+    } catch (error) {
+      setExploreError(error instanceof Error ? error.message : "Unable to load Explore videos");
+    } finally {
+      setExploreLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    loadCareerResources();
-    const handleProgress = (event: Event) => {
-      const detail = (event as CustomEvent<{ reason?: string }>).detail;
-      if (detail?.reason === 'resources' || detail?.reason === 'mission') loadCareerResources();
-    };
-    window.addEventListener('career-progress', handleProgress);
-    return () => window.removeEventListener('career-progress', handleProgress);
-  }, [loadCareerResources]);
-
-  const todayTasks = useMemo(() => {
-    const today = careerTaskDateKey(now);
-    return careerTasks
-      .filter((task) => careerTaskDateKey(task.scheduledDate) === today)
-      .sort(
-        (left, right) =>
-          new Date(left.scheduledDate).getTime() -
-          new Date(right.scheduledDate).getTime()
-      );
-  }, [careerTasks, now]);
+    void loadExploreVideos();
+  }, [loadExploreVideos]);
 
   useEffect(() => {
     if (initializedTopic.current) return;
-    const task = initialCareerTask || (todayTasks.find((item) => item.status !== 'completed') ?? todayTasks[0]);
-    const topic = initialSearchQuery || task?.title;
-    if (!topic) return;
+    const topic = initialSearchQuery || initialCareerTask?.title;
+    if (!topic) {
+      initializedTopic.current = true;
+      return;
+    }
     initializedTopic.current = true;
-    setSelectedTask(task ?? null);
-    setLockedTopic(extractLearningTopic(topic));
-    void runSearch(topic);
-  }, [initialCareerTask, initialSearchQuery, runSearch, todayTasks]);
+    setSelectedTask(initialCareerTask ?? null);
+    setLockedTopic(initialCareerTask ? extractLearningTopic(topic) : "");
+    void runSearch(topic, Boolean(initialCareerTask));
+  }, [initialCareerTask, initialSearchQuery, runSearch]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const endpoint = initialCareerTask?.missionId
+      ? `/api/career/resources?missionId=${encodeURIComponent(initialCareerTask.missionId)}`
+      : "/api/career/resources";
+    void fetch(endpoint, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Unable to load Career playlists (${response.status})`);
+        const result = await response.json();
+        const playlists: CareerPlaylist[] = initialCareerTask?.missionId
+          ? [{
+              missionId: result.missionId,
+              title: initialCareerTask.title,
+              youtubeResources: Array.isArray(result.youtubeResources) ? result.youtubeResources : [],
+            }]
+          : Array.isArray(result.playlists) ? result.playlists : [];
+        const available = playlists.filter((playlist) => playlist.youtubeResources.length > 0);
+        setCareerPlaylists(available);
+        const active = available.find((playlist) => playlist.missionId === initialCareerTask?.missionId) || available[0];
+        if (!active) return;
+        setActiveMissionId(active.missionId);
+        const resource = active.youtubeResources.find((item) => item.searchQuery === initialSearchQuery) || active.youtubeResources[0];
+        if (resource) void runSearch(resource.title, true);
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        console.error("Unable to load Career playlists", error);
+      })
+      .finally(() => setPlaylistsLoading(false));
+    return () => controller.abort();
+  }, [initialCareerTask?.missionId, initialCareerTask?.title, initialSearchQuery, runSearch]);
 
   function handleSearchChange(value: string) {
-    if (!lockedTopic || value.startsWith(lockedTopic)) setSearchQuery(value);
+    setSearchQuery(value);
   }
 
   function handleSearchSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (searchQuery) runSearch(searchQuery);
+    if (!searchQuery.trim()) return;
+    setSelectedTask(null);
+    setLockedTopic("");
+    void runSearch(searchQuery);
   }
   function clearSearch() {
     requestId.current++;
@@ -342,16 +377,13 @@ export default function YouTubeApple({
     setSearchQuery("");
     setSearchResults([]);
     setSearchError(null);
-  }
-
-  function selectScheduledTask(task: CareerTaskItem) {
-    setSelectedTask(task);
-    setLockedTopic(extractLearningTopic(task.title));
-    void runSearch(task.title);
+    setSelectedTask(null);
+    setLockedTopic("");
   }
 
   const selectedTiming = selectedTask ? getCareerTaskTiming(selectedTask, now) : null;
   const canWatch = !selectedTask || selectedTiming?.state === 'active';
+  const activePlaylist = careerPlaylists.find((playlist) => playlist.missionId === activeMissionId) || careerPlaylists[0];
   const playedLockedTaskSoundRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -378,7 +410,59 @@ export default function YouTubeApple({
         searchMode={searchMode}
       />
 
-      <div className="flex">
+      {(activePlaylist || selectedTask) && (
+        <div className={"flex items-center justify-between gap-3 border-b px-4 py-2.5 md:px-6 " + (dark ? "border-white/8 bg-white/3" : "border-black/8 bg-white")}>
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-red-500">Career playlist</p>
+            <p className={"truncate text-xs " + (dark ? "text-white/55" : "text-black/55")}>{activePlaylist?.title || lockedTopic || selectedTask?.title}</p>
+          </div>
+          <PublishArtifactButton kind="youtube" sourceId={activePlaylist?.missionId || selectedTask!.id} />
+        </div>
+      )}
+
+      <div className="flex flex-col lg:flex-row">
+        {(playlistsLoading || careerPlaylists.length > 0) && (
+          <aside className={"shrink-0 border-b p-4 lg:w-64 lg:border-b-0 lg:border-r " + (dark ? "border-white/8 bg-white/2" : "border-black/8 bg-white/70")}>
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-red-500">Career playlists</p>
+            {playlistsLoading ? (
+              <p className={"text-xs " + (dark ? "text-white/45" : "text-black/45")}>Loading playlists...</p>
+            ) : (
+              <div className="space-y-2">
+                {careerPlaylists.map((playlist) => (
+                  <div key={playlist.missionId}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveMissionId(playlist.missionId);
+                        const first = playlist.youtubeResources[0];
+                        if (first) void runSearch(first.title, true);
+                      }}
+                      className={"w-full rounded-md px-2.5 py-2 text-left text-xs font-semibold " + (playlist.missionId === activePlaylist?.missionId ? "youtube-theme-soft" : dark ? "text-white/65 hover:bg-white/5" : "text-black/65 hover:bg-black/4")}
+                    >
+                      <span className="block truncate">{playlist.title}</span>
+                      <span className="mt-0.5 block text-[10px] font-normal opacity-55">{playlist.youtubeResources.length} topics</span>
+                    </button>
+                    {playlist.missionId === activePlaylist?.missionId && (
+                      <div className="mt-1 space-y-0.5 pl-2">
+                        {playlist.youtubeResources.map((resource, index) => (
+                          <button
+                            key={`${resource.searchQuery || resource.title}-${index}`}
+                            type="button"
+                            onClick={() => void runSearch(resource.title, true)}
+                            className={"flex w-full gap-2 rounded-md px-2 py-1.5 text-left text-[11px] leading-4 " + (dark ? "text-white/45 hover:bg-white/5 hover:text-white/75" : "text-black/45 hover:bg-black/4 hover:text-black/75")}
+                          >
+                            <span className="shrink-0 tabular-nums opacity-45">{String(index + 1).padStart(2, "0")}</span>
+                            <span className="line-clamp-2">{resource.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </aside>
+        )}
         <main className="flex-1 min-w-0 px-4 md:px-6 py-5">
           {searchMode ? (
             <SearchResultsView
@@ -387,18 +471,19 @@ export default function YouTubeApple({
               loading={searchLoading}
               error={searchError}
               results={searchResults}
-              onRetry={() => runSearch(searchQuery)}
+              onRetry={() => runSearch(searchQuery, Boolean(selectedTask))}
               onOpen={canWatch ? setSelectedVideo : undefined}
               task={selectedTask}
               now={now}
             />
           ) : (
-            <CareerLearningView
+            <HomeView
               dark={dark}
-              playlists={careerPlaylists}
-              todayTasks={todayTasks}
-              now={now}
-              onSelect={selectScheduledTask}
+              loading={exploreLoading}
+              error={exploreError}
+              videos={exploreVideos}
+              onRetry={loadExploreVideos}
+              onOpen={setSelectedVideo}
             />
           )}
         </main>
@@ -411,7 +496,6 @@ export default function YouTubeApple({
           task={selectedTask}
           onClose={() => {
             setSelectedVideo(null);
-            void loadCareerResources();
           }}
         />
       )}
@@ -461,7 +545,7 @@ function Navbar({
         "sticky top-0 z-40 h-14 flex items-center gap-3 px-4 md:px-6 backdrop-blur-xl border-b " +
         (dark
           ? "bg-black/70 border-white/10"
-          : "bg-white/70 border-black/[0.06]")
+          : "bg-white/70 border-black/6")
       }
     >
       <div className="flex items-center gap-1.5 shrink-0">
@@ -490,7 +574,7 @@ function Navbar({
             "flex items-center gap-2 h-9 px-3 rounded-full border transition-all focus-within:ring-2 " +
             (dark
               ? "bg-white/5 border-white/10 focus-within:ring-white/20"
-              : "bg-black/[0.04] border-black/[0.06] focus-within:ring-black/10")
+              : "bg-black/4 border-black/6 focus-within:ring-black/10")
           }
         >
           <SearchIcon dark={dark} />
@@ -499,9 +583,9 @@ function Navbar({
             name="youtube_search_input"
             value={searchQuery}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Select today's scheduled topic"
-            aria-label="Search within the selected learning topic"
-            title={lockedTopic ? `Topic locked: ${lockedTopic}. You can append search details.` : undefined}
+            placeholder="Search YouTube"
+            aria-label="Search YouTube"
+            title={lockedTopic ? `Career topic: ${lockedTopic}` : undefined}
             className="flex-1 bg-transparent outline-none text-[13.5px] placeholder:text-inherit placeholder:opacity-40"
           />
           {searchMode && (
@@ -535,76 +619,6 @@ function Navbar({
         </button>
       </div>
     </header>
-  );
-}
-
-/* -----------------------------------------------------------------------
- * 6. Home view
- * -------------------------------------------------------------------- */
-function CareerLearningView({
-  dark,
-  playlists,
-  todayTasks,
-  now,
-  onSelect,
-}: {
-  dark: boolean;
-  playlists: CareerPlaylist[];
-  todayTasks: CareerTaskItem[];
-  now: Date;
-  onSelect: (task: CareerTaskItem) => void;
-}) {
-  const resources = playlists.flatMap((playlist) =>
-    playlist.youtubeResources.map((resource) => ({ ...resource, missionTitle: playlist.title }))
-  );
-
-  return (
-    <div className="mx-auto max-w-5xl">
-      <div className="mb-6 border-b border-current/10 pb-5">
-        <p className="youtube-theme-text text-[11px] font-semibold uppercase">Today&apos;s Career Learning</p>
-        <h1 className="mt-1 text-2xl font-semibold">Watch only what is scheduled today</h1>
-        <p className={"mt-1 max-w-2xl text-[13px] leading-relaxed " + (dark ? "text-white/50" : "text-black/50")}>
-          Videos are selected from your dated Career tasks and ranked by real YouTube popularity.
-        </p>
-      </div>
-
-      {todayTasks.length > 0 ? (
-        <div className="overflow-hidden rounded-lg border border-current/10">
-          {todayTasks.map((task, index) => {
-            const timing = getCareerTaskTiming(task, now);
-            return (
-              <button
-                key={task.id}
-                onClick={() => onSelect(task)}
-                className={
-                  "flex w-full items-start gap-4 p-5 text-left transition-colors " +
-                  (index ? "border-t border-current/10 " : "") +
-                  (dark ? "bg-white/4 hover:bg-white/8" : "bg-white hover:bg-black/3")
-                }
-              >
-                <span className="youtube-theme-soft grid h-9 w-9 shrink-0 place-items-center rounded-lg text-sm font-semibold">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[15px] font-semibold leading-snug">{task.title}</span>
-                  <span className="mt-1 block text-[12px] text-current/45">
-                    {timing.start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - {timing.end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · {task.duration ?? 60} min
-                  </span>
-                </span>
-                <CareerTaskMeta task={task} now={now} />
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="py-24 text-center">
-          <p className="text-[15px] font-semibold">No video study task scheduled today</p>
-          <p className={"mt-1 text-[13px] " + (dark ? "text-white/45" : "text-black/45")}>
-            Your future syllabus has {resources.length} topic{resources.length === 1 ? '' : 's'} and will unlock on its assigned date.
-          </p>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -677,7 +691,7 @@ function SearchResultsView({
 
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-[15px] font-semibold">Popular videos for &ldquo;{query}&rdquo;</h2>
-        {timing?.state !== 'active' && (
+        {timing && timing.state !== 'active' && (
           <span className="flex shrink-0 items-center gap-1 text-[11px] opacity-50">
             <LockKeyhole size={12} />
             Opens at allotted time
@@ -732,7 +746,7 @@ function VideoCard({
           className="w-full h-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.015] group-hover:brightness-[0.92]"
         />
         {video.duration && (
-          <span className="absolute bottom-1.5 right-1.5 text-[10.5px] font-medium text-white bg-black/75 px-1.5 py-[1px] rounded backdrop-blur-sm">
+          <span className="absolute bottom-1.5 right-1.5 text-[10.5px] font-medium text-white bg-black/75 px-1.5 py-px rounded backdrop-blur-sm">
             {video.duration}
           </span>
         )}
@@ -741,7 +755,7 @@ function VideoCard({
         <div
           className={
             "w-8 h-8 rounded-full shrink-0 grid place-items-center text-[11px] font-semibold text-white " +
-            "bg-gradient-to-br from-[#5E5CE6] to-[#0A84FF]"
+            "bg-linear-to-br from-[#5E5CE6] to-[#0A84FF]"
           }
         >
           {video.channelTitle?.[0]?.toUpperCase() ?? "?"}
@@ -779,12 +793,12 @@ function SearchResultRow({
       disabled={!onOpen}
       className={
         "w-full text-left flex flex-col sm:flex-row gap-3 p-2 rounded-2xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0A84FF] " +
-        (dark ? "hover:bg-white/5" : "hover:bg-black/[0.03]") +
+        (dark ? "hover:bg-white/5" : "hover:bg-black/3") +
         (!onOpen ? " cursor-not-allowed opacity-60" : "")
       }
       aria-label={`Play ${video.title}`}
     >
-      <div className="sm:w-[280px] shrink-0 aspect-video rounded-[14px] overflow-hidden">
+      <div className="sm:w-70 shrink-0 aspect-video rounded-[14px] overflow-hidden">
         <img src={video.thumbnail} alt="" loading="lazy" className="w-full h-full object-cover" />
       </div>
       <div className="min-w-0 py-1">
@@ -826,7 +840,7 @@ function SkeletonCard({ dark }: { dark: boolean }) {
 function SkeletonRow({ dark }: { dark: boolean }) {
   return (
     <div className="flex flex-col sm:flex-row gap-3">
-      <div className={"sm:w-[280px] aspect-video rounded-[14px] shrink-0 animate-pulse " + shimmer(dark)} />
+      <div className={"sm:w-70 aspect-video rounded-[14px] shrink-0 animate-pulse " + shimmer(dark)} />
       <div className="flex-1 flex flex-col gap-2 pt-1">
         <div className={"h-3.5 rounded animate-pulse w-3/4 " + shimmer(dark)} />
         <div className={"h-3 rounded animate-pulse w-1/3 " + shimmer(dark)} />

@@ -16,6 +16,7 @@ import type {
  * Collection name
  */
 const COLLECTION_NAME = "workspaces";
+let workspaceIndexesPromise: Promise<unknown[]> | null = null;
 
 /**
  * Get workspaces collection
@@ -23,12 +24,19 @@ const COLLECTION_NAME = "workspaces";
 async function getCollection(): Promise<Collection<WorkspaceDocument>> {
   const db = await getDatabase();
   const collection = db.collection<WorkspaceDocument>(COLLECTION_NAME);
-  
-  // Create indexes
-  await collection.createIndex({ ownerId: 1, createdAt: -1 }, { name: "owner_date" });
-  await collection.createIndex({ ownerId: 1, name: 1 }, { name: "owner_name" });
-  await collection.createIndex({ isPublic: 1, isTemplate: 1 }, { name: "public_template" });
-  await collection.createIndex({ ownerId: 1, lastAccessedAt: -1 }, { name: "recent_access" });
+
+  if (!workspaceIndexesPromise) {
+    workspaceIndexesPromise = Promise.all([
+      collection.createIndex({ ownerId: 1, createdAt: -1 }, { name: "owner_date" }),
+      collection.createIndex({ ownerId: 1, name: 1 }, { name: "owner_name" }),
+      collection.createIndex({ isPublic: 1, isTemplate: 1 }, { name: "public_template" }),
+      collection.createIndex({ ownerId: 1, lastAccessedAt: -1 }, { name: "recent_access" }),
+    ]).catch((error) => {
+      workspaceIndexesPromise = null;
+      throw error;
+    });
+  }
+  await workspaceIndexesPromise;
   
   return collection;
 }
@@ -674,22 +682,15 @@ export async function getWorkspace(
 ): Promise<SerializedWorkspace | null> {
   const collection = await getCollection();
   
-  const workspace = await collection.findOne({
-    _id: new ObjectId(workspaceId),
-    ownerId: new ObjectId(userId),
-  });
-  
-  if (!workspace) {
-    return null;
-  }
-  
-  // Update last accessed
-  await collection.updateOne(
-    { _id: workspace._id },
-    { $set: { lastAccessedAt: new Date() } }
+  if (!ObjectId.isValid(workspaceId) || !ObjectId.isValid(userId)) return null;
+
+  const workspace = await collection.findOneAndUpdate(
+    { _id: new ObjectId(workspaceId), ownerId: new ObjectId(userId) },
+    { $set: { lastAccessedAt: new Date() } },
+    { returnDocument: "after" },
   );
-  
-  return serialize(workspace);
+
+  return workspace ? serialize(workspace) : null;
 }
 
 /**

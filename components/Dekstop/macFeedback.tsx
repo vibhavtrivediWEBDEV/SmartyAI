@@ -58,7 +58,7 @@ function Floater({ emoji, x }: { emoji: string; x: number }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function LoveCounter() {
+export default function LoveCounter({ enabled = true }: { enabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const [counts, setCounts] = useState<Counts>({ ...EMPTY });
   const [myReaction, setMyReaction] = useState<string | null>(null);
@@ -89,7 +89,7 @@ export default function LoveCounter() {
   // ── Fetch data from Firebase via API route ───────────────────────────────
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch(API);
+      const res = await fetch(API, { cache: "no-store" });
       if (!res.ok) return;
       const data = await res.json();
       if (data.counts) setCounts(data.counts);
@@ -100,6 +100,11 @@ export default function LoveCounter() {
 
   // ── Init ─────────────────────────────────────────────────────────────────
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     userId.current = getUserId();
 
@@ -108,18 +113,19 @@ export default function LoveCounter() {
     if (saved) setMyReaction(saved);
 
     const init = async () => {
-      // 1. Load all data (counts, comments, visitors) from Firebase
-      await fetchData();
-
-      // 2. Increment visitor count in Firebase
       try {
-        await fetch(API, {
+        const response = await fetch(API, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          cache: "no-store",
           body: JSON.stringify({ action: "visit" }),
         });
-        // Re-fetch to get updated visitor count
-        await fetchData();
+        if (response.ok) {
+          const data = await response.json();
+          if (data.counts) setCounts(data.counts);
+          if (data.comments) setComments(data.comments);
+          if (data.visitors !== undefined) setVisitors(data.visitors);
+        }
       } catch { }
 
       if (cancelled) return;
@@ -151,7 +157,7 @@ export default function LoveCounter() {
       stopPolling();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [fetchData]);
+  }, [enabled, fetchData]);
 
   useEffect(() => {
     if (open) void fetchData();
@@ -272,11 +278,9 @@ export default function LoveCounter() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
-
         .lc-root, .lc-root * { box-sizing: border-box; margin: 0; padding: 0; }
         .lc-root {
-          position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+          position: relative; width: 58px; height: 58px; z-index: 9999;
           font-family: 'Plus Jakarta Sans', sans-serif;
         }
 
@@ -476,7 +480,10 @@ export default function LoveCounter() {
       <div className="lc-root" ref={panelRef}>
 
         {/* ── Panel ───────────────────────────────────────────────────── */}
-        <div className={`lc-panel ${open ? "opened" : "closed"}`}>
+        <div
+          className={`lc-panel ${open ? "opened" : "closed"}`}
+          onMouseDown={event => event.stopPropagation()}
+        >
 
           {/* Header */}
           <div className="lc-hdr">

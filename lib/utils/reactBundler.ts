@@ -29,24 +29,19 @@ export async function bundleReact(
     console.log('[bundler] Using entry file:', entryFile.name)
     
     // Collect ALL JS/JSX/TS/TSX files (not just entry)
-    // EXCLUDE index.js/index.ts files that typically contain createRoot calls
+    // Exclude standard bootstrap files because the preview creates its own root.
     const allJsFiles = files.filter(f => 
       (f.name.endsWith('.js') || f.name.endsWith('.jsx') || 
        f.name.endsWith('.ts') || f.name.endsWith('.tsx')) &&
-      !f.name.match(/(\/|^)index\.(js|ts|jsx|tsx)$/)
+      !f.name.match(/(\/|^)(index|main)\.(js|ts|jsx|tsx)$/)
     );
     
-    console.log('[bundler] Found', allJsFiles.length, 'JS/JSX/TS/TSX files (excluding index entry files)')
+    console.log('[bundler] Found', allJsFiles.length, 'JS/JSX/TS/TSX files (excluding bootstrap files)')
     
-    // Process all files and combine them
+    // Babel Standalone in the preview parses JSX and TypeScript. Preserve TSX
+    // syntax here instead of attempting to remove it with regular expressions.
     const processedCodes = allJsFiles.map(file => {
       let code = file.content;
-      
-      // Process TypeScript/TSX files
-      if (file.name.endsWith('.tsx') || file.name.endsWith('.ts')) {
-        console.log('[bundler] Stripping TypeScript from:', file.name)
-        code = stripTypeScript(code);
-      }
       
       // Transform ES6 imports to use globals
       code = transformImports(code);
@@ -75,79 +70,10 @@ export async function bundleReact(
 }
 
 /**
- * Strip TypeScript-specific syntax
- */
-function stripTypeScript(code: string): string {
-  // Remove type-only imports (import type { ... } from '...')
-  code = code.replace(/import\s+type\s+[^\n]+/g, '')
-  
-  // Remove interface declarations (single-line and multi-line)
-  code = code.replace(/interface\s+\w+[^{]*\{[^}]*\}/g, '')
-  code = code.replace(/interface\s+\w+[^{]*\{[\s\S]*?^\}/gm, '')
-  
-  // Remove type declarations
-  code = code.replace(/type\s+\w+[^=]*=[^\n]+/g, '')
-  code = code.replace(/type\s+\w+[^{]*\{[\s\S]*?^\}/gm, '')
-  
-  // Remove React.FC, React.FunctionComponent and similar BEFORE other processing
-  // This prevents issues with JSX detection
-  code = code.replace(/:\s*React\.(FC|FunctionComponent|ComponentType)(?:<[^>]+>)?\s*=/g, ' =')
-  code = code.replace(/:\s*(FC|FunctionComponent|ComponentType)(?:<[^>]+>)?\s*=/g, ' =')
-  
-  // Remove generic type parameters in specific contexts:
-  // 1. After function/method names: function name<Type>
-  // 2. After useState, useRef, etc.: React.useState<Type>
-  // 3. In class extends: extends Base<Type>
-  // BUT NOT in JSX tags
-  
-  // Remove uppercase generics (Type parameters)
-  code = code.replace(/([a-zA-Z_$]\w*)<[A-Z]\w*(?:\s+(?:extends|keyof|in)\s+[^>,]+)?(?:\s*,\s*[A-Z]\w*(?:\s+(?:extends|keyof|in)\s+[^>,]+)?)*>/g, '$1')
-  
-  // Remove lowercase generics in function call context (after . or lowercase letters)
-  // Matches: .useState<number>, .useRef<string>, etc.
-  code = code.replace(/([a-z]\w*\.)[a-z]\w*<[a-z]\w*>/g, (match, prefix) => {
-    return match.replace(/<[a-z]\w*>/, '')
-  })
-  
-  // Remove destructuring parameter type annotations: { prop }: Type or { prop = value }: Type
-  code = code.replace(/(\{[^}]+\})\s*:\s*[A-Z][a-zA-Z0-9_]*(?:<[^>]+>)?/g, '$1')
-  
-  // Remove function parameter type annotations
-  // Matches: paramName: Type (but preserves function declarations)
-  // Only match patterns that are clearly parameters (after comma or in parameter position)
-  code = code.replace(/,\s*(\w+)\s*:\s*[A-Z][a-zA-Z0-9_]*(?:<[^>]+>)?(?:\[\])?(?:\s*\|\s*[A-Z][a-zA-Z0-9_]*(?:<[^>]+>)?(?:\[\])?)*/g, ', $1')
-  code = code.replace(/\((\w+)\s*:\s*[A-Z][a-zA-Z0-9_]*(?:<[^>]+>)?(?:\[\])?(?:\s*\|\s*[A-Z][a-zA-Z0-9_]*(?:<[^>]+>)?(?:\[\])?)*/g, '($1')
-  
-  // Remove return type annotations (but be careful with arrow functions)
-  // Only remove return types that are clearly type annotations (not arrow functions)
-  code = code.replace(/\)\s*:\s*(?!=>)[A-Z][a-zA-Z0-9_]*(?:<[^>]+>)?(?:\[\])?(?:\s*\|\s*[A-Z][a-zA-Z0-9_]*)*(?=\s*[{;\n])/g, ')')
-  
-  // Remove variable type annotations (const x: Type = ...)
-  code = code.replace(/(const|let|var)\s+(\w+)\s*:\s*[A-Z][a-zA-Z0-9_]*(?:<[^>]+>)?(?:\[\])?/g, '$1 $2')
-  
-  // Remove `as Type` assertions
-  code = code.replace(/\s+as\s+[A-Z][a-zA-Z0-9_]*(?:<[^>]+>)?/g, '')
-  
-  // Remove `as const` assertions
-  code = code.replace(/\s+as\s+const/g, '')
-  
-  // Remove non-null assertion operator (!)
-  code = code.replace(/\w!/g, (match) => match.slice(0, -1))
-  
-  // Remove optional chaining type annotations (?.Type)
-  code = code.replace(/\?\s*:\s*[A-Z][a-zA-Z0-9_]*/g, '?')
-  
-  // Clean up any remaining double spaces or orphaned colons
-  code = code.replace(/\s{2,}/g, ' ')
-  code = code.replace(/:\s*[,);\n]/g, '$1')
-  
-  return code
-}
-
-/**
  * Transform ES6 imports to use global React/ReactDOM
  */
 function transformImports(code: string): string {
+  code = code.replace(/import\s+type\s+[\s\S]*?\s+from\s+['"][^'"]+['"];?\s*/g, '')
   // Handle: import React, { useState, useEffect } from 'react'
   code = code.replace(/import\s+React\s*,\s*\{([^}]+)\}\s+from\s+['"]react['"];\n?/g, (match, imports) => {
     const importList = imports.split(',').map((i: string) => i.trim()).filter(Boolean)

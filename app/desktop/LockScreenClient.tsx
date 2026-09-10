@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { LockScreen } from "@/components/LockScreen/LockScreen";
+import { useSettings } from "@/app/context/settingContext";
 
 export default function DesktopClientLayout({
   children,
@@ -9,6 +10,7 @@ export default function DesktopClientLayout({
   children: React.ReactNode;
 }) {
   const [isLocked, setIsLocked] = useState(true);
+  const { settings } = useSettings();
 
   const handleUnlock = () => {
     setIsLocked(false);
@@ -16,8 +18,15 @@ export default function DesktopClientLayout({
 
   return (
     <>
-      {children}
-      {isLocked && <LockScreen onUnlock={handleUnlock} />}
+      {!isLocked && children}
+      {isLocked && (
+        <LockScreen
+          onUnlock={handleUnlock}
+          wallpaper={settings.lockScreenImage || settings.backgroundImage}
+          depthEffect={settings.lockScreenDepthEffect}
+          depthSubjectTop={settings.lockScreenDepthSubjectTop}
+        />
+      )}
     </>
   );
 }

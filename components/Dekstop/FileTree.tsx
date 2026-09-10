@@ -112,6 +112,8 @@ function TreeNode({
   onFileSelect,
   onFileDelete,
   onFileRename,
+  onFileAdd,
+  onFolderCreate,
   level = 0,
 }: {
   node: FileNode;
@@ -121,6 +123,8 @@ function TreeNode({
   onFileSelect: (path: string) => void;
   onFileDelete?: (path: string) => void;
   onFileRename?: (oldPath: string, newPath: string) => void;
+  onFileAdd?: (path: string) => void;
+  onFolderCreate?: (path: string) => void;
   level?: number;
 }) {
   const [showMenu, setShowMenu] = useState(false);
@@ -241,17 +245,31 @@ function TreeNode({
                 onClick={(e) => {
                   e.stopPropagation();
                   const fileName = prompt("File name:");
-                  if (fileName && onFileSelect) {
+                  if (fileName && onFileAdd) {
                     const newFilePath = node.path
                       ? `${node.path}/${fileName}`
                       : fileName;
-                    onFileSelect(newFilePath);
+                    onFileAdd(newFilePath);
                   }
                   setShowMenu(false);
                 }}
                 className="w-full rounded px-3 py-1 text-left text-xs text-gray-300 hover:bg-[#2a2d2e]"
               >
                 New File
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const folderName = prompt("Folder name:");
+                  if (folderName && onFolderCreate) {
+                    onFolderCreate(`${node.path}/${folderName}`);
+                    if (!isExpanded) onToggle(node.path);
+                  }
+                  setShowMenu(false);
+                }}
+                className="w-full rounded px-3 py-1 text-left text-xs text-gray-300 hover:bg-[#2a2d2e]"
+              >
+                New Folder
               </button>
               <button
                 onClick={(e) => {
@@ -284,6 +302,8 @@ function TreeNode({
               onFileSelect={onFileSelect}
               onFileDelete={onFileDelete}
               onFileRename={onFileRename}
+              onFileAdd={onFileAdd}
+              onFolderCreate={onFolderCreate}
               level={level + 1}
             />
           ))}
@@ -371,6 +391,8 @@ export default function FileTree({
             onFileSelect={onFileSelect}
             onFileDelete={onFileDelete}
             onFileRename={onFileRename}
+            onFileAdd={onFileAdd}
+            onFolderCreate={onFolderCreate}
           />
         ))}
       </div>

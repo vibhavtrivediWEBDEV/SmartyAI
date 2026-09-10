@@ -7,7 +7,7 @@ import { syncCareerDailyTeacherBooks, syncCareerTasksToFinder, utcDateKey } from
 
 const now = new Date("2026-09-03T23:30:00.000Z");
 
-function fakeDb() {
+function fakeDb(existingTeacherBook?: { generationSource: string; provider?: string }) {
   const task = {
     _id: new ObjectId("507f1f77bcf86cd799439013"),
     userId: new ObjectId("507f1f77bcf86cd799439011"),
@@ -31,7 +31,7 @@ function fakeDb() {
   const collections: Record<string, any> = {
     career_tasks: { find: vi.fn(() => cursor([task])) },
     fileNodes: { findOneAndUpdate: finderUpsert },
-    teacherBooks: { updateOne: teacherUpsert },
+    teacherBooks: { findOne: vi.fn().mockResolvedValue(existingTeacherBook ?? null), updateOne: teacherUpsert },
   };
   return { db: { collection: vi.fn((name: string) => collections[name]) } as any, nodes, finderUpsert, teacherUpsert };
 }
@@ -61,5 +61,17 @@ describe("career projections", () => {
     expect(teacherUpsert.mock.calls[1][0]).toEqual(teacherUpsert.mock.calls[0][0]);
     expect(teacherUpsert.mock.calls[1][1].$set).toMatchObject({ provider: "career_tasks", model: "deterministic", generationSource: "career", status: "complete" });
     expect(teacherUpsert.mock.calls[1][1].$set.pages[1].content.body).toContain("Review React / TypeScript (pending)");
+  });
+
+  it("does not overwrite a daily book promoted to interactive generation", async () => {
+    const { db, teacherUpsert } = fakeDb({ generationSource: "interactive", provider: "career_tasks" });
+    await syncCareerDailyTeacherBooks(db, now);
+    expect(teacherUpsert).not.toHaveBeenCalled();
+  });
+
+  it("does not overwrite a legacy daily book that already has AI content", async () => {
+    const { db, teacherUpsert } = fakeDb({ generationSource: "career", provider: "bedrock-mantle" });
+    await syncCareerDailyTeacherBooks(db, now);
+    expect(teacherUpsert).not.toHaveBeenCalled();
   });
 });

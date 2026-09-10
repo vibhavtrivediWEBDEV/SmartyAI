@@ -28,7 +28,6 @@ import { FakeCursor } from "./FakeCursor"
 import { useElevenTTS } from "@/hooks/ElevenLabs"
 import { resolveSequence } from "@/lib/helper/helper"
 import { VoiceControlButton } from "./VoiceControlButton"
-import { CareerAgentVoice } from "./CareerAgentVoice"
 import { getFormattedCommandsWithExamples } from "@/lib/helper/commandRegistry"
 import { useWindowLayout } from "@/hooks/useWindowLayout"
 import { SnapPreview } from "./SnapPreview"
@@ -101,6 +100,32 @@ const StartInterview = dynamic(() => import("@/app/components/terminal/StartInte
 const FeedbackInterview = dynamic(() => import("@/app/components/terminal/feedbackInterview"), { ssr: false })
 const SmartyTeacherWrapper = dynamic(() => import("@/app/components/terminal/smartyTeacher"), { ssr: false })
 const DynamicAgGridConfigurator = dynamic(() => import("./dataTableViewer").then((module) => module.DynamicAgGridConfigurator), { ssr: false })
+
+let resumeProfileRequest: Promise<ResumeProfile | null> | null = null
+
+const loadResumeProfile = () => {
+  if (!resumeProfileRequest) {
+    resumeProfileRequest = fetch("/api/profile/resume")
+      .then(async (response) => {
+        if (!response.ok) {
+          console.warn("Could not load resume profile:", response.status, response.statusText)
+          return null
+        }
+        const body = await response.json()
+        return body.resume ?? null
+      })
+      .catch((error) => {
+        resumeProfileRequest = null
+        console.warn("Error loading resume profile:", error)
+        return null
+      })
+  }
+
+  return resumeProfileRequest
+}
+
+// 🚀 PERFORMANCE: Removed AppStoreApp - using AppLaunchpad instead (50% smaller, shared data)
+// const AppStoreApp = dynamic(() => import("./AppStoreApp"), { ssr: false })
 
 interface WindowState {
   id: string
@@ -325,7 +350,6 @@ export function Desktop() {
   // 🆕 Preview window state for VS Code
   const [previewContent, setPreviewContent] = useState<string | null>(null)
   const [previewWindowTitle, setPreviewWindowTitle] = useState<string>('Preview')
-  const [previewVersion, setPreviewVersion] = useState(0) // Force re-render on content change
 
   // 🆕 Ref to hold openPreviewWindow function (avoids circular dependency)
   const openPreviewWindowRef = useRef<((htmlContent: string, title?: string) => void) | null>(null)
@@ -865,22 +889,9 @@ export function Desktop() {
 
   useEffect(() => {
     let active = true
-    fetch("/api/profile/resume")
-      .then(async (response) => {
-        if (!response.ok) {
-          // Gracefully handle auth errors
-          console.warn("Could not load resume profile:", response.status, response.statusText)
-          if (active) setResumeProfile(null)
-          return null
-        }
-        return response.json()
-      })
-      .then((body) => {
-        if (active && body) setResumeProfile(body.resume)
-      })
-      .catch((error) => {
-        console.warn("Error loading resume profile:", error)
-        if (active) setResumeProfile(null)
+    loadResumeProfile()
+      .then((profile) => {
+        if (active) setResumeProfile(profile)
       })
       .finally(() => {
         if (active) setResumeProfileLoading(false)
@@ -888,43 +899,6 @@ export function Desktop() {
 
     return () => {
       active = false
-    }
-  }, [])
-
-  useEffect(() => {
-    let active = true
-    const loadDesktopItems = async () => {
-      try {
-        const response = await fetch("/api/Projects")
-        const body = await response.json()
-        if (!response.ok) {
-          // Gracefully handle auth errors - just log and continue
-          console.warn("Could not load Desktop items:", body.error || "Authentication required")
-          if (active) setuserIcons([])
-          return
-        }
-        const selected = (body.data as ProjectFile[])
-          .filter((item) => item.showOnDesktop && !item.parentId && !item.isTrashed)
-          .map((item, index): IconItem => ({
-            id: item.id,
-            name: item.name,
-            type: item.type === "folder" ? "folder" : "file",
-            icon: item.type === "folder" ? "folder" : item.name.toLowerCase().endsWith(".pdf") ? "pdf" : "file",
-            x: 1100,
-            y: 50 + index * 100,
-            finderItem: item,
-          }))
-        if (active) setuserIcons(selected)
-      } catch (error) {
-        console.error("Error loading desktop items:", error)
-        if (active) setuserIcons([])
-      }
-    }
-    void loadDesktopItems()
-    window.addEventListener("finder-desktop-change", loadDesktopItems)
-    return () => {
-      active = false
-      window.removeEventListener("finder-desktop-change", loadDesktopItems)
     }
   }, [])
 
@@ -1105,6 +1079,8 @@ export function Desktop() {
             status="NOT_STARTED"
             sessionId={arg?.sessionId}
             bookId={arg?.bookId}
+            taskId={arg?.taskId}
+            missionId={arg?.missionId}
             openApplication={openApplication}
           />;
           title = "AI Book";
@@ -1431,7 +1407,6 @@ export function Desktop() {
           const previewHtml = arg?.htmlContent || previewContent || '<html><body><p>No content</p></body></html>';
           const previewTitle = arg?.title || previewWindowTitle || 'Preview';
           component = <iframe
-            key={`preview-iframe-${previewVersion}`}
             srcDoc={previewHtml}
             className="w-full h-full border-0 bg-white"
             title="Preview"
@@ -1482,7 +1457,8 @@ export function Desktop() {
           defaultHeight = 650;
           break;
         case "App Store":
-          component = <AppStoreApp openApplication={openApplication} />;
+          // 🚀 PERFORMANCE: Removed duplicate AppStoreApp, using AppLaunchpad (50% smaller)
+          component = <AppLaunchpad />;
           title = "App Store";
           iconPath = "/icons/todo.png";
           defaultWidth = desktopRef.current
@@ -1537,6 +1513,9 @@ export function Desktop() {
             )
           );
         }
+        window.dispatchEvent(new CustomEvent('smarty-app-activated', {
+          detail: { appName: existingWindow.appName }
+        }));
         
         // 🆕 Update search query for Chrome if passed - create fresh component
         if (appName === 'chrome' || appName === 'Chrome') {
@@ -1603,6 +1582,8 @@ export function Desktop() {
             status="NOT_STARTED"
             sessionId={arg?.sessionId}
             bookId={arg?.bookId}
+            taskId={arg?.taskId}
+            missionId={arg?.missionId}
             openApplication={openApplication}
           />;
           setOpenWindows((prev) =>
@@ -2156,19 +2137,32 @@ export function Desktop() {
   };
 
   const bringToFront = (id: string) => {
+    const activeWindow = openWindowsRef.current.find((win) => win.id === id);
+    const isAlreadyFront = activeWindow
+      ? openWindowsRef.current.every((win) => win.isMinimized || win.zIndex <= activeWindow.zIndex)
+      : false;
     const topZIndex = claimTopZIndex();
     setOpenWindows((prev) =>
       prev.map((win) => (win.id === id ? { ...win, zIndex: topZIndex } : win)),
     );
+    if (activeWindow && !isAlreadyFront) {
+      window.dispatchEvent(new CustomEvent('smarty-app-activated', {
+        detail: { appName: activeWindow.appName }
+      }));
+    }
   };
 
   // 🆕 Function to open preview window with HTML content
   const openPreviewWindowActual = useCallback((htmlContent: string, title: string = 'Preview') => {
     console.log('[openPreviewWindow] Called with content length:', htmlContent?.length);
-    
+
+    // Update state variables first
+    setPreviewContent(htmlContent);
+    setPreviewWindowTitle(title);
+
     // Check if preview window already exists
     const existingPreview = openWindows.find(w => w.appName === 'Preview');
-    
+
     if (existingPreview) {
       // UPDATE existing window content
       console.log('[openPreviewWindow] Updating content in existing window');
@@ -2311,20 +2305,25 @@ export function Desktop() {
   // 🆕 Widget handlers
   const handleAddWidget = useCallback((type: string) => {
     if (!userContext?.userId) return;
+    if (type === 'reaction' && widgets.some(widget => widget.type === 'reaction')) {
+      setShowWidgetGallery(false);
+      toast.info('Reaction widget is already on the desktop');
+      return;
+    }
     const newWidget: Widget = {
       id: `widget_${Date.now()}`,
       category: "native",
       type: type as any,
       x: 100,
-      y: 100,
-      width: type === 'career-agent' ? 280 : 160,
-      height: type === 'career-agent' ? 190 : 160
+      y: type === 'reaction' ? 400 : 100,
+      width: type === 'reaction' ? 58 : type === 'career-agent' ? 280 : 160,
+      height: type === 'reaction' ? 58 : type === 'career-agent' ? 190 : 160
     };
     const next = WidgetStore.addWidget(userContext.userId, newWidget);
     setWidgets(next);
     setShowWidgetGallery(false);
     toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} widget added!`);
-  }, [userContext?.userId]);
+  }, [userContext?.userId, widgets]);
 
   // 🌐 Handle browser "Add to Desktop" event
   useEffect(() => {
@@ -2556,6 +2555,8 @@ export function Desktop() {
         return <PhotoWidget />;
       case 'clock':
         return <ClockWidget />;
+      case 'reaction':
+        return <LoveCounter />;
       case 'glass-clock':
         return <GlassClockWidget isDarkMode={isDarkMode} />;
       case 'glass-calendar':
@@ -2806,11 +2807,6 @@ export function Desktop() {
               }}
             />}
 
-{/* counter */}
-            {!openWindows.some((window) => window.appName === 'Career' && !window.isMinimized) && (
-              <LoveCounter />
-            )}
-
             {/* Central Portfolio Text */}
             {/* <h1
         ref={portfolioTextRef}
@@ -2961,7 +2957,7 @@ export function Desktop() {
               if (win.appName === 'Preview' && win.previewContent) {
                 windowContent = (
                   <iframe
-                    key={`preview-${win.id}-${win.previewContent.length}`}
+                    key={`preview-${win.id}`}
                     srcDoc={win.previewContent}
                     className="w-full h-full border-0 bg-white"
                     title="Preview"
@@ -3090,19 +3086,6 @@ export function Desktop() {
             />
           )}
           
-{/* CAREER AGENT: Dedicated Voice Pipeline - No interference with useDekstopAgent */}
-        <div style={{marginLeft:100 }}>
-            <CareerAgentVoice
-            openApplication={openApplication}
-            openWindows={openWindows}
-            setOpenWindows={setOpenWindows}
-            userContext={userContext}
-            userId={userContext?.userId}
-          />
-        </div>
-        
-        {/* CAREER AGENT: Progress Tracker - Shows active missions and progress */}
-        
         </TerminalProvider>
       </KeyboardProvider >
     </>

@@ -5,6 +5,7 @@ import type { FileNodeDocument } from "@/modules/storage/storage.repository";
 import type { ResumeProfileData } from "@/modules/users/user.repository";
 
 export type FinderNode = FileNodeDocument & { _id: ObjectId };
+export type FinderLocation = "recents" | "starred" | "trash" | "root" | "folder";
 
 export interface SerializedFinderNode {
   id: string;
@@ -34,6 +35,8 @@ async function nodes(): Promise<Collection<FileNodeDocument>> {
     nodesCollectionPromise = getDatabase().then(async (database) => {
       const collection = database.collection<FileNodeDocument>("fileNodes");
       await collection.createIndex({ ownerId: 1, parentId: 1, isTrashed: 1, name: 1 }, { name: "finder_directory_listing" });
+      await collection.createIndex({ ownerId: 1, isTrashed: 1, updatedAt: -1 }, { name: "finder_recents" });
+      await collection.createIndex({ ownerId: 1, isTrashed: 1, isStarred: 1, name: 1 }, { name: "finder_starred" });
       return collection;
     }).catch((error) => {
       nodesCollectionPromise = null;
@@ -100,6 +103,38 @@ export async function listFinderNodes(userId: string, includeTrash = false) {
     byParent.set(key, siblings);
   }
   return all.map((node) => serializeFinderNode(node, byParent.get(node._id.toHexString()) ?? []));
+}
+
+export async function listFinderLocation(userId: string, location: FinderLocation, parentId?: string | null) {
+  const ownerId = new ObjectId(userId);
+  const query: Record<string, unknown> = { ownerId };
+  let sort: Record<string, 1 | -1> = { name: 1 };
+  let limit = 0;
+
+  if (location === "trash") query.isTrashed = true;
+  else {
+    query.isTrashed = false;
+    if (location === "recents") {
+      sort = { updatedAt: -1 };
+      limit = 100;
+    } else if (location === "starred") query.isStarred = true;
+    else if (location === "root") query.parentId = null;
+    else {
+      if (!parentId || !ObjectId.isValid(parentId)) return [];
+      query.parentId = new ObjectId(parentId);
+    }
+  }
+
+  let cursor = (await nodes()).find(query).project<FileNodeDocument>({ content: 0 }).sort(sort);
+  if (limit) cursor = cursor.limit(limit);
+  const results = await cursor.toArray() as FinderNode[];
+  const today = new Date().toISOString().slice(0, 10);
+  return results
+    .sort((left, right) => Number(right.legacyId?.endsWith(`:date:${today}`)) - Number(left.legacyId?.endsWith(`:date:${today}`)))
+    .map((node) => {
+      const serialized = serializeFinderNode(node);
+      return node.legacyId?.endsWith(`:date:${today}`) ? { ...serialized, name: `Today - ${today}` } : serialized;
+    });
 }
 
 export async function ensureSystemFinderNodes(userId: string) {

@@ -12,7 +12,9 @@ import { upsertCareerInterview } from '@/modules/interviews/interview.repository
 import { createWorkspace } from '@/modules/workspace/workspace.repository';
 import { createCareerTeachingSession } from '@/modules/teaching/teaching.repository';
 import type { WorkspaceFile } from '@/lib/types/workspace';
-import { findUserById } from '@/modules/users/user.repository';
+import { consumePlanUsage, findUserById, getPlanUsageBalance, refundPlanUsage } from '@/modules/users/user.repository';
+import { SUBSCRIPTION_PLANS } from '@/modules/subscription/plans';
+import { countTeacherBooksForPeriod } from '@/modules/teacher-books/teacher-book.repository';
 import { getATSDraft, saveATSDraft } from '@/modules/profile/atsDraft.repository';
 import { generatedResumeDiagnostic, scoreResume } from '@/lib/ats/scoring';
 import * as careerMissionRepo from '@/modules/career/career.repository';
@@ -42,6 +44,12 @@ function toDateKey(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+function utcMonthRange(dateKey: string): { start: Date; end: Date } {
+  const start = new Date(`${dateKey.slice(0, 7)}-01T00:00:00.000Z`);
+  const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+  return { start, end };
+}
+
 const taskTypes = new Set<TaskType>(['teacher', 'interview', 'coding', 'youtube', 'notes', 'calendar', 'telegram', 'mail', 'resume']);
 const taskOpenTargets = new Set<CareerTaskOpenTarget>(['notes', 'ai-book', 'interview', 'vscode', 'teacher', 'youtube', 'career']);
 
@@ -56,7 +64,8 @@ function normalizeTaskIntent(event: any, isInterview: boolean): { type: TaskType
     ? 'vscode'
     : type === 'teacher' ? 'teacher'
       : type === 'notes' ? 'notes'
-        : type === 'interview' ? 'interview' : 'ai-book';
+        : type === 'youtube' ? 'youtube'
+          : type === 'interview' ? 'interview' : 'ai-book';
   return { type, openIn: Array.from(new Set([...(requested.length ? requested : [inferred]), 'career' as const])) };
 }
 
@@ -77,6 +86,19 @@ function normalizePreparationDate(
   const normalized = new Date(`${startKey}T00:00:00.000Z`);
   normalized.setUTCDate(normalized.getUTCDate() + fallbackIndex);
   return toDateKey(normalized) > interviewKey ? interviewKey : toDateKey(normalized);
+}
+
+export function careerPreparationDateKeys(startDate: Date, interviewDate: Date, eventCount: number): string[] {
+  const start = new Date(`${toDateKey(startDate)}T00:00:00.000Z`);
+  const interview = new Date(`${toDateKey(interviewDate)}T00:00:00.000Z`);
+  const availableDays = Math.max(1, Math.ceil((interview.getTime() - start.getTime()) / 86_400_000));
+  const count = Math.max(1, Math.min(Math.floor(eventCount), availableDays));
+  return Array.from({ length: count }, (_, index) => {
+    const offset = count === 1 ? 0 : Math.round(index * (availableDays - 1) / (count - 1));
+    const date = new Date(start);
+    date.setUTCDate(date.getUTCDate() + offset);
+    return toDateKey(date);
+  });
 }
 
 function createCodingExerciseFile(exercise: any, index: number, context: ExecutionContext): WorkspaceFile {
@@ -305,6 +327,7 @@ export class CareerPlanExecutor {
     
     try {
       const analysisResult = await extractJobProfileDirect({
+        userId: context.userId,
         company: context.company || '',
         role: context.role || '',
         jobDescription: context.jobDescription || '',
@@ -381,8 +404,11 @@ export class CareerPlanExecutor {
     console.log('[Step 2] Generating interview notes with AI...');
     
     try {
+      const noteUsage = await getPlanUsageBalance(context.userId, 'notes');
+      if (!noteUsage.allowed) throw new Error(`Monthly note limit reached (${noteUsage.limit})`);
       // Call AI directly - NO HTTP NEEDED
       const notesResult = await generateNotesDirect({
+        userId: context.userId,
         company: context.company || '',
         role: context.role || '',
         jobProfile: context.jobProfile,
@@ -392,17 +418,24 @@ export class CareerPlanExecutor {
       
       // Create each note in database
       const createdNotes = [];
-      for (const note of notesResult.notes || []) {
-        const noteId = await careerPlanRepo.createNote({
-          userId: new ObjectId(context.userId),
-          missionId: new ObjectId(context.missionId),
-          title: note.title,
-          content: note.content,
-          category: note.category || 'career',
-          tags: note.tags || ['interview'],
-          source: 'career-agent'
-        });
-        createdNotes.push({ noteId, ...note });
+      for (const note of (notesResult.notes || []).slice(0, noteUsage.remaining)) {
+        const reservation = await consumePlanUsage(context.userId, 'notes');
+        if (!reservation.allowed) break;
+        try {
+          const noteId = await careerPlanRepo.createNote({
+            userId: new ObjectId(context.userId),
+            missionId: new ObjectId(context.missionId),
+            title: note.title,
+            content: note.content,
+            category: note.category || 'career',
+            tags: note.tags || ['interview'],
+            source: 'career-agent'
+          });
+          createdNotes.push({ noteId, ...note });
+        } catch (error) {
+          await refundPlanUsage(context.userId, 'notes');
+          throw error;
+        }
       }
       
       // Save notes to plan
@@ -436,8 +469,24 @@ export class CareerPlanExecutor {
     );
     
     try {
+      const [user, existingTasks, existingPlan, calendarUsage] = await Promise.all([
+        findUserById(context.userId),
+        careerMissionRepo.findTasksByMission(context.missionId),
+        careerPlanRepo.findPlanById(context.planId),
+        getPlanUsageBalance(context.userId, 'calendarEvents')
+      ]);
+      const subscriptionPlan = SUBSCRIPTION_PLANS[user?.plan || 'free'] || SUBSCRIPTION_PLANS.free;
+      const teacherBooksPerMonth = subscriptionPlan.monthlyLimits?.teacherBooks ?? subscriptionPlan.teacherBooksPerMonth;
+      const calendarLimit = subscriptionPlan.monthlyLimits?.calendarEvents ?? 12;
+      const existingEvents = (existingPlan as any)?.calendarEvents?.events || [];
+      const availableEventSlots = existingEvents.length || Math.min(calendarLimit, calendarUsage.remaining);
+      if (availableEventSlots < 1) throw new Error(`Monthly calendar event limit reached (${calendarLimit})`);
+      const eventCount = Math.max(1, Math.min(12, daysUntilInterview, availableEventSlots));
+      const preparationDates = careerPreparationDateKeys(startDate, context.interviewDate, eventCount);
+
       // Call AI directly - NO HTTP NEEDED
       const eventsResult = await generateCalendarEventsDirect({
+        userId: context.userId,
         company: context.company || '',
         role: context.role || '',
         jobProfile: context.jobProfile,
@@ -445,7 +494,8 @@ export class CareerPlanExecutor {
         skillGaps: context.jobProfile?.skillGaps || [],
         interviewDate: context.interviewDate.toISOString(),
         startDate: startDate.toISOString(),
-        daysUntilInterview
+        daysUntilInterview,
+        eventCount
       });
       
       let calendars = await findCalendarsByUserId(context.userId);
@@ -465,25 +515,17 @@ export class CareerPlanExecutor {
       }
 
       const createdEvents = [];
-      const existingTasks = await careerMissionRepo.findTasksByMission(context.missionId);
-      const existingPlan = await careerPlanRepo.findPlanById(context.planId);
-      const existingEvents = (existingPlan as any)?.calendarEvents?.events || [];
-      const fallbackDates = new Map<string, number>();
-      for (const [eventIndex, event] of (eventsResult.events || []).entries()) {
-        const sourceDate = String(event.date || '').slice(0, 10);
-        if (!fallbackDates.has(sourceDate)) {
-          fallbackDates.set(sourceDate, fallbackDates.size);
-        }
-        const date = normalizePreparationDate(
-          event.date,
-          startDate,
-          context.interviewDate,
-          fallbackDates.get(sourceDate) || 0
-        );
+      const remainingAiBooksByMonth = new Map<string, number>();
+      for (const [eventIndex, event] of (eventsResult.events || []).slice(0, eventCount).entries()) {
+        const date = preparationDates[eventIndex];
+        const eventTitle = typeof event.title === 'string' && event.title.trim()
+          ? event.title.trim()
+          : `Day ${eventIndex + 1} - Interview Preparation`;
+        const normalizedEvent = { ...event, title: eventTitle };
         const eventInput = {
           userId: context.userId,
           calendarId,
-          title: event.title,
+          title: eventTitle,
           date,
           startTime: event.startTime,
           endTime: event.endTime,
@@ -493,21 +535,53 @@ export class CareerPlanExecutor {
           reminder: event.reminder || 10,
           source: 'automation'
         } as const;
-        const previousEvent = existingEvents.find((item: any) => item.title === event.title)
+        const previousEvent = existingEvents.find((item: any) => item.title === eventTitle)
           || existingEvents[eventIndex];
         let persistedEventId = previousEvent?.eventId;
         if (persistedEventId) {
           await updateEvent(persistedEventId, eventInput);
         } else {
-          persistedEventId = await createEvent(eventInput);
+          const reservation = await consumePlanUsage(context.userId, 'calendarEvents');
+          if (!reservation.allowed) break;
+          try {
+            persistedEventId = await createEvent(eventInput);
+          } catch (error) {
+            await refundPlanUsage(context.userId, 'calendarEvents');
+            throw error;
+          }
         }
 
-        createdEvents.push({ ...event, eventId: persistedEventId, date });
+        createdEvents.push({ ...normalizedEvent, eventId: persistedEventId, date });
         const scheduledDate = new Date(`${date}T${event.startTime || '09:00'}:00Z`);
-        const isInterview = /mock interview/i.test(`${event.title} ${event.description || ''}`);
-        const taskIntent = normalizeTaskIntent(event, isInterview);
-        const existingTask = existingTasks.find((task) => task.title === event.title)
+        const isInterview = /mock interview/i.test(`${eventTitle} ${event.description || ''}`);
+        const taskIntent = normalizeTaskIntent(normalizedEvent, isInterview);
+        const existingTask = existingTasks.find((task) => task.title === eventTitle)
           || existingTasks[eventIndex];
+        if (taskIntent.openIn.includes('ai-book') && !existingTask?.openIn?.includes('ai-book')) {
+          const monthKey = date.slice(0, 7);
+          if (!remainingAiBooksByMonth.has(monthKey)) {
+            const { start, end } = utcMonthRange(date);
+            const [used, reserved] = await Promise.all([
+              countTeacherBooksForPeriod(context.userId, start, end),
+              Promise.resolve(existingTasks.filter((task) => {
+                const taskDate = task.scheduledDate ? new Date(task.scheduledDate) : null;
+                return task.openIn?.includes('ai-book')
+                  && taskDate
+                  && Number.isFinite(taskDate.getTime())
+                  && taskDate >= start
+                  && taskDate < end;
+              }).length)
+            ]);
+            remainingAiBooksByMonth.set(monthKey, Math.max(0, teacherBooksPerMonth - used - reserved));
+          }
+          const remaining = remainingAiBooksByMonth.get(monthKey) || 0;
+          if (remaining > 0) {
+            remainingAiBooksByMonth.set(monthKey, remaining - 1);
+          } else {
+            taskIntent.openIn = taskIntent.openIn.filter((target) => target !== 'ai-book');
+            if (!taskIntent.openIn.some((target) => target !== 'career')) taskIntent.openIn.unshift('notes');
+          }
+        }
         const taskResult = {
           ...(existingTask?.result || {}),
           calendarEventId: persistedEventId,
@@ -515,11 +589,11 @@ export class CareerPlanExecutor {
         };
         if (existingTask) {
           await careerMissionRepo.updateTask(existingTask.id, {
-            title: event.title,
+            title: eventTitle,
             description: event.description,
             scheduledDate,
             duration: event.duration || 60,
-            topic: event.title,
+            topic: eventTitle,
             type: taskIntent.type,
             openIn: taskIntent.openIn,
             result: taskResult
@@ -530,15 +604,15 @@ export class CareerPlanExecutor {
             userId: context.userId,
             type: taskIntent.type,
             openIn: taskIntent.openIn,
-            title: event.title,
+            title: eventTitle,
             description: event.description,
             scheduledDate,
             duration: event.duration || 60,
             status: 'pending',
-            topic: event.title,
+            topic: eventTitle,
             result: taskResult,
             retryCount: 0,
-            maxRetries: 0
+            maxRetries: 3
           });
         }
       }
@@ -575,6 +649,7 @@ export class CareerPlanExecutor {
     try {
       // Call AI directly - NO HTTP NEEDED
       const learningResult = await generateLearningPlanDirect({
+        userId: context.userId,
         company: context.company || '',
         role: context.role || '',
         jobProfile: context.jobProfile,
@@ -590,10 +665,16 @@ export class CareerPlanExecutor {
         throw new Error('AI did not generate any coding exercises');
       }
 
+      const missionTasks = await careerMissionRepo.findTasksByMission(context.missionId);
+      const teacherTasks = missionTasks
+        .filter((task) => task.openIn?.includes('teacher'))
+        .sort((left, right) => new Date(left.scheduledDate).getTime() - new Date(right.scheduledDate).getTime());
+
       const teacherSessions = await Promise.all(
-        learningResult.lessons.map((lesson: any) => createCareerTeachingSession({
+        learningResult.lessons.map((lesson: any, index: number) => createCareerTeachingSession({
           userId: context.userId,
           missionId: context.missionId,
+          careerTaskId: teacherTasks[index]?.id,
           subject: 'Computer Science',
           topic: String(lesson.topic || `${context.role || 'Career'} interview preparation`),
           summary: Array.isArray(lesson.concepts) ? lesson.concepts.join(', ') : '',
@@ -601,6 +682,12 @@ export class CareerPlanExecutor {
           exercises: Array.isArray(lesson.exercises) ? lesson.exercises.map(String) : []
         }))
       );
+      await Promise.all(teacherTasks.map((task, index) => {
+        const session = teacherSessions[index];
+        return session ? careerMissionRepo.updateTask(task.id, {
+          result: { ...(task.result || {}), sessionId: session.id }
+        }) : Promise.resolve();
+      }));
 
       const exerciseFiles: WorkspaceFile[] = learningResult.codingExercises.map(
         (exercise: any, index: number) => createCodingExerciseFile(exercise, index, context)
@@ -627,14 +714,53 @@ export class CareerPlanExecutor {
         `${context.role || 'Job'} interview preparation`
       ])).slice(0, 10) as string[];
       const youtubeResources = resourceTopics.map((topic) => {
-        const searchQuery = `${context.company || ''} ${context.role || ''} ${topic} interview preparation`.trim();
+        const searchQuery = /\binterview preparation\b/i.test(topic)
+          ? topic.trim()
+          : `${topic.trim()} interview preparation`;
         return {
-          title: `${topic} interview preparation`,
+          title: searchQuery,
           provider: 'youtube',
           searchQuery,
           url: `https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery)}`
         };
       });
+      const preparationTasks = missionTasks
+        .filter((task) => task.type !== 'youtube')
+        .sort((left, right) => new Date(left.scheduledDate).getTime() - new Date(right.scheduledDate).getTime());
+      const existingYoutubeTasks = missionTasks.filter((task) => task.type === 'youtube');
+      await Promise.all(youtubeResources.map((resource, index) => {
+        const existingTask = existingYoutubeTasks[index];
+        const scheduledDate = new Date(
+          preparationTasks[index % Math.max(preparationTasks.length, 1)]?.scheduledDate
+            || context.interviewDate
+            || new Date()
+        );
+        const task = {
+          type: 'youtube' as const,
+          openIn: ['youtube', 'career'] as CareerTaskOpenTarget[],
+          title: `Watch: ${resource.title}`,
+          description: `Watch focused videos for ${resource.searchQuery}.`,
+          scheduledDate,
+          duration: 30,
+          topic: resource.title,
+          result: {
+            ...(existingTask?.result || {}),
+            searchQuery: resource.searchQuery,
+            resourceUrl: resource.url,
+          },
+        };
+
+        return existingTask
+          ? careerMissionRepo.updateTask(existingTask.id, task)
+          : careerMissionRepo.createTask({
+              missionId: context.missionId,
+              userId: context.userId,
+              ...task,
+              status: 'pending',
+              retryCount: 0,
+              maxRetries: 3,
+            });
+      }));
       const learningResources = {
         ...learningResult,
         youtubeResources,
@@ -644,7 +770,7 @@ export class CareerPlanExecutor {
         workspaceIds: workspaceArtifacts.map(({ workspace }) => workspace.id)
       };
 
-      const codingTasks = (await careerMissionRepo.findTasksByMission(context.missionId))
+      const codingTasks = missionTasks
         .filter((task) => task.type === 'coding')
         .sort((left, right) => new Date(left.scheduledDate).getTime() - new Date(right.scheduledDate).getTime());
       await Promise.all(codingTasks.map((task, index) => careerMissionRepo.updateTask(task.id, {
@@ -689,6 +815,7 @@ export class CareerPlanExecutor {
     try {
       // Call AI directly - NO HTTP NEEDED
       const interviewResult = await generateInterviewSessionDirect({
+        userId: context.userId,
         company: context.company || '',
         role: context.role || '',
         jobProfile: context.jobProfile,

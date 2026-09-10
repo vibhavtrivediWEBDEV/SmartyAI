@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server'
-import { createAIService } from '@/lib/ai'
+import { createMeteredAIService, CreditLimitError } from '@/lib/ai/metered'
 import { getCurrentUser } from '@/lib/actions/auth.action'
 import { generateDesktopAssistantPrompt } from '@/lib/ai/userAIContext'
+import { getDesktopSettings } from '@/modules/settings/desktop-settings.repository'
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const aiService = createAIService()
+    const aiService = createMeteredAIService(user.id, { source: 'assistant', feature: 'desktop-chat' })
     
     // Generate user-specific system prompt
     let systemPrompt = `You are a helpful assistant for ${user.name}. Respond naturally and helpfully.`;
@@ -40,6 +41,13 @@ export async function POST(request: NextRequest) {
       }
     } catch (ctxError) {
       console.warn('Could not load full user context, using fallback:', ctxError);
+    }
+
+    if (user.plan !== 'free' && user.subscriptionStatus === 'active') {
+      const { customAIInstructions } = await getDesktopSettings(user.id)
+      if (customAIInstructions) {
+        systemPrompt += `\n\nUSER RESPONSE INSTRUCTIONS:\n${customAIInstructions}`
+      }
     }
     
     const fullMessages = [
@@ -70,6 +78,9 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error: any) {
+    if (error instanceof CreditLimitError) {
+      return Response.json({ error: error.message }, { status: error.status })
+    }
     console.error('❌ API error:', error)
     return new Response(JSON.stringify({ success: false, error: error.message || String(error) }), {
       status: 500,

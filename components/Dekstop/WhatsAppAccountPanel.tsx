@@ -38,7 +38,14 @@ export function WhatsAppAccountPanel() {
   }
 
   useEffect(() => {
-    if (whatsapp.account.status === 'qr_ready' && !qrCode) void run(refreshQr)
+    if (whatsapp.account.status === 'qr_ready' && !qrCode) {
+      // Automatically fetch QR when status becomes qr_ready
+      void run(refreshQr)
+    }
+    // Also handle transition from connecting to qr_ready
+    if (whatsapp.account.status === 'connecting') {
+      setQrCode(null) // Clear stale QR while connecting
+    }
   }, [whatsapp.account.status, qrCode])
 
   useEffect(() => {
@@ -76,7 +83,7 @@ export function WhatsAppAccountPanel() {
     <section className="border-b border-black/10 bg-[#f4f8f7] px-4 py-3 text-gray-800 dark:border-white/10 dark:bg-[#17201e] dark:text-white">
       <div className="mb-3 flex items-center gap-2"><QrCode size={18} className="text-[#168b6b]" /><div><p className="text-xs font-semibold">Link WhatsApp</p><p className="text-[10px] text-gray-500 dark:text-gray-400">Scan with WhatsApp under Linked devices.</p></div></div>
       {!qrCode ? (
-        <><div className="grid grid-cols-2 gap-1.5">{permissionLabels.map(([scope, label]) => <label key={scope} className="flex items-center gap-1.5 text-[10px]"><input type="checkbox" checked={permissions[scope]} onChange={(event) => setPermissions((current) => ({ ...current, [scope]: event.target.checked }))} />{label}</label>)}</div><button type="button" onClick={() => void run(async () => { await whatsapp.connect(permissions); await refreshQr() })} disabled={busy} className="mt-3 flex items-center gap-2 rounded-md bg-[#168b6b] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{busy && <LoaderCircle size={14} className="animate-spin" />}Generate QR code</button></>
+        <><div className="grid grid-cols-2 gap-1.5">{permissionLabels.map(([scope, label]) => <label key={scope} className="flex items-center gap-1.5 text-[10px]"><input type="checkbox" checked={permissions[scope]} onChange={(event) => setPermissions((current) => ({ ...current, [scope]: event.target.checked }))} />{label}</label>)}</div><button type="button" onClick={() => void run(async () => { setQrCode(null); await whatsapp.connect(permissions) })} disabled={busy} className="mt-3 flex items-center gap-2 rounded-md bg-[#168b6b] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{busy && <LoaderCircle size={14} className="animate-spin" />}Connect WhatsApp</button></>
       ) : (
         <div className="flex items-center gap-3"><div className="rounded-md bg-white p-2 shadow-sm"><img src={qrCode} alt="WhatsApp linking QR code" className="h-36 w-36" /></div><div><p className="max-w-[150px] text-[10px] leading-relaxed text-gray-600 dark:text-gray-300">Open WhatsApp, choose Linked devices, then scan this code.</p><button type="button" onClick={() => void run(refreshQr)} disabled={busy} className="mt-2 flex items-center gap-1.5 text-[10px] font-semibold text-[#168b6b]"><RefreshCw size={12} className={busy ? 'animate-spin' : ''} />Refresh code</button></div></div>
       )}

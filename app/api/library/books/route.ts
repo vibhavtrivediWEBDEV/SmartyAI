@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     const result = await listPublicTeacherBooks(limit, cursor);
     return NextResponse.json(
       { books: result.books, nextCursor: encodeCursor(result.nextCursor) },
-      { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=300" } },
+      { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
     console.error("Public library catalog failed:", error);

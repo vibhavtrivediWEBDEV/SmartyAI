@@ -7,6 +7,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUserId } from '@/lib/auth/session';
 import * as careerRepository from '@/modules/career/career.repository';
+import { consumePlanUsage, refundPlanUsage } from '@/modules/users/user.repository';
+import { deleteCareerTeachingSessions } from '@/modules/teaching/teaching.repository';
 
 /**
  * GET /api/career/mission
@@ -63,6 +65,7 @@ export async function GET(req: NextRequest) {
  * CRITICAL: Prevents duplicate missions and enforces one active mission per user
  */
 export async function POST(req: NextRequest) {
+  let reservedUserId: string | null = null;
   try {
     const userId = await getSessionUserId();
     
@@ -74,7 +77,10 @@ export async function POST(req: NextRequest) {
     }
     
     const body = await req.json();
-    const { company, role, jobDescription, interviewDate, priority } = body;
+    const company = typeof body.company === 'string' ? body.company.trim().slice(0, 120) : '';
+    const role = typeof body.role === 'string' ? body.role.trim().slice(0, 120) : '';
+    const jobDescription = typeof body.jobDescription === 'string' ? body.jobDescription.trim().slice(0, 8_000) : '';
+    const { interviewDate, priority } = body;
     
     if (!company || !role) {
       return NextResponse.json(
@@ -90,11 +96,22 @@ export async function POST(req: NextRequest) {
       );
     }
     
+    const newInterviewDate = new Date(interviewDate);
+    const latestInterviewDate = new Date(Date.now() + 366 * 24 * 60 * 60 * 1000);
+    if (!Number.isFinite(newInterviewDate.getTime()) || newInterviewDate <= new Date() || newInterviewDate > latestInterviewDate) {
+      return NextResponse.json({ error: 'Interview date must be within the next year' }, { status: 400 });
+    }
+
+    const usage = await consumePlanUsage(userId, 'careerMissions');
+    if (!usage.allowed) {
+      return NextResponse.json({ error: `Your plan includes ${usage.limit} career plans per month.`, code: 'CAREER_LIMIT_REACHED', usage }, { status: 429 });
+    }
+    reservedUserId = userId;
+
     // Check for existing active missions
     const activeMissions = await careerRepository.findActiveMissions(userId);
     
     // If there are active missions, check date overlap
-    const newInterviewDate = new Date(interviewDate);
     const existingOverlap = activeMissions.find(mission => {
       const missionDate = new Date(mission.interviewDate);
       const timeDiff = Math.abs(missionDate.getTime() - newInterviewDate.getTime());
@@ -150,6 +167,7 @@ export async function POST(req: NextRequest) {
     });
     
   } catch (error: any) {
+    if (reservedUserId) await refundPlanUsage(reservedUserId, 'careerMissions');
     console.error('Create mission error:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to create mission' },
@@ -224,7 +242,7 @@ export async function PATCH(req: NextRequest) {
  */
 export async function DELETE(req: NextRequest) {
   try {
-    const { userId } = getAuth(req);
+    const userId = await getSessionUserId();
     
     if (!userId) {
       return NextResponse.json(
@@ -253,7 +271,7 @@ export async function DELETE(req: NextRequest) {
       );
     }
     
-    // Delete mission
+    await deleteCareerTeachingSessions(missionId);
     await careerRepository.deleteMission(missionId);
     
     return NextResponse.json({

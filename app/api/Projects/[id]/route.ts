@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireFinderSubscription } from "@/lib/auth/finder-access";
-import { getFinderNode, trashFinderNodes, updateFinderNode } from "@/modules/finder/finder.repository";
+import { getFinderNode, serializeFinderNode, trashFinderNodes, updateFinderNode } from "@/modules/finder/finder.repository";
 import { commitReservedStorage, releaseReservedStorage, releaseUsedStorage, reserveStorage } from "@/modules/storage/storage.repository";
 
 const updateSchema = z.object({
@@ -14,6 +14,15 @@ const updateSchema = z.object({
 });
 
 type Context = { params: Promise<{ id: string }> };
+
+export async function GET(_request: Request, { params }: Context) {
+  const access = await requireFinderSubscription();
+  if (access.response) return access.response;
+  const item = await getFinderNode(access.user!.id, (await params).id);
+  return item
+    ? NextResponse.json({ data: serializeFinderNode(item) })
+    : NextResponse.json({ error: "Item not found" }, { status: 404 });
+}
 
 export async function PUT(request: Request, { params }: Context) {
   const access = await requireFinderSubscription();

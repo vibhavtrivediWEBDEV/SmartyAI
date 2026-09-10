@@ -1,12 +1,13 @@
-import { createAIService } from '@/lib/ai'
+import { createMeteredAIService, CreditLimitError } from '@/lib/ai/metered'
 import { ObjectId } from "mongodb";
 import { getRandomInterviewCover } from "@/lib/utils";
 import { getSessionUserId } from "@/lib/auth/session";
-import { findUserById } from "@/modules/users/user.repository";
+import { consumePlanUsage, findUserById, refundPlanUsage } from "@/modules/users/user.repository";
 import { createInterview, findInterviewsByUserId, type InterviewQuestion } from "@/modules/interviews/interview.repository";
 
 export async function POST(request: Request) {
   console.log('🎯 [generate] Interview creation request received');
+  let reservedUserId: string | null = null;
   
   try {
     const { type, role, level, techstack, amount, userid, jobDescription, createFromProfile } = await request.json();
@@ -44,12 +45,18 @@ export async function POST(request: Request) {
     const questionCount = Math.max(4, Math.min(12, Number.parseInt(String(amount), 10) || 7));
     const safeJobDescription = String(jobDescription || "").trim().slice(0, 8000);
 
+    const usage = await consumePlanUsage(sessionUserId, "interviews");
+    if (!usage.allowed) {
+      return Response.json({ success: false, error: `Your plan includes ${usage.limit} interviews per month.`, code: "INTERVIEW_LIMIT_REACHED", usage }, { status: 429 });
+    }
+    reservedUserId = sessionUserId;
+
     // Calculate how many coding questions to include (20% of total)
     const codingQuestionsCount = Math.max(1, Math.ceil(questionCount * 0.25));
     const regularQuestionsCount = questionCount - codingQuestionsCount;
 
     // Use AI abstraction layer (auto-detects: OpenAI, Bedrock, or Gemini)
-    const aiService = createAIService()
+    const aiService = createMeteredAIService(sessionUserId, { source: 'interview', feature: 'question-generation' })
     console.log('🤖 AI Service created:', aiService.constructor.name);
     
     const prompt = `Create a structured, realistic mock interview question set.
@@ -152,6 +159,10 @@ export async function POST(request: Request) {
       created: true,
     }, { status: 200 });
   } catch (error: any) {
+    if (reservedUserId) await refundPlanUsage(reservedUserId, "interviews");
+    if (error instanceof CreditLimitError) {
+      return Response.json({ success: false, error: error.message }, { status: error.status });
+    }
     console.error("❌ Interview creation error:", error);
     return Response.json({ 
       success: false, 

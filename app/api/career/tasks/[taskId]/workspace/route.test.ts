@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getSessionUserId: vi.fn(),
-  findTasksByUserId: vi.fn(),
+  findTaskByIdForUser: vi.fn(),
   updateTask: vi.fn(),
   createWorkspace: vi.fn(),
   getWorkspace: vi.fn(),
@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/auth/session', () => ({ getSessionUserId: mocks.getSessionUserId }));
 vi.mock('@/modules/career/career.repository', () => ({
-  findTasksByUserId: mocks.findTasksByUserId,
+  findTaskByIdForUser: mocks.findTaskByIdForUser,
   updateTask: mocks.updateTask,
 }));
 vi.mock('@/modules/workspace/workspace.repository', () => ({
@@ -45,7 +45,7 @@ describe('career task workspace route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSessionUserId.mockResolvedValue('user-1');
-    mocks.findTasksByUserId.mockResolvedValue([task]);
+    mocks.findTaskByIdForUser.mockResolvedValue(task);
     mocks.createCareerCodingWorkspaceSpec.mockReturnValue(spec);
     mocks.createWorkspace.mockResolvedValue({ id: 'react-workspace', name: spec.name, files: spec.files });
   });
@@ -64,10 +64,10 @@ describe('career task workspace route', () => {
   });
 
   it('upgrades a legacy React workspace whose component is outside src', async () => {
-    mocks.findTasksByUserId.mockResolvedValue([{
+    mocks.findTaskByIdForUser.mockResolvedValue({
       ...task,
       result: { workspaceId: 'legacy-react-workspace', filePath: 'exercises/01-build-a-react-popup.jsx' },
-    }]);
+    });
     mocks.getWorkspace.mockResolvedValue({
       id: 'legacy-react-workspace',
       files: [{ path: 'exercises/01-build-a-react-popup.jsx', content: '', language: 'javascript' }],
@@ -83,12 +83,12 @@ describe('career task workspace route', () => {
   });
 
   it('upgrades an older calendar-typed task that opens in VS Code', async () => {
-    mocks.findTasksByUserId.mockResolvedValue([{
+    mocks.findTaskByIdForUser.mockResolvedValue({
       ...task,
       type: 'calendar',
       openIn: ['vscode'],
       result: { workspaceId: 'legacy-react-workspace', filePath: 'exercises/01-build-a-react-popup.jsx' },
-    }]);
+    });
 
     const response = await POST(new Request('http://localhost'), context);
 
@@ -99,7 +99,7 @@ describe('career task workspace route', () => {
   });
 
   it('reuses a compatible persisted workspace without creating another one', async () => {
-    mocks.findTasksByUserId.mockResolvedValue([{ ...task, result: { workspaceId: 'react-workspace', filePath: spec.entryPoint } }]);
+    mocks.findTaskByIdForUser.mockResolvedValue({ ...task, result: { workspaceId: 'react-workspace', filePath: spec.entryPoint } });
     mocks.getWorkspace.mockResolvedValue({ id: 'react-workspace', files: spec.files });
 
     const response = await POST(new Request('http://localhost'), context);

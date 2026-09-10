@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { getCurrentUser } from "@/lib/actions/auth.action"
 import { deterministicRewriteFallback } from "@/lib/ats/rewrite"
+import { consumeAtsCvUpdate, refundAtsCvUpdate } from "@/modules/users/user.repository"
 
 const requestSchema = z.object({ selectedText: z.string().min(1).max(8_000), jobDescription: z.string().max(30_000).optional() })
 const suggestionSchema = z.object({ suggestedRewrite: z.string(), reason: z.string(), keywordsAddressed: z.array(z.string()), factsRequiringInput: z.array(z.string()) })
@@ -31,6 +32,10 @@ export async function POST(request: Request) {
   const endpoint = process.env.AZURE_OPENAI_RESUME_ENDPOINT?.trim()
   const deployment = process.env.AZURE_OPENAI_RESUME_DEPLOYMENT?.trim() || "gpt-5.6-sol"
   if (!endpoint) return NextResponse.json({ error: "Resume suggestion service is not configured" }, { status: 503 })
+  const usage = await consumeAtsCvUpdate(user.id)
+  if (!usage.allowed) {
+    return NextResponse.json({ error: "ATS CV update limit reached", usage }, { status: 402 })
+  }
   try {
     const azure = await fetch(endpoint, {
       method: "POST", headers: { "Content-Type": "application/json", "api-key": apiKey },
@@ -46,15 +51,20 @@ export async function POST(request: Request) {
     })
     if (!azure.ok) {
       console.warn(`ATS suggestion service failed (${azure.status}); using deterministic fallback`)
+      await refundAtsCvUpdate(user.id)
       return NextResponse.json({ suggestion: deterministicRewriteFallback(parsed.data.selectedText), fallback: true })
     }
     const suggestion = suggestionSchema.parse(JSON.parse(outputText(await azure.json())))
     const sourceNumbers = new Set(parsed.data.selectedText.match(/\d+(?:\.\d+)?/g) ?? [])
     const introducedNumber = (suggestion.suggestedRewrite.match(/\d+(?:\.\d+)?/g) ?? []).some((number) => !sourceNumbers.has(number))
-    if (introducedNumber) return NextResponse.json({ suggestion: deterministicRewriteFallback(parsed.data.selectedText), fallback: true })
-    return NextResponse.json({ suggestion })
+    if (introducedNumber) {
+      await refundAtsCvUpdate(user.id)
+      return NextResponse.json({ suggestion: deterministicRewriteFallback(parsed.data.selectedText), fallback: true })
+    }
+    return NextResponse.json({ suggestion, usage })
   } catch (error) {
     console.error("ATS suggestion parsing failed:", error)
+    await refundAtsCvUpdate(user.id)
     return NextResponse.json({ suggestion: deterministicRewriteFallback(parsed.data.selectedText), fallback: true })
   }
 }

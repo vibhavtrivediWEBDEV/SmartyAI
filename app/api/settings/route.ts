@@ -26,6 +26,10 @@ export async function PATCH(request: Request) {
     );
   }
 
+  if (parsed.data.customAIInstructions !== undefined && (user.plan === "free" || user.subscriptionStatus !== "active")) {
+    return NextResponse.json({ error: "Custom AI instructions require an active subscription" }, { status: 403 });
+  }
+
   return NextResponse.json({ data: await updateDesktopSettings(user.id, parsed.data) });
 }
 

@@ -229,7 +229,6 @@ export default function VSCodeEditor({ openPreviewWindow, initialFile }: VSCodeP
 
   useEffect(() => {
     if (!initialFile) return
-    let active = true
     const incoming: CodeFile = {
       id: initialFile.id,
       name: initialFile.name,
@@ -240,28 +239,6 @@ export default function VSCodeEditor({ openPreviewWindow, initialFile }: VSCodeP
     setFiles(previous => [...previous.filter(file => file.id !== incoming.id), incoming])
     setActiveFileId(incoming.id)
     setHasUnsavedChanges(false)
-
-    fetch('/api/Projects')
-      .then(response => response.json())
-      .then(result => {
-        if (!active || !Array.isArray(result.data)) return
-        const siblings: CodeFile[] = result.data
-          .filter((item: any) => item.parentId === initialFile.parentId && item.id !== initialFile.id && typeof item.content === 'string')
-          .map((item: any): CodeFile => ({
-            id: item.id,
-            name: item.name,
-            content: item.content,
-            finderParentId: item.parentId,
-            source: 'finder',
-          }))
-        setFiles(previous => {
-          const siblingIds = new Set(siblings.map((file: CodeFile) => file.id))
-          return [...previous.filter(file => !siblingIds.has(file.id)), ...siblings]
-        })
-      })
-      .catch(() => undefined)
-
-    return () => { active = false }
   }, [initialFile?.id, initialFile?.name, initialFile?.content, initialFile?.parentId])
 
   // ============ AUTO-SAVE TO LOCALSTORAGE ============

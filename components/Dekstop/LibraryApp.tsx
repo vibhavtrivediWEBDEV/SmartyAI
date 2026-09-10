@@ -34,7 +34,7 @@ export default function LibraryApp({ openApplication }: LibraryAppProps) {
     setError("")
     try {
       const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""
-      const response = await fetch(`/api/library/books${query}`)
+      const response = await fetch(`/api/library/books${query}`, { cache: "no-store" })
       const data = await response.json().catch(() => null)
       if (!response.ok) throw new Error(data?.error || "Unable to load the library.")
       setBooks((current) => cursor ? [...current, ...(data.books || [])] : data.books || [])
@@ -47,7 +47,12 @@ export default function LibraryApp({ openApplication }: LibraryAppProps) {
     }
   }, [])
 
-  useEffect(() => { void loadBooks() }, [loadBooks])
+  useEffect(() => {
+    const refreshBooks = () => { void loadBooks() }
+    void loadBooks()
+    window.addEventListener("library-books-changed", refreshBooks)
+    return () => window.removeEventListener("library-books-changed", refreshBooks)
+  }, [loadBooks])
 
   return (
     <main className={styles.library}>

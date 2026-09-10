@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import type { CareerPlan, PlanStep } from '@/lib/career/types';
+import { loadCareerProgress } from '@/lib/career/progressRequest';
 import { playById } from '@/lib/sound';
 import {
   BrainCircuit,
@@ -74,43 +75,35 @@ export function CareerProgressCard({ missionId, missionData, openApplication }: 
 
   useEffect(() => {
     if (!missionId) return;
-    
+
+    let active = true;
+
     const loadPlan = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`/api/career/execute/progress?missionId=${missionId}`);
-        
-        if (!response.ok) {
-          throw new Error('Failed to load plan');
+        const data = await loadCareerProgress<CareerProgress>(missionId);
+        if (active) {
+          setPlan(data);
+          setError(null);
         }
-        
-        const data = await response.json();
-        // API returns the plan data directly, not wrapped in a 'plan' field
-        setPlan(data.steps ? data : null); // Check if steps exist to confirm it's a valid plan
       } catch (err: any) {
-        setError(err.message);
+        if (active) setError(err.message);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
-    
-    loadPlan();
 
-    const handleProgress = (event: Event) => {
-      const detail = (event as CustomEvent<{ missionId?: string }>).detail;
-      if (!detail?.missionId || detail.missionId === missionId) loadPlan();
+    void loadPlan();
+
+    const refreshWhenCareerOpens = (event: Event) => {
+      const detail = (event as CustomEvent<{ appName?: string }>).detail;
+      if (detail?.appName?.trim().toLowerCase() === 'career') void loadPlan();
     };
-    const recoverWhenVisible = () => {
-      if (document.visibilityState === 'visible') loadPlan();
-    };
-    window.addEventListener('career-progress', handleProgress);
-    document.addEventListener('visibilitychange', recoverWhenVisible);
-    const fallback = window.setInterval(recoverWhenVisible, 60_000);
+    window.addEventListener('smarty-app-activated', refreshWhenCareerOpens);
 
     return () => {
-      window.removeEventListener('career-progress', handleProgress);
-      document.removeEventListener('visibilitychange', recoverWhenVisible);
-      window.clearInterval(fallback);
+      active = false;
+      window.removeEventListener('smarty-app-activated', refreshWhenCareerOpens);
     };
   }, [missionId]);
 
@@ -278,7 +271,7 @@ export function CareerProgressCard({ missionId, missionData, openApplication }: 
             { label: 'Notes', icon: NotebookPen, enabled: Boolean(plan.generatedNotes), action: () => openApplication?.('Notes') },
             { label: 'Calendar', icon: CalendarDays, enabled: Boolean(plan.calendarEvents), action: () => { void playById('ny-video-online-audio-converter').catch(() => {}); openApplication?.('Calendar'); } },
             { label: 'Teacher', icon: GraduationCap, enabled: Boolean(plan.learningResources?.teacherSessionIds?.[0]), action: () => openApplication?.('Smarty Teacher', 80, 60, undefined, { sessionId: plan.learningResources?.teacherSessionIds?.[0] }) },
-            { label: 'AI Book', icon: BookOpen, enabled: Boolean(taskGroups.length), action: () => openApplication?.('AI Book', 80, 60, undefined, { sessionId: `career:${missionId}:${new Date().toISOString().slice(0, 10)}` }) },
+            { label: 'AI Book', icon: BookOpen, enabled: Boolean(taskGroups.length), action: () => openApplication?.('AI Book', 80, 60, undefined, { sessionId: `career-mission:${missionId}`, topic: `${missionData?.company || 'Career'} ${missionData?.role || 'interview'} preparation` }) },
             { label: 'VS Code', icon: Code2, enabled: Boolean(plan.learningResources?.workspaceId), action: () => { void playById('are-baap-re-yaad-aya').catch(() => {}); openApplication?.('vscode', 80, 60, undefined, { workspaceId: plan.learningResources?.workspaceId }); } },
             { label: 'YouTube', icon: PlayCircle, enabled: Boolean(plan.learningResources?.youtubeResources?.length), action: () => openApplication?.('Youtube') },
             { label: 'Interview', icon: Mic2, enabled: Boolean(mockInterviewId), action: () => openApplication?.('Start Interview', 80, 60, undefined, { interviewId: mockInterviewId }) },

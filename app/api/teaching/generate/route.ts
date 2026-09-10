@@ -35,6 +35,7 @@ export async function POST(request: Request) {
       temperature: 0.7,
       maxTokens: 1500,
       openAIModel: "gpt-5.6-sol",
+      metering: { userId: user.id, source: "teacher", feature: "lesson-summary" },
     })
     
     const generatedContent = response.content

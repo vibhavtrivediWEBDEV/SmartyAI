@@ -19,13 +19,17 @@ const EXTENSION_TO_LANGUAGE: Record<string, string> = {
   // JavaScript & TypeScript
   'js': 'javascript',
   'jsx': 'javascript',
+  'es6': 'javascript',
   'mjs': 'javascript',
   'cjs': 'javascript',
   'ts': 'typescript',
   'tsx': 'typescript',
+  'mts': 'typescript',
+  'cts': 'typescript',
   
   // Data formats
   'json': 'json',
+  'jsonc': 'json',
   'xml': 'xml',
   'yml': 'yaml',
   'yaml': 'yaml',
@@ -33,6 +37,7 @@ const EXTENSION_TO_LANGUAGE: Record<string, string> = {
   // Markdown
   'md': 'markdown',
   'markdown': 'markdown',
+  'mdx': 'mdx',
   
   // Programming languages
   'py': 'python',
@@ -50,19 +55,67 @@ const EXTENSION_TO_LANGUAGE: Record<string, string> = {
   'swift': 'swift',
   'kt': 'kotlin',
   'scala': 'scala',
+  'cs': 'csharp',
+  'fs': 'fsharp',
+  'fsx': 'fsharp',
+  'dart': 'dart',
+  'lua': 'lua',
+  'r': 'r',
+  'pl': 'perl',
+  'pm': 'perl',
+  'ex': 'elixir',
+  'exs': 'elixir',
+  'sol': 'solidity',
+  'vb': 'vb',
+  'wgsl': 'wgsl',
   
   // Shell & configs
   'sh': 'shell',
   'bash': 'shell',
   'zsh': 'shell',
+  'fish': 'shell',
+  'bat': 'bat',
+  'cmd': 'bat',
+  'ps1': 'powershell',
+  'psm1': 'powershell',
   'env': 'plaintext',
   'txt': 'plaintext',
+  'ini': 'ini',
+  'cfg': 'ini',
+  'conf': 'ini',
+  'properties': 'ini',
   
   // Other
   'sql': 'sql',
+  'graphql': 'graphql',
+  'gql': 'graphql',
+  'proto': 'protobuf',
+  'tf': 'hcl',
+  'tfvars': 'hcl',
+  'hcl': 'hcl',
+  'pug': 'pug',
+  'hbs': 'handlebars',
+  'handlebars': 'handlebars',
+  'liquid': 'liquid',
+  'twig': 'twig',
+  'vue': 'html',
+  'svelte': 'html',
+  'astro': 'html',
+  'cshtml': 'razor',
   'dockerfile': 'dockerfile',
   'makefile': 'makefile',
   'gradle': 'groovy',
+}
+
+const FILENAME_TO_LANGUAGE: Record<string, string> = {
+  'dockerfile': 'dockerfile',
+  'containerfile': 'dockerfile',
+  'makefile': 'makefile',
+  'jenkinsfile': 'groovy',
+  '.editorconfig': 'ini',
+  '.gitignore': 'plaintext',
+  '.npmrc': 'ini',
+  '.env': 'plaintext',
 }
 
 /**
@@ -72,19 +125,13 @@ const EXTENSION_TO_LANGUAGE: Record<string, string> = {
  */
 export function getLanguageFromExtension(filename: string): string {
   if (!filename) return 'plaintext'
-  
-  // Extract extension (handle files like .env, Dockerfile without extensions)
-  const parts = filename.split('.')
-  
-  // Handle files without extension (e.g., Dockerfile, Makefile)
-  if (parts.length === 1) {
-    const baseName = filename.toLowerCase()
-    return EXTENSION_TO_LANGUAGE[baseName] || 'plaintext'
-  }
-  
-  // Get the last part as extension
-  const ext = parts[parts.length - 1].toLowerCase()
-  
+
+  const baseName = filename.split(/[\\/]/).pop()?.toLowerCase() || ''
+  const exactLanguage = FILENAME_TO_LANGUAGE[baseName]
+  if (exactLanguage) return exactLanguage
+
+  if (baseName.startsWith('.env.')) return 'plaintext'
+  const ext = baseName.includes('.') ? baseName.split('.').pop()! : baseName
   return EXTENSION_TO_LANGUAGE[ext] || 'plaintext'
 }
 

@@ -67,7 +67,7 @@ export default function MacSignIn({ goNext, goBack }: MacSignInProps) {
 
   return (
     <div
-      className="w-screen h-screen flex items-center justify-center relative overflow-hidden"
+      className="w-screen min-h-dvh p-3 sm:p-6 flex items-center justify-center relative overflow-hidden"
       style={{
         backgroundImage: "url('/Wallpaper/GoldenGate_6k.png')",
         backgroundSize: 'cover',
@@ -82,18 +82,18 @@ export default function MacSignIn({ goNext, goBack }: MacSignInProps) {
         animate={{ opacity: 1, scale: 1, x: 0 }}
         exit={{ opacity: 0, scale: 0.95, x: -20 }}
         transition={{ duration: 0.4 }}
-        className="w-[500px] bg-white rounded-2xl shadow-2xl z-10 flex flex-col relative"
+        className="w-full max-w-[500px] max-h-[calc(100dvh-1.5rem)] overflow-y-auto bg-white rounded-lg sm:rounded-2xl shadow-2xl z-10 flex flex-col relative"
       >
         {/* Back button */}
         <button
           onClick={goBack}
           disabled={isSigningIn}
-          className="absolute top-6 left-6 w-10 h-10 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors bg-white text-blue-600 shadow-md z-20 disabled:opacity-50"
+          className="absolute top-3 left-3 sm:top-6 sm:left-6 w-10 h-10 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors bg-white text-blue-600 shadow-md z-20 disabled:opacity-50"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
 
-        <div className="p-12 pt-16">
+        <div className="p-5 pt-16 sm:p-12 sm:pt-16">
           {/* Header */}
           <div className="mb-8">
             <h2 className="text-[15px] font-bold text-gray-900 mb-1">Setup Your Mac</h2>

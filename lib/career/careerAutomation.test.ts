@@ -5,6 +5,7 @@ vi.mock("@/lib/db/mongodb", () => ({ getDatabase: vi.fn() }));
 
 import {
   createMongoCareerAutomationRepository,
+  finalizeExpiredTaskFeedback,
   overdueBucket,
   resolveCareerReminderEmail,
   runCareerAutomation,
@@ -31,6 +32,7 @@ function candidate(overrides: Partial<ReminderCandidate> = {}): ReminderCandidat
 
 function repository(candidates: ReminderCandidate[] = [candidate()]): CareerAutomationRepository {
   return {
+    failExpiredTasks: vi.fn().mockResolvedValue(0),
     listReminderCandidates: vi.fn().mockResolvedValue(candidates),
     listLaunchCandidates: vi.fn().mockResolvedValue([]),
     claim: vi.fn().mockResolvedValue(true),
@@ -59,12 +61,35 @@ describe("career automation timing and delivery", () => {
     expect(overdueBucket(now)).toBe(Math.floor(now.getTime() / 600_000));
   });
 
+  it("locks the verified score when a task window expires", () => {
+    const feedback = finalizeExpiredTaskFeedback({
+      type: "youtube",
+      openIn: ["youtube", "career"],
+      result: {
+        feedback: {
+          requiredTools: ["youtube"],
+          tools: { youtube: { progress: 60 } },
+          progress: 60,
+          completed: false,
+        },
+      },
+    }, now);
+
+    expect(feedback).toMatchObject({
+      progress: 60,
+      completed: false,
+      locked: true,
+      outcome: "time_expired",
+      finalizedAt: now.toISOString(),
+    });
+  });
+
   it("routes supported tasks only during the exact start window", () => {
     const base = { userId: "user-1", missionId: "mission-1", status: "pending", title: "Career preparation", scheduledDate: new Date(now.getTime() - 30_000) };
     expect(taskLaunchCandidate({ ...base, _id: "interview-1", type: "interview", result: { interviewId: "session-1" } }, now)).toMatchObject({ appName: "Start Interview", args: { interviewId: "session-1", title: "Career preparation", scheduledAt: "2026-09-03T12:04:30.000Z", duration: "60" } });
     expect(taskLaunchCandidate({ ...base, _id: "interview-pending", type: "interview" }, now)).toBeNull();
     expect(taskLaunchCandidate({ ...base, _id: "teacher-1", type: "teacher", result: { sessionId: "lesson-1" } }, now)).toMatchObject({ appName: "Smarty Teacher", args: { sessionId: "lesson-1" } });
-    expect(taskLaunchCandidate({ ...base, _id: "book-1", title: "Review AI Book" }, now)).toMatchObject({ appName: "AI Book", args: { sessionId: "career:mission-1:2026-09-03" } });
+    expect(taskLaunchCandidate({ ...base, _id: "book-1", title: "Review AI Book" }, now)).toMatchObject({ appName: "AI Book", args: { sessionId: "career-task:book-1" } });
     expect(taskLaunchCandidate({ ...base, _id: "future", type: "teacher", scheduledDate: new Date(now.getTime() + 1) }, now)).toBeNull();
     expect(taskLaunchCandidate({ ...base, _id: "old", type: "teacher", scheduledDate: new Date(now.getTime() - 120_000) }, now)).toBeNull();
   });
@@ -85,10 +110,11 @@ describe("career automation timing and delivery", () => {
   it("records disabled delivery without calling mail", async () => {
     const repo = repository();
     const mailer = { isConfigured: vi.fn(() => true), send: vi.fn() };
-    const result = await runCareerAutomation({ repository: repo, mailer, remindersEnabled: false, now });
+    const resolveUserPreferences = vi.fn().mockResolvedValue({ emailReminders: false, telegramReminders: false });
+    const result = await runCareerAutomation({ repository: repo, mailer, remindersEnabled: false, resolveUserPreferences, now });
     expect(result).toMatchObject({ claimed: 1, skipped: 1, sent: 0 });
     expect(mailer.send).not.toHaveBeenCalled();
-    expect(repo.finish).toHaveBeenCalledWith("career-task:task-1:due", expect.objectContaining({ status: "skipped", reason: "reminders_disabled" }));
+    expect(repo.finish).toHaveBeenCalledWith("career-task:task-1:due", expect.objectContaining({ status: "skipped", reason: "user_preferences_disabled" }));
   });
 
   it("does not send when another process already claimed the dedupe key", async () => {
@@ -103,7 +129,8 @@ describe("career automation timing and delivery", () => {
   it("records missing SMTP and keeps task status untouched", async () => {
     const repo = repository();
     const mailer = { isConfigured: vi.fn(() => false), send: vi.fn() };
-    await runCareerAutomation({ repository: repo, mailer, remindersEnabled: true, now });
+    const resolveUserPreferences = vi.fn().mockResolvedValue({ emailReminders: true, telegramReminders: false });
+    await runCareerAutomation({ repository: repo, mailer, remindersEnabled: true, resolveUserPreferences, now });
     expect(repo.finish).toHaveBeenCalledWith("career-task:task-1:due", expect.objectContaining({ status: "skipped", reason: "smtp_not_configured" }));
     expect(mailer.send).not.toHaveBeenCalled();
     expect(repo).not.toHaveProperty("updateMission");
@@ -112,10 +139,12 @@ describe("career automation timing and delivery", () => {
   it("records sent and failed delivery attempts", async () => {
     const sentRepo = repository();
     const sentMailer = { isConfigured: () => true, send: vi.fn().mockResolvedValue({ status: "sent", messageId: "mail-1" }) };
+    const resolveUserPreferences = vi.fn().mockResolvedValue({ emailReminders: true, telegramReminders: false });
     const sent = await runCareerAutomation({
       repository: sentRepo,
       mailer: sentMailer,
       remindersEnabled: true,
+      resolveUserPreferences,
       now,
       resolveUserEmail: vi.fn().mockResolvedValue("user@example.com"),
     });
@@ -129,6 +158,7 @@ describe("career automation timing and delivery", () => {
       repository: failedRepo,
       mailer: failedMailer,
       remindersEnabled: true,
+      resolveUserPreferences,
       now,
       resolveUserEmail: vi.fn().mockResolvedValue("user@example.com"),
     });
@@ -146,11 +176,13 @@ describe("career automation timing and delivery", () => {
     const repo = repository();
     const mailer = { isConfigured: () => true, send: vi.fn() };
     const telegramNotifier = { send: vi.fn().mockResolvedValue({ status: "sent", messageId: "telegram-7" }) };
+    const resolveUserPreferences = vi.fn().mockResolvedValue({ emailReminders: true, telegramReminders: true });
 
     const result = await runCareerAutomation({
       repository: repo,
       mailer,
       remindersEnabled: true,
+      resolveUserPreferences,
       now,
       resolveUserEmail: vi.fn().mockResolvedValue(null),
       telegramNotifier,
@@ -172,11 +204,13 @@ describe("career automation timing and delivery", () => {
     const repo = repository();
     const mailer = { isConfigured: () => true, send: vi.fn() };
     const telegramNotifier = { send: vi.fn().mockResolvedValue({ status: "skipped", reason: "telegram_not_connected" }) };
+    const resolveUserPreferences = vi.fn().mockResolvedValue({ emailReminders: true, telegramReminders: true });
 
     const result = await runCareerAutomation({
       repository: repo,
       mailer,
       remindersEnabled: true,
+      resolveUserPreferences,
       now,
       resolveUserEmail: vi.fn().mockResolvedValue(null),
       telegramNotifier,
@@ -223,6 +257,16 @@ describe("career automation timing and delivery", () => {
   it("runs deterministic projections after feedback sync", async () => {
     const repo = repository([]);
     await runCareerAutomation({ repository: repo, mailer: { isConfigured: () => false, send: vi.fn() }, remindersEnabled: false, now });
+    expect(repo.failExpiredTasks).toHaveBeenCalledWith(now);
     expect(repo.syncCareerProjections).toHaveBeenCalledWith(now);
+  });
+
+  it("reports tasks failed by the expiration sweep", async () => {
+    const repo = repository([]);
+    vi.mocked(repo.failExpiredTasks).mockResolvedValue(3);
+
+    const result = await runCareerAutomation({ repository: repo, mailer: { isConfigured: () => false, send: vi.fn() }, remindersEnabled: false, now });
+
+    expect(result.tasksFailed).toBe(3);
   });
 });

@@ -243,6 +243,14 @@ export async function playById(soundId: string, options?: PlayOptions): Promise<
 }
 
 /**
+ * Stop playback of a specific sound by ID
+ */
+export async function stopById(soundId: string): Promise<void> {
+  const { stopSound } = await import('./audioPlayer');
+  stopSound(soundId);
+}
+
+/**
  * Play sound by library index directly
  */
 export async function playByIndex(index: number, options?: PlayOptions): Promise<void> {

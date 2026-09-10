@@ -5,9 +5,9 @@ import { getSiteUrl } from "@/lib/site";
 import { generatePageMetadata, generateOrganizationJsonLd } from "@/lib/seo";
 
 export const metadata: Metadata = generatePageMetadata({
-  title: "SmartyAI — Your AI Career Agent | Interview Preparation on Autopilot",
+  title: "SmartyAI — The AI Operating System for Work and Career",
   description:
-    "SmartyAI turns job opportunities into complete preparation systems. One AI agent that teaches, practices, schedules, and tracks your interview preparation journey.",
+    "Operate your Mac with permission-controlled AI automation, then plan, learn, practice, and apply from one complete career workspace.",
   path: "/",
 });
 
@@ -17,7 +17,7 @@ const websiteJsonLd = {
   name: "SmartyAI",
   url: getSiteUrl(),
   description:
-    "Your AI Career Agent — turn job opportunities into complete preparation systems with intelligent teaching, practice, and scheduling.",
+    "A permission-controlled AI operating system for desktop automation, role-specific planning, learning, coding practice, mock interviews, and resume improvement.",
   potentialAction: {
     "@type": "SearchAction",
     target: `${getSiteUrl()}/apps?q={search_term_string}`,

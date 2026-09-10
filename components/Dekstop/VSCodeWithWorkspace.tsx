@@ -42,7 +42,7 @@ import {
 } from 'lucide-react';
 import FileTree from './FileTree';
 import { CareerTaskMeta, useCareerClock } from '../Desktop/CareerTaskMeta';
-import { getCareerTaskTiming, groupCareerTasks, prepareCareerTaskLaunch, type CareerTaskItem } from '../Desktop/careerTaskGroups';
+import { findCareerTaskForWorkspaceFile, getCareerTaskTiming, groupCareerTasks, prepareCareerTaskLaunch, type CareerTaskItem } from '../Desktop/careerTaskGroups';
 import { getLanguageFromExtension } from '@/lib/utils/language';
 import { configureJSXSupport } from '@/lib/monaco/setup';
 import { playById } from '@/lib/sound';
@@ -106,6 +106,36 @@ interface VSCodeWithWorkspaceProps {
   initialWorkspaceId?: string;
   initialFile?: string;
   initialCareerTask?: CareerTaskItem;
+}
+
+interface CareerTaskActionsProps {
+  task: CareerTaskItem;
+  activeFilePath: string | null;
+  isTaskFileActive: boolean;
+  isSubmitting: boolean;
+  onSubmit: (task: CareerTaskItem) => void;
+}
+
+function CareerTaskActions({ task, activeFilePath, isTaskFileActive, isSubmitting, onSubmit }: CareerTaskActionsProps) {
+  const now = useCareerClock();
+  const timing = getCareerTaskTiming(task, now);
+
+  return (
+    <>
+      <div className="mt-2">
+        <CareerTaskMeta task={task} now={now} />
+      </div>
+      <button
+        type="button"
+        onClick={() => onSubmit(task)}
+        disabled={!activeFilePath || !isTaskFileActive || timing.state === 'upcoming' || task.status === 'completed' || isSubmitting}
+        className="mt-2 flex h-7 w-full items-center justify-center gap-1.5 rounded bg-[#2d2d2d] text-[11px] text-gray-200 hover:bg-[#3d3d3d] disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {isSubmitting ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+        {task.status === 'completed' ? 'Submitted' : timing.state === 'upcoming' ? 'Submit when task starts' : 'Save & Submit'}
+      </button>
+    </>
+  );
 }
 
 // ============ CONSTANTS ============
@@ -175,14 +205,13 @@ export default function VSCodeWithWorkspace({ openPreviewWindow, initialWorkspac
   const [aiResult, setAIResult] = useState<{ summary: string; code?: string; provider?: string; model?: string } | null>(null);
   const [isAIWorking, setIsAIWorking] = useState(false);
   const aiTargetRef = useRef<{ path: string; range: any } | null>(null);
-  const now = useCareerClock();
   const codingTaskGroups = useMemo(() => {
     const codingTasks = careerTasks.filter((task) => task.type === 'coding' || task.id === initialCareerTask?.id);
     if (initialCareerTask && !codingTasks.some((task) => task.id === initialCareerTask.id)) {
       codingTasks.push(initialCareerTask);
     }
-    return groupCareerTasks(codingTasks, now);
-  }, [careerTasks, initialCareerTask, now]);
+    return groupCareerTasks(codingTasks);
+  }, [careerTasks, initialCareerTask]);
 
   useEffect(() => {
     if (initialCareerTask) setExplorerMode('tasks');
@@ -362,10 +391,7 @@ export default function VSCodeWithWorkspace({ openPreviewWindow, initialWorkspac
     const tasks = initialCareerTask
       ? [initialCareerTask, ...careerTasks.filter(task => task.id !== initialCareerTask.id)]
       : careerTasks;
-    return tasks.find(task =>
-      (!task.result?.workspaceId || task.result.workspaceId === activeWorkspace?.id)
-      && (!task.result?.filePath || task.result.filePath === path)
-    );
+    return findCareerTaskForWorkspaceFile(tasks, activeWorkspace?.id, path);
   };
 
   const updateFileContent = (path: string, content: string) => {
@@ -533,7 +559,7 @@ export default function VSCodeWithWorkspace({ openPreviewWindow, initialWorkspac
   };
 
   const submitCareerTask = async (task: CareerTaskItem) => {
-    const timing = getCareerTaskTiming(task, now);
+    const timing = getCareerTaskTiming(task, new Date());
     const taskWorkspaceId = task.result?.workspaceId;
     const taskFilePath = task.result?.filePath;
     if (!activeFilePath || task.status === 'completed') return;
@@ -713,7 +739,11 @@ export default function VSCodeWithWorkspace({ openPreviewWindow, initialWorkspac
       const response = await fetch(`/api/workspaces/${activeWorkspace.id}/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files, entryPoint: activeFilePath }),
+        body: JSON.stringify({
+          files,
+          entryPoint: activeFilePath,
+          ...(careerTask ? { career: { missionId: careerTask.missionId, taskId: careerTask.id } } : {}),
+        }),
       });
 
       const result = await response.json();
@@ -1406,7 +1436,6 @@ export default function VSCodeWithWorkspace({ openPreviewWindow, initialWorkspac
                     <div className="space-y-1.5">
                       {group.tasks.map((task) => {
                         const isSelectedCareerTask = task.id === initialCareerTask?.id;
-                        const timing = getCareerTaskTiming(task, now);
                         const isTaskFileActive = (!task.result?.workspaceId || task.result.workspaceId === activeWorkspace?.id)
                           && (!task.result?.filePath || task.result.filePath === activeFilePath);
                         return (
@@ -1417,20 +1446,13 @@ export default function VSCodeWithWorkspace({ openPreviewWindow, initialWorkspac
                             {isSelectedCareerTask && <p className="mb-1 text-[9px] font-semibold uppercase text-cyan-300">Opened from Career</p>}
                             <p className={`text-xs leading-snug ${task.status === 'completed' ? 'text-gray-500 line-through' : 'text-gray-200'}`}>{task.title}</p>
                             {task.description && <p className="mt-1 text-[11px] leading-relaxed text-gray-400">{task.description}</p>}
-                            <div className="mt-2">
-                              <CareerTaskMeta task={task} now={now} />
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => void submitCareerTask(task)}
-                              disabled={!activeFilePath || !isTaskFileActive || timing.state === 'upcoming' || task.status === 'completed' || submittingTaskId === task.id}
-                              className="mt-2 flex h-7 w-full items-center justify-center gap-1.5 rounded bg-[#2d2d2d] text-[11px] text-gray-200 hover:bg-[#3d3d3d] disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {submittingTaskId === task.id
-                                ? <Loader2 size={12} className="animate-spin" />
-                                : <CheckCircle2 size={12} />}
-                              {task.status === 'completed' ? 'Submitted' : timing.state === 'upcoming' ? 'Submit when task starts' : 'Save & Submit'}
-                            </button>
+                            <CareerTaskActions
+                              task={task}
+                              activeFilePath={activeFilePath}
+                              isTaskFileActive={isTaskFileActive}
+                              isSubmitting={submittingTaskId === task.id}
+                              onSubmit={(selectedTask) => void submitCareerTask(selectedTask)}
+                            />
                           </div>
                         );
                       })}

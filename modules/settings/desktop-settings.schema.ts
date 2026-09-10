@@ -2,6 +2,11 @@ import { z } from "zod";
 
 const hslColorSchema = z.string().regex(/^\d{1,3}(?:\.\d+)? \d{1,3}(?:\.\d+)?% \d{1,3}(?:\.\d+)?%$/);
 const percentageSchema = z.number().int().min(0).max(100);
+const wallpaperSourceSchema = z.union([
+  z.literal(""),
+  z.string().url().max(2048).refine((value) => /^https?:\/\//i.test(value)),
+  z.string().max(2048).regex(/^\/(?!\/)/),
+]);
 
 export const desktopSettingsUpdateSchema = z.object({
   fontSize: z.number().int().min(11).max(20).optional(),
@@ -14,7 +19,10 @@ export const desktopSettingsUpdateSchema = z.object({
   backgroundColor: hslColorSchema.optional(),
   darkMode: z.boolean().optional(),
   themeColor: hslColorSchema.optional(),
-  backgroundImage: z.union([z.literal(""), z.string().url().max(2048)]).optional(),
+  backgroundImage: wallpaperSourceSchema.optional(),
+  lockScreenImage: wallpaperSourceSchema.optional(),
+  lockScreenDepthEffect: z.boolean().optional(),
+  lockScreenDepthSubjectTop: z.number().int().min(5).max(50).optional(),
   wallpaperQuery: z.string().max(200).optional(),
   githubProfile: z.string().regex(/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i).optional(),
   gestureControl: z.boolean().optional(),
@@ -46,6 +54,9 @@ export const desktopSettingsUpdateSchema = z.object({
   preferredSearchEngine: z.enum(["Google", "Bing", "DuckDuckGo"]).optional(),
   appLockEnabled: z.boolean().optional(),
   lockedApps: z.array(z.string().min(1).max(80)).max(40).optional(),
+  careerEmailReminders: z.boolean().optional(),
+  careerTelegramReminders: z.boolean().optional(),
+  customAIInstructions: z.string().trim().max(2_000).optional(),
 }).strict();
 
 export type DesktopSettingsUpdate = z.infer<typeof desktopSettingsUpdateSchema>;

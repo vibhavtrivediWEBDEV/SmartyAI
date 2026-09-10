@@ -1,4 +1,5 @@
 import type { CareerTaskOpenTarget } from '@/modules/career/career.types';
+import type { PreparationBrief } from '@/lib/career/preparationBrief';
 
 export interface CareerTaskItem {
   id: string;
@@ -11,8 +12,29 @@ export interface CareerTaskItem {
   type?: string;
   openIn?: CareerTaskOpenTarget[];
   topic?: string;
-  result?: { interviewId?: string; sessionId?: string; workspaceId?: string; filePath?: string; exerciseIndex?: number; calendarEventId?: string };
+  result?: {
+    interviewId?: string;
+    sessionId?: string;
+    workspaceId?: string;
+    filePath?: string;
+    exerciseIndex?: number;
+    calendarEventId?: string;
+    searchQuery?: string;
+    resourceUrl?: string;
+    preparationBrief?: PreparationBrief;
+    feedback?: {
+      requiredTools: string[];
+      tools: Record<string, { progress: number }>;
+      progress: number;
+      completed: boolean;
+      locked?: boolean;
+      outcome?: 'time_expired';
+      finalizedAt?: string;
+    };
+  };
   priority?: 'low' | 'medium' | 'high' | 'urgent';
+  retryCount?: number;
+  maxRetries?: number;
 }
 
 export type CareerTaskKind = 'notes' | 'video' | 'code' | 'interview' | 'teacher' | 'book' | 'other';
@@ -34,6 +56,15 @@ const destinationByTarget: Record<CareerTaskOpenTarget, CareerTaskDestination> =
 };
 
 export function getCareerTaskKind(task: CareerTaskItem): CareerTaskKind {
+  const explicitKind: Record<string, CareerTaskKind | undefined> = {
+    notes: 'notes',
+    youtube: 'video',
+    coding: 'code',
+    interview: 'interview',
+    teacher: 'teacher',
+  };
+  if (task.type && explicitKind[task.type]) return explicitKind[task.type];
+
   const hint = `${task.type ?? ''} ${task.title} ${task.description ?? ''}`.toLowerCase();
   if (hint.includes('interview') || hint.includes('mock')) return 'interview';
   if (hint.includes('book') || hint.includes('read') || hint.includes('review')) return 'book';
@@ -75,6 +106,18 @@ export function findCareerTaskForCalendarEvent(
   return tasksOnDate.find((task) => task.title.trim().toLowerCase() === event.title.trim().toLowerCase());
 }
 
+export function findCareerTaskForWorkspaceFile(
+  tasks: CareerTaskItem[],
+  workspaceId: string | undefined,
+  filePath: string
+): CareerTaskItem | undefined {
+  if (!workspaceId) return undefined;
+  return tasks.find((task) =>
+    task.result?.workspaceId === workspaceId
+    && task.result?.filePath === filePath
+  );
+}
+
 export function careerTaskLaunchArgs(task: CareerTaskItem): Record<string, unknown> {
   const args: Record<string, unknown> = {
     missionId: task.missionId,
@@ -93,8 +136,12 @@ export function careerTaskLaunchArgs(task: CareerTaskItem): Record<string, unkno
     if (task.result?.filePath) args.initialFile = task.result.filePath;
   }
   if (kind === 'interview' && task.result?.interviewId) args.interviewId = task.result.interviewId;
+  if (kind === 'video') {
+    if (task.result?.searchQuery) args.searchQuery = task.result.searchQuery;
+    if (task.result?.resourceUrl) args.resourceUrl = task.result.resourceUrl;
+  }
   if (kind === 'book') {
-    args.sessionId = task.result?.sessionId ?? `career:${task.missionId}:${new Date(task.scheduledDate).toISOString().slice(0, 10)}`;
+    args.sessionId = task.result?.sessionId ?? `career-task:${task.id}`;
   } else if (kind === 'teacher') {
     args.sessionId = task.result?.sessionId ?? `career-task:${task.id}`;
   }
@@ -103,6 +150,7 @@ export function careerTaskLaunchArgs(task: CareerTaskItem): Record<string, unkno
 
 export async function prepareCareerTaskLaunch(task: CareerTaskItem): Promise<Record<string, unknown>> {
   if (getCareerTaskKind(task) !== 'code') return careerTaskLaunchArgs(task);
+  if (task.result?.workspaceId) return careerTaskLaunchArgs(task);
 
   const response = await fetch(`/api/career/tasks/${encodeURIComponent(task.id)}/workspace`, { method: 'POST' });
   const result = await response.json();
@@ -118,7 +166,7 @@ export async function prepareCareerTaskLaunch(task: CareerTaskItem): Promise<Rec
   });
 }
 
-export type CareerTaskTimingState = 'upcoming' | 'active' | 'overdue' | 'completed';
+export type CareerTaskTimingState = 'upcoming' | 'active' | 'overdue' | 'completed' | 'failed';
 
 export interface CareerTaskTiming {
   state: CareerTaskTimingState;
@@ -160,6 +208,7 @@ export function getCareerTaskTiming(task: CareerTaskItem, now = new Date()): Car
   const end = new Date(start.getTime() + Math.max(task.duration ?? 60, 1) * 60_000);
 
   if (task.status === 'completed') return { state: 'completed', label: 'Complete', start, end };
+  if (task.status === 'failed') return { state: 'failed', label: 'Failed', start, end };
   if (now < start) return { state: 'upcoming', label: `Starts in ${compactDuration(start.getTime() - now.getTime())}`, start, end };
   if (now <= end) return { state: 'active', label: `${compactDuration(end.getTime() - now.getTime())} left`, start, end };
   return { state: 'overdue', label: `Overdue ${compactDuration(now.getTime() - end.getTime())}`, start, end };

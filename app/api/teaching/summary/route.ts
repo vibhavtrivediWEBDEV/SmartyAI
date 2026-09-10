@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/firebase/admin";
 import { getCurrentUser } from "@/lib/actions/auth.action";
+import { recordVerifiedCareerEvidence } from "@/lib/career/recordCareerFeedback";
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,6 +19,18 @@ export async function POST(request: NextRequest) {
     const sessionRef = db.collection("teachingSessions").doc(sessionId);
     const session = await sessionRef.get();
     if (!session.exists || session.data()?.userId !== user.id) return NextResponse.json({ success: false, error: "Teaching session not found" }, { status: 404 });
+    const sessionData = session.data() || {};
+    const careerTaskId = typeof sessionData.careerTaskId === "string" ? sessionData.careerTaskId : "";
+    const missionId = typeof sessionData.missionId === "string" ? sessionData.missionId : "";
+    const verifiedExchanges = Array.isArray(sessionData.verifiedExchangeKeys)
+      ? new Set(sessionData.verifiedExchangeKeys.filter((key: unknown) => typeof key === "string")).size
+      : 0;
+    if (careerTaskId && missionId && verifiedExchanges < 2) {
+      return NextResponse.json(
+        { success: false, error: "Complete at least two verified Teacher exchanges first." },
+        { status: 409 },
+      );
+    }
     await sessionRef.update({
       summary,
       duration: duration || 0,
@@ -25,9 +38,22 @@ export async function POST(request: NextRequest) {
       completedAt: new Date().toISOString(),
     });
 
+    const feedback = careerTaskId && missionId
+      ? await recordVerifiedCareerEvidence({
+          userId: user.id,
+          missionId,
+          taskId: careerTaskId,
+          tool: "teacher",
+          evidenceKey: `teacher-session:${sessionId}`,
+          progress: 100,
+          metadata: { sessionId, verifiedExchanges },
+        })
+      : null;
+
     return NextResponse.json({
       success: true,
       message: "Summary saved successfully",
+      feedback,
     });
   } catch (error) {
     console.error("Error saving teaching summary:", error);

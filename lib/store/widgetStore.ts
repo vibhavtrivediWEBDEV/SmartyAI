@@ -20,7 +20,7 @@ export interface BaseWidget {
 
 export interface NativeWidget extends BaseWidget {
   category: "native";
-  type: "calendar" | "weather" | "photo" | "clock" | 
+  type: "calendar" | "weather" | "photo" | "clock" | "reaction" |
         "glass-clock" | "glass-calendar" | "glass-weather" | 
         "glass-reminders" | "glass-day" | "glass-mini-calendar" | 
         "glass-world-clock" | "glass-small-world-clock" | 

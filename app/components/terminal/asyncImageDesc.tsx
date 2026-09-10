@@ -8,15 +8,16 @@ type Props = {
   alt: string
   caption?: string
   initialUrl?: string
+  resolveMissing?: boolean
   onResolved?: (url: string) => void
 }
 
-export default function AsyncImageFromDescription({ description, alt, caption, initialUrl, onResolved }: Props) {
+export default function AsyncImageFromDescription({ description, alt, caption, initialUrl, resolveMissing = true, onResolved }: Props) {
   const [imageUrl, setImageUrl] = useState<string | null>(initialUrl || null)
 
   useEffect(() => {
     const fetchImage = async () => {
-      if (initialUrl) return
+      if (initialUrl || !resolveMissing) return
       try {
         const res = await fetch("/api/pinterest/searchimage", {
           method: "POST",
@@ -41,7 +42,7 @@ export default function AsyncImageFromDescription({ description, alt, caption, i
     }
 
     fetchImage()
-  }, [description, initialUrl, onResolved])
+  }, [description, initialUrl, onResolved, resolveMissing])
 
   return (
     <div className="flex flex-col items-center justify-center h-full p-4 bg-gray-900">

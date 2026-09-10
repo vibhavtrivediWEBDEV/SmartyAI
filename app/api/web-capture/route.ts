@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { captureWebRegion, type CaptureConfig } from '@/lib/webCapture';
+import { getCurrentUser } from '@/lib/actions/auth.action';
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,6 +51,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
     
     // Validate viewport dimensions
     if (

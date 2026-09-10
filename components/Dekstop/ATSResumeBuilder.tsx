@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Braces, Download, FileText, Loader2, RefreshCcw, Save, Sparkles, Upload } from "lucide-react"
 import { toast } from "sonner"
 import type { ResumeProfile } from "./ResumeProfilePanel"
@@ -26,14 +26,18 @@ type AIRewrite = { suggestedRewrite: string; reason: string; keywordsAddressed: 
 
 export function ATSResumeBuilder() {
   const { settings } = useSettings()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [resume, setResume] = useState<ATSResume>(emptyResume)
   const [extracted, setExtracted] = useState<ATSResume>(emptyResume)
+  const [accountResume, setAccountResume] = useState<ResumeProfile | null>(null)
   const [jobDescription, setJobDescription] = useState("")
   const [diagnostic, setDiagnostic] = useState<PDFDiagnostic>(EMPTY_PDF_DIAGNOSTIC)
   const [debounced, setDebounced] = useState({ resume: emptyResume, jobDescription: "" })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [replacing, setReplacing] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [compilingLaTeX, setCompilingLaTeX] = useState(false)
   const [view, setView] = useState<"overview" | "editor" | "tools">("overview")
   const [editorSection, setEditorSection] = useState<ATSEditorSection>("personal")
@@ -54,6 +58,7 @@ export function ATSResumeBuilder() {
     ]).then(([resumeBody, draftBody, analysisBody]) => {
       if (!active) return
       const source = resumeBody.resume?.profile ? fromProfile(resumeBody.resume.profile) : emptyResume
+      setAccountResume(resumeBody.resume ?? null)
       setExtracted(source)
       let local: { draft?: ATSResume; jobDescription?: string; template?: LaTeXTemplateId } | null = null
       try { local = JSON.parse(localSnapshot ?? "null") } catch { local = null }
@@ -78,6 +83,7 @@ export function ATSResumeBuilder() {
   const result = useMemo(() => { const score = scoreResume(debounced.resume, debounced.jobDescription, generatedResumeDiagnostic(debounced.resume)); return { ...score, total: readinessDisplayScore(score, debounced.jobDescription) } }, [debounced])
   const sourceResult = useMemo(() => { const score = scoreResume(extracted, debounced.jobDescription, diagnostic); return { ...score, total: readinessDisplayScore(score, debounced.jobDescription) } }, [extracted, debounced.jobDescription, diagnostic])
   const latexSource = useMemo(() => generateLaTeXResume(resume, template), [resume, template])
+  const hasResumeContent = Boolean(resume.name.trim() || resume.email.trim() || resume.summary.trim() || resume.skills.length || resume.experience.length || resume.education.length || resume.projects.length)
   const rewriteImpact = useMemo(() => {
     if (!rewriteTarget || !rewrite) return null
     let next = resume
@@ -134,6 +140,33 @@ export function ATSResumeBuilder() {
       toast.success("LaTeX PDF compiled")
     } catch (error) { toast.error(error instanceof Error ? error.message : "LaTeX compilation failed") } finally { setCompilingLaTeX(false) }
   }
+  const applyAccountResume = async (profile: ResumeProfile, message: string) => {
+    const refreshed = profile.profile ? fromProfile(profile.profile) : emptyResume
+    setAccountResume(profile); setExtracted(refreshed); setResume(refreshed)
+    const analysisResponse = await fetch("/api/profile/resume/ats/analyze", { cache: "no-store" })
+    if (analysisResponse.ok) setDiagnostic((await analysisResponse.json()).diagnostic ?? EMPTY_PDF_DIAGNOSTIC)
+    window.dispatchEvent(new Event("finder-desktop-change")); toast.success(message)
+  }
+  const uploadAccountResume = async (file: File) => {
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) { toast.error("Resume must be a PDF file"); return }
+    if (file.size === 0 || file.size > 5 * 1024 * 1024) { toast.error("Resume must be between 1 byte and 5 MB"); return }
+    setUploading(true)
+    try {
+      const form = new FormData(); form.append("resume", file)
+      const response = await fetch("/api/profile/resume", { method: "POST", body: form }); const body = await response.json()
+      if (!response.ok) throw new Error(body.error ?? "Resume upload failed")
+      await applyAccountResume(body.resume, accountResume ? "Account resume re-uploaded and synced" : "Resume uploaded and synced to ATS")
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Resume upload failed") } finally { setUploading(false) }
+  }
+  const syncLatestAccountResume = async () => {
+    setSyncing(true)
+    try {
+      const response = await fetch("/api/profile/resume?refresh=true", { cache: "no-store" }); const body = await response.json()
+      if (!response.ok) throw new Error(body.error ?? "Resume sync failed")
+      if (!body.resume) { setAccountResume(null); toast.error("Upload an account resume before syncing"); return }
+      await applyAccountResume(body.resume, "Latest account resume synced to ATS")
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Resume sync failed") } finally { setSyncing(false) }
+  }
   const replaceAccountResume = async () => {
     setReplacing(true)
     try {
@@ -141,10 +174,7 @@ export function ATSResumeBuilder() {
       const form = new FormData(); form.append("resume", new File([blob], resumeFileName(resume.name), { type: "application/pdf" }))
       const response = await fetch("/api/profile/resume", { method: "POST", body: form }); const body = await response.json()
       if (!response.ok) throw new Error(body.error ?? "Resume replacement failed")
-      const refreshed = fromProfile(body.resume.profile); setExtracted(refreshed); setResume(refreshed)
-      const analysisResponse = await fetch("/api/profile/resume/ats/analyze")
-      if (analysisResponse.ok) setDiagnostic((await analysisResponse.json()).diagnostic ?? EMPTY_PDF_DIAGNOSTIC)
-      window.dispatchEvent(new Event("finder-desktop-change")); toast.success("Account resume replaced and Finder refreshed")
+      await applyAccountResume(body.resume, "Generated resume saved to account and Finder refreshed")
     } catch (error) { toast.error(error instanceof Error ? error.message : "Resume replacement failed") } finally { setReplacing(false) }
   }
   const requestRewrite = async (target: RewriteTarget) => {
@@ -181,8 +211,13 @@ export function ATSResumeBuilder() {
         <button onClick={download} className="toolbar-btn"><Download className="h-3.5 w-3.5" />Download PDF</button>
         <button onClick={downloadLaTeX} className="toolbar-btn"><Braces className="h-3.5 w-3.5" />Download .tex</button>
         <button onClick={() => void compileLaTeX()} disabled={compilingLaTeX} className="toolbar-btn">{compilingLaTeX ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}{compilingLaTeX ? "Compiling…" : "LaTeX PDF"}</button>
-        <button onClick={() => void replaceAccountResume()} disabled={replacing} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-xs font-medium hover:bg-blue-500 disabled:opacity-50"><Upload className="h-3.5 w-3.5" />{replacing ? "Extracting…" : "Replace account resume"}</button>
+        <button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-xs font-medium hover:bg-blue-500 disabled:opacity-50"><Upload className="h-3.5 w-3.5" />{uploading ? "Analyzing…" : accountResume ? "Re-upload PDF" : "Upload PDF"}</button>
+        <button onClick={() => void syncLatestAccountResume()} disabled={syncing || !accountResume} className="toolbar-btn"><RefreshCcw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />{syncing ? "Syncing…" : "Sync latest"}</button>
+        <button onClick={() => void replaceAccountResume()} disabled={replacing || !hasResumeContent} title={hasResumeContent ? "Save the generated ATS PDF as your account resume" : "Add resume details before publishing"} className="toolbar-btn"><Save className="h-3.5 w-3.5" />{replacing ? "Saving…" : "Save draft to account"}</button>
+        <input ref={fileInputRef} type="file" accept="application/pdf,.pdf" disabled={uploading} className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadAccountResume(file); event.target.value = "" }} />
       </header>
+
+      {!accountResume && <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-amber-400/20 bg-amber-400/10 px-4 py-3"><FileText className="h-5 w-5 text-amber-300" /><div className="mr-auto"><p className="text-xs font-semibold">No account resume uploaded</p><p className="text-[10px] opacity-60">Upload a text-based PDF to extract your profile and start ATS analysis.</p></div><button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-xs font-medium text-white disabled:opacity-50"><Upload className="h-3.5 w-3.5" />{uploading ? "Analyzing…" : "Upload resume PDF"}</button></div>}
 
       {view === "overview" ? <ATSOverview resume={resume} score={result} sourceScore={sourceResult} template={template} hasJobDescription={Boolean(jobDescription.trim())} onEdit={openEditor} /> : view === "editor" ? <ATSRichEditor key={editorSection} resume={resume} template={template} initialSection={editorSection} onTemplateChange={setTemplate} onChange={setResume} onImprove={(field, text, index) => void requestRewrite({ field, text, index })} onDone={() => setView("overview")} /> : <div className="grid min-h-0 flex-1 grid-cols-1 overflow-auto xl:grid-cols-[280px_minmax(430px,1fr)_minmax(360px,0.9fr)] xl:overflow-hidden">
         <aside className="space-y-4 overflow-y-auto border-r border-white/10 bg-black/20 p-3">

@@ -192,6 +192,13 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html,
+  body {
+    min-width: 100%;
+    min-height: 100%;
+    margin: 0;
+    background: #000;
+  }
   body {
      /* overflow: hidden; */
      

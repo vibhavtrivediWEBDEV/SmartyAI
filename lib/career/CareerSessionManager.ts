@@ -17,7 +17,7 @@ import type {
 } from '@/modules/career/careerSession.types';
 import * as sessionRepo from '@/modules/career/careerSession.repository';
 import * as missionRepo from '@/modules/career/career.repository';
-import { getAIService } from '@/lib/ai';
+import { createMeteredAIService } from '@/lib/ai/metered';
 
 // State transition table (explicit, not implicit)
 const STATE_TRANSITIONS: Record<CareerSessionState, CareerSessionState | 'COMPLETE'> = {
@@ -293,7 +293,7 @@ export class CareerSessionManager {
     }
     
     // AI fallback with strict validation
-    const aiService = await getAIService();
+    const aiService = createMeteredAIService(this.session.userId, { source: 'career', feature: 'company-extraction' });
     const prompt = `Extract ONLY the company name from this user input.
 
 User: "${userInput}"
@@ -354,7 +354,7 @@ Company:`;
     }
     
     // AI extraction with validation
-    const aiService = await getAIService();
+    const aiService = createMeteredAIService(this.session.userId, { source: 'career', feature: 'role-extraction' });
     const prompt = `Extract ONLY the job role or title from this user input.
 
 User: "${userInput}"
@@ -434,7 +434,7 @@ Role:`;
     }
     
     // Use AI if needed
-    const aiService = await getAIService();
+    const aiService = createMeteredAIService(this.session.userId, { source: 'career', feature: 'date-extraction' });
     const prompt = `Extract the interview date from this user input.
     
 User: "${userInput}"

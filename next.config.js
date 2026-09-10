@@ -2,6 +2,15 @@
   distDir: process.env.NODE_ENV === 'production'
     ? '.next'
     : `.next-${process.env.PORT || '3001'}`,
+  allowedDevOrigins: ['2s24z27j-3001.inc1.devtunnels.ms'],
+  experimental: {
+    serverActions: {
+      allowedOrigins: [
+        '2s24z27j-3001.inc1.devtunnels.ms',
+        'localhost:3001',
+      ],
+    },
+  },
    eslint: {
     ignoreDuringBuilds: true,
   },

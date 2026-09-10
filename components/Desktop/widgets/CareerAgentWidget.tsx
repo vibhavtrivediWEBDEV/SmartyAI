@@ -15,7 +15,7 @@ export default function CareerAgentWidget({ onOpen, preview = false }: CareerAge
     if (preview) return;
 
     let active = true;
-    fetch('/api/career/tasks')
+    fetch('/api/career/tasks/summary')
       .then((response) => response.ok ? response.json() : null)
       .then((data) => {
         if (active && data) setSummary({ completed: data.completed ?? 0, total: data.total ?? 0 });

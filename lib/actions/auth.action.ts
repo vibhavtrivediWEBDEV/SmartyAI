@@ -6,11 +6,15 @@ import { z } from "zod";
 import { clearSession, getSessionUserId, setSession } from "@/lib/auth/session";
 import {
   createUser,
+  findUserCredentialsById,
   findUserByEmail,
   findUserById,
   normalizeEmail,
+  updateUserPasswordHash,
 } from "@/modules/users/user.repository";
 import { getOrCreateProfile } from "@/modules/profile/profile.repository";
+
+const PASSWORD_HASH_ROUNDS = 10;
 
 const credentialsSchema = z.object({
   email: z.string().trim().email(),
@@ -29,7 +33,7 @@ export async function signUp(params: { name: string; email: string; password: st
 
   try {
     const email = normalizeEmail(parsed.data.email);
-    const passwordHash = await bcrypt.hash(parsed.data.password, 12);
+    const passwordHash = await bcrypt.hash(parsed.data.password, PASSWORD_HASH_ROUNDS);
     const userId = await createUser({ name: parsed.data.name, email, passwordHash });
 
     if (!userId) {
@@ -68,6 +72,23 @@ export async function signIn(params: { email: string; password: string }) {
     console.error("Error signing in:", error);
     return { success: false, message: "Failed to sign in. Please try again." };
   }
+}
+
+export async function verifyCurrentUserPassword(userId: string, password: string) {
+  const parsed = credentialsSchema.shape.password.safeParse(password);
+  if (!parsed.success) return false;
+
+  const user = await findUserCredentialsById(userId);
+  if (!user || user.status !== "active") return false;
+
+  const valid = await bcrypt.compare(parsed.data, user.passwordHash);
+  if (valid && bcrypt.getRounds(user.passwordHash) > PASSWORD_HASH_ROUNDS) {
+    void bcrypt.hash(parsed.data, PASSWORD_HASH_ROUNDS)
+      .then((passwordHash) => updateUserPasswordHash(userId, user.passwordHash, passwordHash))
+      .catch((error) => console.error("Failed to upgrade password hash:", error));
+  }
+
+  return valid;
 }
 
 export async function signOut() {

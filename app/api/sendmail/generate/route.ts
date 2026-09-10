@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { createAIService } from "@/lib/ai"
+import { createMeteredAIService, CreditLimitError } from "@/lib/ai/metered"
+import { getSessionUserId } from "@/lib/auth/session"
 
 const requestSchema = z.object({
   subject: z.string().trim().min(2).max(200),
@@ -13,6 +14,8 @@ const requestSchema = z.object({
 })
 
 export async function POST(request: Request) {
+  const userId = await getSessionUserId()
+  if (!userId) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
   const parsed = requestSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) {
     return NextResponse.json({ success: false, error: "A valid subject is required." }, { status: 400 })
@@ -37,11 +40,14 @@ Requirements:
   `.trim()
 
   try {
-    const ai = createAIService()
+    const ai = createMeteredAIService(userId, { source: "assistant", feature: "mail-draft" })
     const response = await ai.complete(prompt, { temperature: 0.65, maxTokens: 900 })
     const content = response.content.trim().replace(/^```(?:text)?\s*/i, "").replace(/```$/, "").trim()
     return NextResponse.json({ success: true, content })
   } catch (error) {
+    if (error instanceof CreditLimitError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.status })
+    }
     console.error("Mail AI generation error:", error)
     return NextResponse.json(
       { success: false, error: "AI could not prepare the email. Please try again." },

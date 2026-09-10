@@ -5,7 +5,6 @@
  * that all AI services should consume.
  */
 
-import { getCurrentUser } from '@/lib/actions/auth.action';
 import type { ResumeProfileData } from '@/modules/users/user.repository';
 
 export interface UserAIContext {
@@ -55,24 +54,22 @@ export interface UserAIContext {
   profileContext: string;
 }
 
+let userAIContextRequest: Promise<UserAIContext | null> | null = null;
+
 /**
  * Get current user's AI context for the authenticated user (CLIENT-SIDE)
  */
 export async function getUserAIContext(): Promise<UserAIContext | null> {
-  try {
-    // Fetch from API route to avoid client-side MongoDB import
-    const response = await fetch('/api/user/ai-context');
-    
-    if (!response.ok) {
-      return null;
-    }
-    
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Error getting user AI context:', error);
-    return null;
+  if (!userAIContextRequest) {
+    userAIContextRequest = fetch('/api/user/ai-context', { signal: AbortSignal.timeout(5_000) })
+      .then(async (response) => response.ok ? response.json() : null)
+      .catch(() => {
+        userAIContextRequest = null;
+        return null;
+      });
   }
+
+  return userAIContextRequest;
 }
 
 /**
@@ -229,11 +226,14 @@ Your job is to:
 Current user:
 Name: ${userContext.displayName}
 Username: ${userContext.username}
+${userContext.isOwner ? `Account email: ${userContext.email}` : ''}
 Role: ${userContext.role || 'Developer'}
 
 ${userContext.isPublicView ? 
   `⚠️ PUBLIC VIEW MODE: You are sharing ${userContext.displayName}'s public portfolio. Only share public information. Do not expose private data, personal files, or sensitive information.` :
   `✅ OWNER MODE: You are helping ${userContext.displayName} with full access to their desktop.`}
+
+When the owner asks "my email" or "my mail" without asking to open or read the inbox, return their Resume contact email from the profile when present; otherwise return the Account email above. Treat inbox/open/read requests as Mail app actions instead.
 
 User profile:
 ${userContext.profileContext}

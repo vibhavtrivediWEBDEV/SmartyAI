@@ -2,6 +2,7 @@
  * Sound Reaction Engine - Public API
  * 
  * Main export point for sound reactions
+ * Updated: Force rebuild for cache invalidation
  */
 
 // Types
@@ -22,6 +23,7 @@ export {
   react,
   playById,
   playByIndex,
+  stopById,
   previewReaction,
   getAvailableReactions
 } from './reactionEngine';
@@ -38,6 +40,7 @@ export {
 // Audio player (for direct playback)
 export {
   playSound,
+  stopSound,
   preloadSound,
   preloadCommonSounds,
   initializeSoundSystem,

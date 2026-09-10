@@ -7,12 +7,13 @@
  * NO authentication required - these are pure business logic functions
  */
 
-import { getAIService } from '@/lib/ai';
+import { createMeteredAIService } from '@/lib/ai/metered';
 
 /**
  * Extract Job Profile and Compare with User Profile
  */
 export async function extractJobProfileDirect(data: {
+  userId: string;
   jobDescription: string;
   company: string;
   role: string;
@@ -28,7 +29,7 @@ export async function extractJobProfileDirect(data: {
   });
   
   try {
-    const aiService = await getAIService();
+    const aiService = createMeteredAIService(data.userId, { source: 'career', feature: 'job-profile' });
     
     // Build user profile summary for AI prompt
     const userProfileSummary = userProfile ? `
@@ -147,6 +148,7 @@ Only return valid JSON.`;
  * Generate Notes Content - AI Powered
  */
 export async function generateNotesDirect(data: {
+  userId: string;
   company: string;
   role: string;
   jobProfile: any;
@@ -156,7 +158,7 @@ export async function generateNotesDirect(data: {
   const { company, role, jobProfile, userProfile, skillGaps } = data;
   
   try {
-    const aiService = await getAIService();
+    const aiService = createMeteredAIService(data.userId, { source: 'career', feature: 'notes-generation' });
     
     const prompt = `Generate comprehensive interview preparation notes for ${company} ${role} position.
 
@@ -235,6 +237,7 @@ Only return valid JSON.`;
  * Generate Calendar Events - AI Powered
  */
 export async function generateCalendarEventsDirect(data: {
+  userId: string;
   company: string;
   role: string;
   jobProfile: any;
@@ -243,11 +246,12 @@ export async function generateCalendarEventsDirect(data: {
   interviewDate: string;
   startDate: string;
   daysUntilInterview: number;
+  eventCount: number;
 }) {
-  const { company, role, jobProfile, userProfile, skillGaps, interviewDate, startDate, daysUntilInterview } = data;
+  const { company, role, jobProfile, userProfile, skillGaps, interviewDate, startDate, daysUntilInterview, eventCount } = data;
   
   try {
-    const aiService = await getAIService();
+    const aiService = createMeteredAIService(data.userId, { source: 'career', feature: 'calendar-generation' });
     
     const prompt = `Generate a ${daysUntilInterview}-day interview preparation calendar schedule for ${company} ${role}.
 
@@ -264,7 +268,7 @@ Job Requirements:
 Skill Gaps to Address:
 ${skillGaps.map(g => `- ${g.skill}: ${g.status}`).join('\n')}
 
-Generate exactly 12 calendar events spread across the ${daysUntilInterview} days. Each event should be 1-2 hours long.
+Generate exactly ${eventCount} focused calendar events for this ${daysUntilInterview}-day window. Do not add filler tasks. Each event should be 45-90 minutes long.
 
 Return JSON array:
 {
@@ -297,7 +301,7 @@ Only return valid JSON.`;
     
     // Fallback: Basic events
     return {
-      events: generateBasicCalendarEvents(company, role, daysUntilInterview, new Date(startDate))
+      events: generateBasicCalendarEvents(company, role, eventCount, new Date(startDate))
     };
   } catch (error: any) {
     console.error('[generateCalendarEvents] Error:', error.message);
@@ -309,6 +313,7 @@ Only return valid JSON.`;
  * Generate Learning Plan - AI Powered
  */
 export async function generateLearningPlanDirect(data: {
+  userId: string;
   company: string;
   role: string;
   jobProfile: any;
@@ -319,7 +324,7 @@ export async function generateLearningPlanDirect(data: {
   const { company, role, jobProfile, userProfile, skillGaps, daysUntilInterview } = data;
   
   try {
-    const aiService = await getAIService();
+    const aiService = createMeteredAIService(data.userId, { source: 'career', feature: 'learning-plan' });
     
     const prompt = `Generate a ${daysUntilInterview}-day learning plan for ${company} ${role} interview.
 
@@ -383,6 +388,7 @@ Only return valid JSON.`;
  * Generate Interview Session - AI Powered
  */
 export async function generateInterviewSessionDirect(data: {
+  userId: string;
   company: string;
   role: string;
   jobProfile: any;
@@ -391,7 +397,7 @@ export async function generateInterviewSessionDirect(data: {
   const { company, role, jobProfile, userProfile } = data;
   
   try {
-    const aiService = await getAIService();
+    const aiService = createMeteredAIService(data.userId, { source: 'career', feature: 'interview-session' });
     
     const prompt = `Generate interview questions for ${company} ${role} position.
 
@@ -451,9 +457,9 @@ Only return valid JSON.`;
 /**
  * Helper: Generate basic calendar events
  */
-function generateBasicCalendarEvents(company: string, role: string, days: number, startDate: Date) {
+function generateBasicCalendarEvents(company: string, role: string, eventCount: number, startDate: Date) {
   const events = [];
-  for (let i = 0; i < Math.min(12, days); i++) {
+  for (let i = 0; i < eventCount; i++) {
     const eventDate = new Date(startDate);
     eventDate.setDate(eventDate.getDate() + i);
     

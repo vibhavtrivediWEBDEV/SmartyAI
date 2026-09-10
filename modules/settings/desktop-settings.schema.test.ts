@@ -15,7 +15,10 @@ describe("desktopSettingsUpdateSchema", () => {
       backgroundColor: "240 5.9% 10%",
       darkMode: true,
       themeColor: "211 100% 50%",
-      backgroundImage: "https://example.com/wallpaper.jpg",
+      backgroundImage: "/Wallpaper/wallpaper-1.jpg",
+      lockScreenImage: "https://example.com/lock-screen.jpg",
+      lockScreenDepthEffect: true,
+      lockScreenDepthSubjectTop: 32,
       wallpaperQuery: "macOS mountains",
       githubProfile: "vibhavtrivediWEBDEV",
       gestureControl: true,
@@ -55,5 +58,7 @@ describe("desktopSettingsUpdateSchema", () => {
   it("rejects unknown or invalid settings", () => {
     expect(desktopSettingsUpdateSchema.safeParse({ gestureControl: true, unknown: true }).success).toBe(false);
     expect(desktopSettingsUpdateSchema.safeParse({ screenBrightness: 101 }).success).toBe(false);
+    expect(desktopSettingsUpdateSchema.safeParse({ backgroundImage: "javascript:alert(1)" }).success).toBe(false);
+    expect(desktopSettingsUpdateSchema.safeParse({ lockScreenDepthSubjectTop: 51 }).success).toBe(false);
   });
 });

@@ -30,7 +30,7 @@ import {
   type WhatsAppMessage,
   useWhatsAppAccount,
 } from "@/hooks/useWhatsAppAccount";
-import { playById } from "@/lib/sound";
+import { playById } from "@/lib/sound/reactionEngine";
 
 function initials(name: string) {
   return (
@@ -185,6 +185,21 @@ export default function WhatsAppApp() {
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ✅ OPTIMIZATION: Track mounted state to prevent memory leaks
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      // ✅ CRITICAL: Clear state on unmount to free memory
+      setMessages([]);
+      setSelectedChatId(null);
+      setError(null);
+    };
+  }, []);
+
   const filtered = whatsapp.conversations.filter((conversation) =>
     conversation.title.toLowerCase().includes(searchQuery.trim().toLowerCase()),
   );
@@ -200,12 +215,14 @@ export default function WhatsAppApp() {
         (conversation) => conversation.chatId === incomingCall.from,
       )?.title || incomingCall.from
     : "";
+  const [rejectingCall, setRejectingCall] = useState(false)
 
-useEffect(() => {
-  if (incomingCall) {
-    void playById("yo-phone-is-ringing").catch(() => {});
-  }
-}, [incomingCall]);
+  useEffect(() => {
+    if (incomingCall) {
+      void playById("yo-phone-is-ringing").catch(() => {});
+    }
+    // Note: Sound stops automatically when call ends (no explicit stop needed)
+  }, [incomingCall]);
 
 
   const openIncomingCall = () => {
@@ -230,10 +247,12 @@ useEffect(() => {
     void whatsapp
       .loadMessages(selectedChatId)
       .then((result) => {
-        if (active) setMessages(result.messages);
+        // ✅ OPTIMIZATION: Check if component is still mounted
+        if (active && isMountedRef.current) setMessages(result.messages);
       })
       .catch((loadError) => {
-        if (active)
+        // ✅ OPTIMIZATION: Check if component is still mounted
+        if (active && isMountedRef.current)
           setError(
             loadError instanceof Error
               ? loadError.message
@@ -241,7 +260,8 @@ useEffect(() => {
           );
       })
       .finally(() => {
-        if (active) setLoadingMessages(false);
+        // ✅ OPTIMIZATION: Check if component is still mounted
+        if (active && isMountedRef.current) setLoadingMessages(false);
       });
     return () => {
       active = false;
@@ -399,20 +419,26 @@ useEffect(() => {
           </button>
           <button
             type="button"
-            onClick={() =>
-              void whatsapp
-                .rejectCall(incomingCall.callId)
-                .catch((callError) =>
-                  setError(
-                    callError instanceof Error
-                      ? callError.message
-                      : "Call could not be rejected",
-                  ),
+            onClick={async () => {
+              if (rejectingCall) return
+              setRejectingCall(true)
+              try {
+                await whatsapp.rejectCall(incomingCall.callId)
+                // Ringing stops when incomingCall becomes null (call status changes)
+              } catch (callError) {
+                setError(
+                  callError instanceof Error
+                    ? callError.message
+                    : "Call could not be rejected",
                 )
-            }
-            className="h-8 rounded-md bg-red-600 px-3 text-[10px] font-semibold"
+              } finally {
+                setRejectingCall(false)
+              }
+            }}
+            disabled={rejectingCall}
+            className="h-8 rounded-md bg-red-600 px-3 text-[10px] font-semibold disabled:opacity-50"
           >
-            Reject
+            {rejectingCall ? "Rejecting..." : "Reject"}
           </button>
         </div>
       )}

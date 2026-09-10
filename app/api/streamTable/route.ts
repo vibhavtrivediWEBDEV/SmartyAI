@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 
 import { getCurrentUser } from "@/lib/actions/auth.action"
-import { createAIService } from "@/lib/ai"
+import { createMeteredAIService, CreditLimitError } from "@/lib/ai/metered"
 import { SUBSCRIPTION_PLANS } from "@/modules/subscription/plans"
 import { consumeTableGeneration } from "@/modules/users/user.repository"
 
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     const plan = SUBSCRIPTION_PLANS[user.plan]
     const data = typeof body.data === "string" ? body.data.slice(0, 250_000) : ""
     const current = sanitizeContext(body.current)
-    const completion = await createAIService().chat([
+    const completion = await createMeteredAIService(user.id, { source: "other", feature: "table-generation" }).chat([
       { role: "system", content: systemPrompt },
       {
         role: "user",
@@ -73,6 +73,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ config: result, remaining })
   } catch (error) {
+    if (error instanceof CreditLimitError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error("Table AI error:", error)
     return NextResponse.json({ error: error instanceof Error ? error.message : "Table AI failed" }, { status: 500 })
   }

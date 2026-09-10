@@ -97,8 +97,12 @@ export async function syncCareerDailyTeacherBooks(db: Db, now = new Date()): Pro
       { type: "text" as const, content: { title: "Tasks", body } },
       { type: "end" as const, content: { message: "End of persisted daily career plan." } },
     ];
-    await db.collection("teacherBooks").updateOne(
-      { userId, sessionId: `career:${missionId}:${date}` },
+    const teacherBooks = db.collection("teacherBooks");
+    const identity = { userId, sessionId: `career:${missionId}:${date}` };
+    const existing = await teacherBooks.findOne(identity, { projection: { generationSource: 1, provider: 1 } });
+    if (existing && (existing.generationSource === "interactive" || existing.provider !== "career_tasks")) continue;
+    await teacherBooks.updateOne(
+      identity,
       {
         $set: { subject: "Computer Science", title: `Career plan: ${date}`, provider: "career_tasks", model: "deterministic", generationSource: "career", messages, pages, status: "complete", updatedAt: now },
         $setOnInsert: { userId, sessionId: `career:${missionId}:${date}`, createdAt: now },

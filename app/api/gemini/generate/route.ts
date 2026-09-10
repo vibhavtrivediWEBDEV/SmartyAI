@@ -1,8 +1,11 @@
-import { createAIService } from '@/lib/ai'
+import { createMeteredAIService, CreditLimitError } from '@/lib/ai/metered'
+import { getSessionUserId } from '@/lib/auth/session'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
   try {
+    const userId = await getSessionUserId()
+    if (!userId) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     const { prompt } = await request.json()
 
     if (!prompt) {
@@ -13,7 +16,7 @@ export async function POST(request: Request) {
     }
 
     // Create AI service (auto-detects provider: OpenAI, Bedrock, or Gemini)
-    const aiService = createAIService()
+    const aiService = createMeteredAIService(userId, { source: 'other', feature: 'legacy-generate' })
 
     // Enhanced prompt
     const enhancedPrompt = `
@@ -41,6 +44,9 @@ Always respond as Vibhav himself, using his tone and experience.
       { status: 200 }
     )
   } catch (error: any) {
+    if (error instanceof CreditLimitError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.status })
+    }
     console.error("AI generation error:", error)
     return NextResponse.json(
       {

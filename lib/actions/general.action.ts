@@ -1,16 +1,16 @@
 "use server";
 
-import { generateObject } from "ai";
-import { google } from "@ai-sdk/google";
-import { createAIService } from "@/lib/ai";
+import { createMeteredAIService } from "@/lib/ai/metered";
 import { ObjectId } from "mongodb";
 
 import { db } from "@/firebase/admin";
 import { feedbackSchema } from "@/constants";
 import { getCurrentUser } from "@/lib/actions/auth.action";
+import { recordVerifiedCareerEvidence } from "@/lib/career/recordCareerFeedback";
 import {
   findFeedback,
   findInterviewById,
+  findOwnedCareerInterviewContext,
   findOwnedInterviewById,
   findInterviewsByUserId,
   findLatestInterviews,
@@ -40,6 +40,10 @@ export async function createFeedback(params: CreateFeedbackParams) {
       console.error("❌ Unauthorized: currentUser.id !== userId", { currentUserId: currentUser?.id, userId });
       throw new Error("Unauthorized feedback request");
     }
+    const careerContext = await findOwnedCareerInterviewContext(interviewId, userId);
+    if (!careerContext) {
+      throw new Error("Interview not found");
+    }
     console.log("✅ User authorized:", currentUser.id);
     console.log("📝 Formatting transcript...");
     const formattedTranscript = transcript
@@ -62,7 +66,7 @@ export async function createFeedback(params: CreateFeedbackParams) {
       // Use Bedrock/GLM for feedback generation
       console.log('🎯 Using Bedrock/GLM for feedback generation');
       
-      const aiService = createAIService();
+      const aiService = createMeteredAIService(userId, { source: "interview", feature: "feedback" });
       const feedbackPrompt = `
 You are an AI interviewer analyzing a mock interview. Your task is to evaluate the candidate based on structured categories. Be thorough and detailed in your analysis. Don't be lenient with the candidate. If there are mistakes or areas for improvement, point them out.
 
@@ -112,13 +116,10 @@ Return a JSON object with this structure:
     } else {
       // Default: Use Google Gemini
       console.log('� Using Google Gemini for feedback generation');
-      
-      const result = await generateObject({
-        model: google("gemini-2.0-flash-001", {
-          structuredOutputs: false,
-        }),
-        schema: feedbackSchema,
-        prompt: `
+      const aiService = createMeteredAIService(userId, { source: "interview", feature: "feedback" });
+      const response = await aiService.chat([
+        { role: "system", content: "You are a professional interviewer analyzing a mock interview. Return only valid JSON matching the requested structure." },
+        { role: "user", content: `
 You are an AI interviewer analyzing a mock interview. Your task is to evaluate the candidate based on structured categories. Be thorough and detailed in your analysis. Don't be lenient with the candidate. If there are mistakes or areas for improvement, point them out.
 Transcript:
 ${formattedTranscript}
@@ -129,13 +130,12 @@ Please score the candidate from 0 to 100 in the following areas. Do not add cate
 - **Problem-Solving**: Ability to analyze problems and propose solutions.
 - **Cultural & Role Fit**: Alignment with company values and job role.
 - **Confidence & Clarity**: Confidence in responses, engagement, and clarity.
-        `,
-        system:
-          "You are a professional interviewer analyzing a mock interview. Your task is to evaluate the candidate based on structured categories",
-      });
-      
+Return JSON with totalScore, categoryScores, strengths, areasForImprovement, and finalAssessment.` },
+  ], { maxTokens: 2000, temperature: 0.7, responseFormat: { type: "json_object" } });
+  const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("Invalid JSON response from AI provider");
       console.log("📤 Sent prompt to Gemini...");
-      feedbackObject = result.object;
+  feedbackObject = feedbackSchema.parse(JSON.parse(jsonMatch[0]));
       console.log("✅ Received feedback from Gemini:", feedbackObject);
     }
 
@@ -160,6 +160,26 @@ Please score the candidate from 0 to 100 in the following areas. Do not add cate
     console.log("📊 Feedback object:", JSON.stringify(feedback, null, 2));
     const savedFeedbackId = await saveFeedback(feedback, feedbackId);
     console.log("✅ Feedback SAVED successfully with ID:", savedFeedbackId);
+
+    if (careerContext.taskId && careerContext.missionId) {
+      try {
+        await recordVerifiedCareerEvidence({
+          userId,
+          missionId: careerContext.missionId,
+          taskId: careerContext.taskId,
+          tool: "interview",
+          evidenceKey: `interview-feedback:${savedFeedbackId}`,
+          progress: 100,
+          metadata: {
+            interviewId,
+            feedbackId: savedFeedbackId,
+            totalScore: feedbackObject.totalScore,
+          },
+        });
+      } catch (error) {
+        console.error("Career interview evidence sync failed:", error);
+      }
+    }
 
     return { success: true, feedbackId: savedFeedbackId };
   } catch (error) {
@@ -241,7 +261,7 @@ export async function reviewCodeSubmission(params: {
   }
 
   try {
-    const response = await createAIService().chat([
+    const response = await createMeteredAIService(user.id, { source: "interview", feature: "code-review" }).chat([
       {
         role: "system",
         content: "You are a senior technical interviewer. Evaluate code accurately, never claim it was executed, and return only valid JSON.",

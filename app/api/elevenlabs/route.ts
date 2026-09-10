@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getCurrentUser } from '@/lib/actions/auth.action';
 
 export async function POST(request: Request) {
     try {
@@ -7,6 +8,9 @@ export async function POST(request: Request) {
         if (!text) {
             return NextResponse.json({ error: 'Text required' }, { status: 400 });
         }
+
+        const user = await getCurrentUser();
+        if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
 
         const apiKey = process.env.ELEVEN_LABS_API_KEY;
 

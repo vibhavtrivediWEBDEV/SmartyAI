@@ -66,6 +66,7 @@ const BsGrid = Grid
 const BsFolder2Open = FolderOpen
 const BsLayers = Layers
 import { getDepthPreset } from "@/lib/constants/depthWallpapers";
+import { useSettings } from "@/app/context/settingContext";
 
 // Static imports for wallpaper images
 import wallpaper1 from '/public/Wallpaper/wallpaper-1.jpg'
@@ -152,6 +153,7 @@ const TrafficLights = ({ windowId }) => {
 
 export default function MacGallery({ windowId }: { windowId?: string }) {
   const isDarkMode = useAppStore((s) => s.isDarkMode);
+  const { settings, updateSettings } = useSettings();
   const [selected, setSelected] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [activeTab, setActiveTab] = useState("library");
@@ -169,18 +171,16 @@ export default function MacGallery({ windowId }: { windowId?: string }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showLockScreenOptions, setShowLockScreenOptions] = useState(false);
   const [tempDepthMode, setTempDepthMode] = useState(false);
-  const [depthSliderValue, setDepthSliderValue] = useState(() => {
-    return parseInt(localStorage.getItem("lockscreen_depth_subject_top") || "30", 10);
-  });
+  const [depthSliderValue, setDepthSliderValue] = useState(settings.lockScreenDepthSubjectTop);
 
   // Synchronize temporary depth mode state when popover is opened
   useEffect(() => {
     if (showLockScreenOptions) {
-      const isCurrentWallpaper = localStorage.getItem("lockscreen_wallpaper") === selected;
-      const currentDepth = localStorage.getItem("lockscreen_depth_effect") === "true";
-      setTempDepthMode(isCurrentWallpaper ? currentDepth : false);
+      const isCurrentWallpaper = settings.lockScreenImage === selected;
+      setTempDepthMode(isCurrentWallpaper ? settings.lockScreenDepthEffect : false);
+      if (isCurrentWallpaper) setDepthSliderValue(settings.lockScreenDepthSubjectTop);
     }
-  }, [showLockScreenOptions, selected]);
+  }, [showLockScreenOptions, selected, settings.lockScreenDepthEffect, settings.lockScreenDepthSubjectTop, settings.lockScreenImage]);
 
   // Close depth popover when selected image changes
   useEffect(() => {
@@ -246,19 +246,17 @@ export default function MacGallery({ windowId }: { windowId?: string }) {
   };
 
   const setWallpaper = () => {
-    localStorage.setItem("desktop_wallpaper", selected);
-    setTimeout(() => {
-      window.dispatchEvent(new Event('wallpaperChanged'));
-    }, 50);
+    if (!selected) return;
+    updateSettings({ backgroundImage: selected });
   };
 
   const setLockscreen = (withDepth = false) => {
-    localStorage.setItem("lockscreen_wallpaper", selected);
-    localStorage.setItem("lockscreen_depth_effect", withDepth ? "true" : "false");
-    if (withDepth) {
-      localStorage.setItem("lockscreen_depth_subject_top", depthSliderValue.toString());
-    }
-    window.dispatchEvent(new Event("lockscreenDepthChanged"));
+    if (!selected) return;
+    updateSettings({
+      lockScreenImage: selected,
+      lockScreenDepthEffect: withDepth,
+      lockScreenDepthSubjectTop: depthSliderValue,
+    });
     setShowLockScreenOptions(false);
   };
 

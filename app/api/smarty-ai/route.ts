@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAIService } from '@/lib/ai'
+import { createMeteredAIService, CreditLimitError } from '@/lib/ai/metered'
+import { getSessionUserId } from '@/lib/auth/session'
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getSessionUserId()
+    if (!userId) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     const { question, subject } = await request.json()
 
     // Validate inputs
@@ -11,12 +14,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Create AI service (auto-detects provider from env)
-    const aiService = createAIService()
+    const aiService = createMeteredAIService(userId, { source: 'teacher', feature: 'legacy-tutor' })
 
     // Ask AI to answer the question in a beginner-friendly way
     const messages = [
       {
-        role: 'system',
+        role: 'system' as const,
         content: `
 You are Smarty, a friendly and helpful teacher who explains concepts in a mix of Hindi and English (Hinglish).
 
@@ -35,7 +38,7 @@ Your tone should be warm, friendly and slightly playful - like a cool teacher wh
       `.trim(),
       },
       {
-        role: 'user',
+        role: 'user' as const,
         content: `
 Question: ${question}
 ${subject ? `Subject area: ${subject}` : ''}
@@ -57,6 +60,9 @@ ${subject ? `Subject area: ${subject}` : ''}
     })
     
   } catch (err: any) {
+    if (err instanceof CreditLimitError) {
+      return NextResponse.json({ success: false, error: err.message }, { status: err.status })
+    }
     console.error('❌ Error in smarty-ai:', err)
     return NextResponse.json(
       { 

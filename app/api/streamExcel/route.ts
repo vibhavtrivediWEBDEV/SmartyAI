@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 
 import { getCurrentUser } from "@/lib/actions/auth.action"
-import { createAIService } from "@/lib/ai"
+import { createMeteredAIService, CreditLimitError } from "@/lib/ai/metered"
 import { SUBSCRIPTION_PLANS } from "@/modules/subscription/plans"
 import { consumeExcelOperation } from "@/modules/users/user.repository"
 
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       ? body.spreadsheet.slice(0, MAX_CONTEXT_ROWS).map((row: unknown) => Array.isArray(row) ? row.slice(0, MAX_CONTEXT_COLUMNS) : [])
       : []
     const activeSheet = typeof body.activeSheet === "string" ? body.activeSheet : "Sheet1"
-    const completion = await createAIService().chat(
+    const completion = await createMeteredAIService(user.id, { source: "excel", feature: "spreadsheet" }).chat(
       [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Active sheet: ${activeSheet}\nCurrent cells: ${JSON.stringify(spreadsheet)}\nRequest: ${prompt}` },
@@ -76,6 +76,9 @@ export async function POST(request: NextRequest) {
       remaining,
     })
   } catch (error) {
+    if (error instanceof CreditLimitError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error("Excel AI error:", error)
     return NextResponse.json({ error: error instanceof Error ? error.message : "Excel AI failed" }, { status: 500 })
   }

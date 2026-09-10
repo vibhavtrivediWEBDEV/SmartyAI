@@ -2,9 +2,9 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { gsap } from "gsap";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { BookOpen, CalendarDays, CheckCircle2, ChevronDown, Clock3, Dumbbell, Sparkles, Target } from "lucide-react";
-import { CareerTaskMeta, useCareerClock } from "../Desktop/CareerTaskMeta";
-import { groupCareerTasks, type CareerTaskItem } from "../Desktop/careerTaskGroups";
+import { BookOpen, CheckCircle2, Clock3, Dumbbell, Sparkles, Target } from "lucide-react";
+import type { CareerTaskItem } from "../Desktop/careerTaskGroups";
+import PublishArtifactButton from "../Desktop/PublishArtifactButton";
 
 interface PreparationBrief {
     summary: string;
@@ -176,10 +176,6 @@ const STORAGE_KEY = "premium_notes_v1";
 const loadNotes = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) ?? []; } catch { return []; } };
 const saveNotes = (n) => localStorage.setItem(STORAGE_KEY, JSON.stringify(n));
 const formatDate = (iso) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-const dateKey = (value) => {
-    const date = new Date(value);
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-};
 const formatDateGroup = (iso) => {
     const date = new Date(iso);
     const today = new Date();
@@ -227,13 +223,16 @@ function AiNoteArtifact({ note }) {
     );
 }
 
-function PreparationBriefView({ task, brief, loading, error, onRetry }) {
+function PreparationBriefView({ task, brief, loading, error, onRetry, onReview, reviewLoading, reviewError, publishAction }) {
     const scheduledDate = new Date(task.scheduledDate);
 
     return (
         <>
             <div style={{ padding: "20px 28px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                <div style={{ marginBottom: 8, color: "var(--theme-primary-color)", fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Preparation brief</div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 8 }}>
+                    <div style={{ color: "var(--theme-primary-color)", fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Preparation brief</div>
+                    {publishAction}
+                </div>
                 <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em", color: "#fff" }}>{task.title}</h2>
                 <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 8, color: "rgba(255,255,255,0.42)", fontSize: 12 }}>
                     <span style={{ display: "flex", alignItems: "center", gap: 5 }}><Clock3 size={13} />{scheduledDate.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
@@ -293,6 +292,12 @@ function PreparationBriefView({ task, brief, loading, error, onRetry }) {
                         </BriefSection>
 
                         <div style={{ marginTop: 30, color: "rgba(255,255,255,0.42)", fontSize: 13, fontStyle: "italic", lineHeight: 1.6 }}>{brief.encouragement}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 22 }}>
+                            <button type="button" onClick={onReview} disabled={reviewLoading || task.result?.feedback?.tools?.notes?.progress === 100} style={{ padding: "9px 14px", border: "none", borderRadius: 7, background: "var(--theme-primary-color)", color: "#fff", cursor: reviewLoading ? "wait" : "pointer", fontWeight: 700 }}>
+                                {task.result?.feedback?.tools?.notes?.progress === 100 ? "Reviewed" : reviewLoading ? "Verifying..." : "Mark reviewed"}
+                            </button>
+                            {reviewError && <span style={{ color: "#ff7b72", fontSize: 12 }}>{reviewError}</span>}
+                        </div>
                     </div>
                 )}
             </div>
@@ -317,19 +322,12 @@ export default function PremiumNotes({ initialCareerTask, initialCareerTaskId }:
     const [showVoicePanel, setShowVoicePanel] = useState(false);
     const [showNewModal, setShowNewModal] = useState(false);
     const [editingBody, setEditingBody] = useState("");
-    const [selectedDate, setSelectedDate] = useState(() => initialCareerTask ? dateKey(initialCareerTask.scheduledDate) : dateKey(new Date()));
-    const [roadmapOpen, setRoadmapOpen] = useState(true);
-    const [careerTasks, setCareerTasks] = useState<CareerTaskItem[]>([]);
     const [selectedCareerTask, setSelectedCareerTask] = useState<CareerTaskItem | null>(initialCareerTask ?? null);
     const [preparationBriefs, setPreparationBriefs] = useState<Record<string, PreparationBrief>>({});
     const [briefLoading, setBriefLoading] = useState(false);
     const [briefError, setBriefError] = useState("");
-    const now = useCareerClock();
-    const todayCareerTasks = useMemo(
-        () => groupCareerTasks(careerTasks.filter((task) => task.status !== "completed"), now)
-            .find((group) => group.state === "current")?.tasks ?? [],
-        [careerTasks, now]
-    );
+    const [reviewLoading, setReviewLoading] = useState(false);
+    const [reviewError, setReviewError] = useState("");
     const themeAccent = "var(--theme-primary-color)";
     const themeGlow = "color-mix(in srgb, var(--theme-primary-color) 35%, transparent)";
 
@@ -351,9 +349,8 @@ export default function PremiumNotes({ initialCareerTask, initialCareerTaskId }:
 
     const activeNote = notes.find((n) => n.id === activeId);
     const filtered = useMemo(() => notes
-        .filter((note) => dateKey(note.createdAt) === selectedDate)
         .filter((note) => note.subject.toLowerCase().includes(search.toLowerCase()) || note.message.toLowerCase().includes(search.toLowerCase()))
-        .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()), [notes, search, selectedDate]);
+        .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()), [notes, search]);
     const notesByDate = useMemo(() => filtered.reduce((groups, note) => {
             const date = formatDateGroup(note.createdAt);
             (groups[date] ||= []).push(note);
@@ -363,11 +360,15 @@ export default function PremiumNotes({ initialCareerTask, initialCareerTaskId }:
     // ── Persist
     useEffect(() => saveNotes(notes), [notes]);
 
-    // ── Load Career Agent notes persisted in MongoDB
+    // ── Keep all Career Agent notes visible throughout the preparation period
     useEffect(() => {
+        const controller = new AbortController();
         let cancelled = false;
+        const query = search.trim();
+        const params = new URLSearchParams({ limit: "100" });
+        if (query) params.set("query", query);
 
-        fetch('/api/career/notes')
+        const timer = window.setTimeout(() => fetch(`/api/career/notes?${params}`, { signal: controller.signal })
             .then((response) => response.ok ? response.json() : Promise.reject(new Error('Unable to load career notes')))
             .then(({ notes: careerNotes }) => {
                 if (cancelled || !Array.isArray(careerNotes)) return;
@@ -376,28 +377,19 @@ export default function PremiumNotes({ initialCareerTask, initialCareerTaskId }:
                     return [...careerNotes.filter((note) => !existingIds.has(String(note.id))), ...current];
                 });
             })
-            .catch(() => undefined);
+            .catch(() => undefined), query ? 300 : 0);
 
-        return () => { cancelled = true; };
-    }, []);
+        return () => {
+            cancelled = true;
+            controller.abort();
+            window.clearTimeout(timer);
+        };
+    }, [search]);
 
     useEffect(() => {
         if (selectedCareerTask || filtered.some((note) => note.id === activeId)) return;
         setActiveId(filtered[0]?.id ?? null);
     }, [activeId, filtered, selectedCareerTask]);
-
-    useEffect(() => {
-        const loadCareerTasks = async () => {
-            const response = await fetch('/api/career/tasks');
-            if (!response.ok) return;
-            const result = await response.json();
-            setCareerTasks(Array.isArray(result.tasks) ? result.tasks : []);
-        };
-        void loadCareerTasks();
-        const handleProgress = () => void loadCareerTasks();
-        window.addEventListener('career-progress', handleProgress);
-        return () => window.removeEventListener('career-progress', handleProgress);
-    }, []);
 
     // ── Mount animation
     useEffect(() => {
@@ -434,7 +426,6 @@ export default function PremiumNotes({ initialCareerTask, initialCareerTaskId }:
     const createNote = ({ subject, message }) => {
         const note = { id: Date.now(), subject: subject.trim(), message: message.trim(), createdAt: new Date().toISOString(), color: themeAccent };
         setNotes((p) => [note, ...p]);
-        setSelectedDate(dateKey(note.createdAt));
         setSelectedCareerTask(null);
         setActiveId(note.id);
         // animate new sidebar item after render
@@ -478,6 +469,11 @@ export default function PremiumNotes({ initialCareerTask, initialCareerTaskId }:
             setBriefLoading(false);
             return;
         }
+        if (!force && task.result?.preparationBrief) {
+            setPreparationBriefs((current) => ({ ...current, [task.id]: task.result!.preparationBrief! }));
+            setBriefLoading(false);
+            return;
+        }
 
         setBriefLoading(true);
         try {
@@ -492,34 +488,73 @@ export default function PremiumNotes({ initialCareerTask, initialCareerTaskId }:
         }
     };
 
+    const loadCareerTask = async (taskId: string) => {
+        const response = await fetch(`/api/career/tasks/${encodeURIComponent(taskId)}`);
+        if (!response.ok) return null;
+        const result = await response.json();
+        return result.task as CareerTaskItem | undefined;
+    };
+
+    const refreshSelectedCareerTask = async (taskId: string) => {
+        const refreshedTask = await loadCareerTask(taskId);
+        if (!refreshedTask) return;
+        setSelectedCareerTask((current) => current?.id === taskId ? refreshedTask : current);
+        if (refreshedTask.result?.preparationBrief) {
+            setPreparationBriefs((current) => ({ ...current, [taskId]: refreshedTask.result!.preparationBrief! }));
+            setBriefLoading(false);
+        }
+    };
+
+    const reviewCareerNote = async () => {
+        if (!selectedCareerTask) return;
+        setReviewLoading(true);
+        setReviewError("");
+        try {
+            const response = await fetch(`/api/career/tasks/${encodeURIComponent(selectedCareerTask.id)}/notes-review`, { method: "POST" });
+            const result = await response.json();
+            if (!response.ok || !result.feedback) throw new Error(result.error || "Unable to verify this review.");
+            setSelectedCareerTask((task) => task ? { ...task, status: result.feedback.completed ? "completed" : task.status, result: { ...(task.result || {}), feedback: result.feedback } } : task);
+        } catch (error) {
+            setReviewError(error instanceof Error ? error.message : "Unable to verify this review.");
+        } finally {
+            setReviewLoading(false);
+        }
+    };
+
     useEffect(() => {
         const taskId = initialCareerTaskId ?? initialCareerTask?.id;
         if (!taskId || openedInitialTaskRef.current === taskId) return;
-        const requestedTask = careerTasks.find((task) => task.id === taskId) ?? (initialCareerTask?.id === taskId ? initialCareerTask : undefined);
-        if (!requestedTask) return;
         openedInitialTaskRef.current = taskId;
-        setSelectedDate(dateKey(requestedTask.scheduledDate));
-        setRoadmapOpen(true);
-        void openCareerTask(requestedTask);
-    }, [careerTasks, initialCareerTask, initialCareerTaskId]);
+        const suppliedTask = initialCareerTask?.id === taskId ? initialCareerTask : undefined;
+        if (suppliedTask) {
+            void openCareerTask(suppliedTask);
+            void refreshSelectedCareerTask(taskId);
+            return;
+        }
+        void loadCareerTask(taskId).then((requestedTask) => {
+            if (requestedTask) void openCareerTask(requestedTask);
+        });
+    }, [initialCareerTask, initialCareerTaskId]);
 
     useEffect(() => {
-        const handleCareerTaskOpen = (event: Event) => {
+        const handleCareerTaskOpen = async (event: Event) => {
             const detail = (event as CustomEvent<{ taskId?: string; task?: CareerTaskItem }>).detail;
             const taskId = detail?.taskId;
             if (!taskId) return;
-            const requestedTask = careerTasks.find((task) => task.id === taskId)
-                ?? (detail.task?.id === taskId ? detail.task : undefined);
-            if (!requestedTask) return;
             openedInitialTaskRef.current = taskId;
-            setSelectedDate(dateKey(requestedTask.scheduledDate));
-            setRoadmapOpen(true);
-            void openCareerTask(requestedTask);
+            const suppliedTask = detail.task?.id === taskId ? detail.task : undefined;
+            if (suppliedTask) {
+                void openCareerTask(suppliedTask);
+                void refreshSelectedCareerTask(taskId);
+                return;
+            }
+            const requestedTask = await loadCareerTask(taskId);
+            if (requestedTask) void openCareerTask(requestedTask);
         };
 
         window.addEventListener('career-notes:open', handleCareerTaskOpen);
         return () => window.removeEventListener('career-notes:open', handleCareerTaskOpen);
-    }, [careerTasks]);
+    }, []);
 
     // ── Voice
     // const voice = useVoice({ onNoteCreate: createNote });
@@ -686,56 +721,15 @@ export default function PremiumNotes({ initialCareerTask, initialCareerTaskId }:
                         />
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 7, padding: "7px 12px 5px" }}>
-                        <label style={{ position: "relative", display: "flex", alignItems: "center" }}>
-                            <CalendarDays size={13} style={{ position: "absolute", left: 10, color: "rgba(255,255,255,0.4)", pointerEvents: "none" }} />
-                            <input
-                                aria-label="Filter notes by date"
-                                type="date"
-                                value={selectedDate}
-                                onChange={(event) => { setSelectedDate(event.target.value); setSelectedCareerTask(null); }}
-                                style={{ width: "100%", height: 34, padding: "0 8px 0 31px", colorScheme: "dark", color: "rgba(255,255,255,0.78)", background: "rgba(255,255,255,0.055)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 7, fontSize: 11, fontFamily: "inherit", outline: "none" }}
-                            />
-                        </label>
-                        <button
-                            type="button"
-                            onClick={() => { setSelectedDate(dateKey(new Date())); setSelectedCareerTask(null); }}
-                            disabled={selectedDate === dateKey(new Date())}
-                            style={{ height: 34, padding: "0 10px", borderRadius: 7, border: "1px solid rgba(255,255,255,0.09)", background: selectedDate === dateKey(new Date()) ? "var(--theme-primary-soft)" : "rgba(255,255,255,0.055)", color: selectedDate === dateKey(new Date()) ? themeAccent : "rgba(255,255,255,0.65)", fontSize: 11, fontWeight: 700, cursor: selectedDate === dateKey(new Date()) ? "default" : "pointer" }}
-                        >Today</button>
-                    </div>
-
-                    {selectedDate === dateKey(new Date()) && todayCareerTasks.length > 0 && (
-                        <div style={{ margin: "8px 10px 4px", padding: 10, borderRadius: 10, background: "rgba(255,255,255,0.045)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                            <button type="button" aria-expanded={roadmapOpen} onClick={() => setRoadmapOpen((open) => !open)} style={{ width: "100%", padding: 0, display: "flex", alignItems: "center", justifyContent: "space-between", border: 0, background: "transparent", color: themeAccent, cursor: "pointer", fontFamily: "inherit" }}>
-                                <span style={{ fontSize: 10, fontWeight: 750, textTransform: "uppercase" }}>Today · Career roadmap</span>
-                                <span style={{ display: "flex", alignItems: "center", gap: 5, color: "rgba(255,255,255,0.4)", fontSize: 10 }}>
-                                    {todayCareerTasks.length} task{todayCareerTasks.length === 1 ? "" : "s"}
-                                    <ChevronDown size={14} style={{ transform: roadmapOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
-                                </span>
-                            </button>
-                            {roadmapOpen && (
-                                <div style={{ paddingTop: 7, marginTop: 8, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                                    {todayCareerTasks.map((task) => (
-                                        <button key={task.id} type="button" onClick={() => void openCareerTask(task)} style={{ width: "100%", padding: "7px 8px", margin: "2px 0", background: selectedCareerTask?.id === task.id ? "var(--theme-primary-soft)" : "transparent", border: selectedCareerTask?.id === task.id ? "1px solid color-mix(in srgb, var(--theme-primary-color) 28%, transparent)" : "1px solid transparent", borderRadius: 7, color: "inherit", textAlign: "left", cursor: "pointer", fontFamily: "inherit" }}>
-                                            <div style={{ marginBottom: 5, color: "rgba(255,255,255,0.82)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.title}</div>
-                                            <CareerTaskMeta task={task} now={now} />
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    <div style={{ padding: "8px 14px 4px", fontSize: "11px", fontWeight: 700, letterSpacing: "0.1em", color: "rgba(255,255,255,0.3)", textTransform: "uppercase" }}>
-                        {selectedDate === dateKey(new Date()) ? "Today" : formatDate(`${selectedDate}T12:00:00`)} · {filtered.length} Note{filtered.length !== 1 ? "s" : ""}
+                    <div style={{ padding: "12px 14px 6px", fontSize: "11px", fontWeight: 700, letterSpacing: "0.1em", color: "rgba(255,255,255,0.3)", textTransform: "uppercase" }}>
+                        All career notes · {filtered.length}
                     </div>
 
                     {/* Note list */}
                     <div style={{ flex: 1, overflowY: "auto", paddingBottom: 12 }}>
                         {filtered.length === 0 && (
                             <div style={{ textAlign: "center", color: "rgba(255,255,255,0.25)", fontSize: 13, marginTop: 40, lineHeight: 1.8 }}>
-                                No notes for this date.<br />
+                                No career notes yet.<br />
                                 <span style={{ fontSize: 24 }}>✦</span>
                             </div>
                         )}
@@ -787,9 +781,20 @@ export default function PremiumNotes({ initialCareerTask, initialCareerTaskId }:
                             loading={briefLoading}
                             error={briefError}
                             onRetry={() => void openCareerTask(selectedCareerTask, true)}
+                            onReview={() => void reviewCareerNote()}
+                            reviewLoading={reviewLoading}
+                            reviewError={reviewError}
+                            publishAction={preparationBriefs[selectedCareerTask.id]
+                                ? <PublishArtifactButton kind="note" sourceId={selectedCareerTask.id} />
+                                : null}
                         />
                     ) : activeNote?.source === "career-agent" ? (
-                        <AiNoteArtifact note={activeNote} />
+                        <div style={{ position: "relative", height: "100%", overflow: "auto" }}>
+                            <div style={{ position: "absolute", zIndex: 2, top: 16, right: 20 }}>
+                                <PublishArtifactButton kind="note" sourceId={String(activeNote.id)} />
+                            </div>
+                            <AiNoteArtifact note={activeNote} />
+                        </div>
                     ) : activeNote ? (
                         <>
                             {/* Editor header */}

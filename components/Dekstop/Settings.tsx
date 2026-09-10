@@ -6,14 +6,33 @@ import {
   Gamepad2, Globe2, Hand, Info, Keyboard, Laptop, LockKeyhole, Menu, Monitor,
   Moon, MousePointer2, Network, Palette, PanelRight, Printer, RotateCcw, Search,
   ShieldCheck, SlidersHorizontal, Speaker, Sun, UserRound, Wifi, X, MessageCircle,
+  Briefcase
 } from 'lucide-react'
 import { useSettings, type DesktopSettings } from '@/app/context/settingContext'
 import SoundSettings from './SoundSettings'
 import { DESKTOP_APPS } from '@/lib/desktopApps'
 
-type SettingTab = 'account' | 'network' | 'notifications' | 'sound' | 'focus' | 'general' | 'appearance' | 'accessibility' | 'control' | 'desktop' | 'display' | 'wallpaper' | 'battery' | 'privacy' | 'keyboard' | 'trackpad' | 'extras' | 'telegram'
+type SettingTab = 'account' | 'network' | 'notifications' | 'sound' | 'focus' | 'general' | 'appearance' | 'accessibility' | 'control' | 'desktop' | 'display' | 'wallpaper' | 'battery' | 'privacy' | 'keyboard' | 'trackpad' | 'extras' | 'telegram' | 'career'
 type Item = { id: SettingTab; label: string; icon: typeof Palette; color: string; clickId?: string }
 type BluetoothNavigator = Navigator & { bluetooth?: { requestDevice: (options: { acceptAllDevices: boolean }) => Promise<{ name?: string }> } }
+type SubscriptionSummary = {
+  planName: string
+  status: string
+  endsAt: string | null
+  credits: { used: number; reserved: number; remaining: number; limit: number; period: string }
+  creditActivity: Array<{
+    id: string
+    source: string
+    feature: string
+    status: 'reserved' | 'settled' | 'refunded' | 'denied'
+    credits: number
+    reservedCredits: number
+    promptTokens: number
+    completionTokens: number
+    createdAt: string
+  }>
+  atsCvUpdates: { used: number; remaining: number; limit: number }
+}
 
 const groups: Item[][] = [
   [
@@ -33,6 +52,7 @@ const groups: Item[][] = [
   ],
   [
     { id: 'telegram', label: 'Telegram', icon: MessageCircle, color: '#0088cc', clickId: 'settings_sidebar_telegram' },
+    { id: 'career', label: 'Career', icon: Briefcase, color: '#ff9500', clickId: 'settings_sidebar_career' },
     { id: 'desktop', label: 'Desktop & Dock', icon: PanelRight, color: '#007aff', clickId: 'settings_sidebar_desktop' },
     { id: 'display', label: 'Displays', icon: Monitor, color: '#5856d6', clickId: 'settings_sidebar_display' },
     { id: 'wallpaper', label: 'Wallpaper', icon: Sun, color: '#32ade6', clickId: 'settings_sidebar_wallpaper' },
@@ -65,6 +85,66 @@ function Group({ children }: { children: React.ReactNode }) {
   return <section className="overflow-hidden rounded-xl border shadow-sm" style={{ background: 'var(--macos-surface)', borderColor: 'var(--macos-border)' }}>{children}</section>
 }
 
+function AnimatedCreditBalance({ credits }: { credits: SubscriptionSummary['credits'] }) {
+  const [displayed, setDisplayed] = useState(0)
+
+  useEffect(() => {
+    const startedAt = performance.now()
+    const duration = 650
+    let frame = 0
+    const animate = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / duration)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setDisplayed(Math.round(credits.remaining * eased))
+      if (progress < 1) frame = requestAnimationFrame(animate)
+    }
+    frame = requestAnimationFrame(animate)
+    return () => cancelAnimationFrame(frame)
+  }, [credits.remaining])
+
+  const availablePercent = credits.limit > 0 ? Math.max(0, Math.min(100, (credits.remaining / credits.limit) * 100)) : 0
+  return <div className="min-w-[210px] py-1">
+    <div className="flex items-baseline justify-between gap-3"><span className="text-lg font-semibold tabular-nums" style={{ color: 'var(--theme-primary-color)' }}>{displayed.toLocaleString()}</span><span className="text-[10px]" style={{ color: 'var(--macos-secondary)' }}>of {credits.limit.toLocaleString()}</span></div>
+    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full" style={{ background: 'var(--macos-border)' }}><div className="h-full rounded-full transition-[width] duration-700 ease-out" style={{ width: `${availablePercent}%`, background: 'var(--theme-primary-color)' }} /></div>
+    <p className="mt-1 text-right text-[10px]" style={{ color: 'var(--macos-secondary)' }}>{credits.used.toLocaleString()} used{credits.reserved > 0 ? ` · ${credits.reserved} processing` : ''}</p>
+  </div>
+}
+
+function creditFeatureLabel(value: string) {
+  return value.split('-').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
+}
+
+function CreditUsageHistory({ entries }: { entries: SubscriptionSummary['creditActivity'] }) {
+  return <Group>
+    <div className="border-b px-4 py-3" style={{ borderColor: 'var(--macos-border)' }}>
+      <p className="text-[13px] font-semibold">Credit activity</p>
+      <p className="mt-0.5 text-[11px]" style={{ color: 'var(--macos-secondary)' }}>Actual provider token usage for this month</p>
+    </div>
+    {entries.length === 0
+      ? <p className="px-4 py-5 text-center text-xs" style={{ color: 'var(--macos-secondary)' }}>No AI credit usage yet</p>
+      : entries.map((entry, index) => {
+        const processing = entry.status === 'reserved'
+        const amount = processing ? entry.reservedCredits : entry.credits
+        const statusLabel = entry.status === 'settled' ? 'Charged' : entry.status === 'reserved' ? 'Processing' : entry.status === 'refunded' ? 'Refunded' : 'Declined'
+        return <div key={entry.id} className={`flex gap-3 px-4 py-3 ${index < entries.length - 1 ? 'border-b' : ''}`} style={{ borderColor: 'var(--macos-border)' }}>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <p className="text-[12px] font-medium">{creditFeatureLabel(entry.feature)}</p>
+              <span className="text-[10px] uppercase" style={{ color: 'var(--macos-secondary)' }}>{entry.source}</span>
+            </div>
+            <p className="mt-1 text-[10px] tabular-nums" style={{ color: 'var(--macos-secondary)' }}>
+              {entry.promptTokens.toLocaleString()} input + {entry.completionTokens.toLocaleString()} output tokens · {new Date(entry.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+            </p>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className="text-[12px] font-semibold tabular-nums" style={{ color: entry.status === 'settled' ? '#ff453a' : 'var(--macos-secondary)' }}>{entry.status === 'settled' ? '-' : ''}{amount.toLocaleString()} credits</p>
+            <p className="mt-0.5 text-[10px]" style={{ color: 'var(--macos-secondary)' }}>{statusLabel}</p>
+          </div>
+        </div>
+      })}
+  </Group>
+}
+
 function Slider({ value, onChange, min = 0, max = 100, id }: { value: number; onChange: (value: number) => void; min?: number; max?: number; id?: string }) {
   return <div className="flex w-52 items-center gap-2"><span className="text-[11px]" style={{ color: 'var(--macos-secondary)' }}>{min}</span><input id={id} type="range" min={min} max={max} value={value} onChange={(event) => onChange(Number(event.target.value))} className="h-1.5 min-w-0 flex-1 cursor-pointer accent-[var(--theme-primary-color)]" /><span className="w-7 text-right text-[11px] tabular-nums" style={{ color: 'var(--macos-secondary)' }}>{value}</span></div>
 }
@@ -93,6 +173,7 @@ export default function SettingsModal({ isSocketConnected = false, socketError, 
   const [telegramLinking, setTelegramLinking] = useState(false)
   const [telegramLinkUrl, setTelegramLinkUrl] = useState('')
   const [telegramStatus, setTelegramStatus] = useState('')
+  const [subscription, setSubscription] = useState<SubscriptionSummary | null>(null)
 
   useEffect(() => {
     const updateOnlineStatus = () => setNetworkOnline(navigator.onLine)
@@ -110,6 +191,14 @@ export default function SettingsModal({ isSocketConnected = false, socketError, 
     if (activeTab === 'telegram') {
       checkTelegramStatus()
     }
+  }, [activeTab])
+
+  useEffect(() => {
+    if (activeTab !== 'account') return
+    void fetch('/api/subscription', { cache: 'no-store' })
+      .then(async (response) => response.ok ? response.json() : null)
+      .then((body) => setSubscription(body?.subscription ?? null))
+      .catch((error) => console.error('Failed to load subscription:', error))
   }, [activeTab])
 
   // Poll for connection status while linking
@@ -258,7 +347,15 @@ export default function SettingsModal({ isSocketConnected = false, socketError, 
     <main className="min-w-0 flex-1 overflow-y-auto">
       <header className="sticky top-0 z-20 flex h-12 items-center border-b px-4 backdrop-blur-2xl md:px-7" style={{ background: settings.reduceTransparency ? 'var(--macos-bg)' : 'color-mix(in srgb, var(--macos-bg) 84%, transparent)', borderColor: 'var(--macos-border)' }}><button onClick={() => setSidebarOpen(true)} className="mr-3 md:hidden"><Menu className="h-4 w-4" /></button><h1 className="text-[15px] font-semibold">{title}</h1></header>
       <div className="mx-auto max-w-[760px] space-y-5 p-4 pb-14 md:p-7">
-        {activeTab === 'account' && <><div className="flex items-center gap-5 py-3"><div className="grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br from-slate-200 to-slate-500 text-white shadow-lg"><UserRound className="h-12 w-12" /></div><div><h2 className="text-2xl font-semibold">Vibhav Trivedi</h2><p className="text-sm" style={{ color: 'var(--macos-secondary)' }}>Personal profile for this Mac</p></div></div><Group><SettingRow title="iCloud" description="Photos, Drive, passwords, and app data"><Cloud className="h-5 w-5 text-sky-500" /></SettingRow><SettingRow title="Media & Purchases"><ChevronRight className="h-4 w-4 opacity-40" /></SettingRow><SettingRow title="Sign-In & Security" last><ChevronRight className="h-4 w-4 opacity-40" /></SettingRow></Group></>}
+        {activeTab === 'account' && <>
+          <div className="flex items-center gap-5 py-3"><div className="grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br from-slate-200 to-slate-500 text-white shadow-lg"><UserRound className="h-12 w-12" /></div><div><h2 className="text-2xl font-semibold">Vibhav Trivedi</h2><p className="text-sm" style={{ color: 'var(--macos-secondary)' }}>Personal profile for this Mac</p></div></div>
+          {subscription && <Group>
+            <SettingRow title={subscription.planName} description={`${subscription.status}${subscription.endsAt ? ` · renews ${new Date(subscription.endsAt).toLocaleDateString()}` : ` · ${subscription.credits.period}`} credits`}><AnimatedCreditBalance credits={subscription.credits} /></SettingRow>
+            <SettingRow title="ATS CV updates" description={`${subscription.atsCvUpdates.used} used in this subscription`}><span className="text-xs tabular-nums">{subscription.atsCvUpdates.remaining} left</span></SettingRow>
+          </Group>}
+          {subscription && <CreditUsageHistory entries={subscription.creditActivity || []} />}
+          <Group><SettingRow title="iCloud" description="Photos, Drive, passwords, and app data"><Cloud className="h-5 w-5 text-sky-500" /></SettingRow><SettingRow title="Media & Purchases"><ChevronRight className="h-4 w-4 opacity-40" /></SettingRow><SettingRow title="Sign-In & Security" last><ChevronRight className="h-4 w-4 opacity-40" /></SettingRow></Group>
+        </>}
 
         {activeTab === 'network' && <><Group><SettingRow title="Wi-Fi" description={!settings.wifiEnabled ? 'Wi-Fi is off for SmartyAI' : networkOnline ? 'Browser is online' : 'Browser is offline'}><Toggle label="Wi-Fi" value={settings.wifiEnabled} onChange={(value) => patch('wifiEnabled', value)} /></SettingRow><SettingRow title="Bluetooth" description={bluetoothDevice || (settings.bluetoothEnabled ? 'On · authorize a nearby device' : 'Bluetooth is off')}><div className="flex items-center gap-2">{settings.bluetoothEnabled && <button type="button" onClick={() => void connectBluetoothDevice()} className="rounded-md border px-2 py-1 text-[11px]" style={{ borderColor: 'var(--macos-border)' }}>Connect…</button>}<Toggle label="Bluetooth" value={settings.bluetoothEnabled} onChange={(value) => patch('bluetoothEnabled', value)} /></div></SettingRow><SettingRow title="Internet search engine" description="Used by the desktop browser"><Select value={settings.preferredSearchEngine} onChange={(value) => patch('preferredSearchEngine', value as DesktopSettings['preferredSearchEngine'])} options={['Google', 'Bing', 'DuckDuckGo']} /></SettingRow><SettingRow title="Network" description="Browser connectivity and connection details" last><Network className="h-5 w-5" style={{ color: 'var(--theme-primary-color)' }} /></SettingRow></Group></>}
 
@@ -297,7 +394,7 @@ export default function SettingsModal({ isSocketConnected = false, socketError, 
 
         {activeTab === 'trackpad' && <><div className="rounded-2xl border p-5 text-center" style={{ background: 'var(--macos-surface)', borderColor: 'var(--macos-border)' }}><Hand className="mx-auto h-14 w-14" style={{ color: 'var(--theme-primary-color)' }} /><h2 className="mt-2 font-semibold">Gesture Mode</h2><p className="mx-auto mt-1 max-w-md text-xs leading-5" style={{ color: 'var(--macos-secondary)' }}>Use hand gestures and the gesture dock to control apps. This setting is connected directly to the desktop.</p></div><Group><SettingRow title="Gesture control" description="Control apps with hand and eye gestures"><Toggle label="Gesture control" value={settings.gestureControl} onChange={(value) => patch('gestureControl', value)} /></SettingRow><SettingRow title="Tap to click"><Toggle label="Tap to click" value={settings.tapToClick} onChange={(value) => patch('tapToClick', value)} /></SettingRow><SettingRow title="Natural scrolling" description="Move content in the direction of finger movement"><Toggle label="Natural scrolling" value={settings.naturalScrolling} onChange={(value) => patch('naturalScrolling', value)} /></SettingRow><SettingRow title="Three-finger drag" last><Toggle label="Three-finger drag" value={settings.threeFingerDrag} onChange={(value) => patch('threeFingerDrag', value)} /></SettingRow></Group></>}
 
-        {activeTab === 'general' && <><Group><SettingRow title="Language"><Select value={settings.language} onChange={(value) => patch('language', value)} options={['English', 'Hindi', 'Spanish', 'French', 'German', 'Japanese']} /></SettingRow><SettingRow title="Region"><Select value={settings.region} onChange={(value) => patch('region', value)} options={['India', 'United States', 'United Kingdom', 'Canada', 'Australia', 'Japan']} /></SettingRow><SettingRow title="24-hour time" last><Toggle label="24-hour time" value={settings.use24HourTime} onChange={(value) => patch('use24HourTime', value)} /></SettingRow></Group><Group><SettingRow title="Software Update" description="SmartyAI is up to date"><Info className="h-5 w-5" style={{ color: 'var(--theme-primary-color)' }} /></SettingRow><SettingRow title="Transfer or Reset" last><button onClick={() => confirm('Reset every desktop setting?') && resetSettings()} className="flex items-center gap-1.5 text-xs font-medium text-red-500"><RotateCcw className="h-3.5 w-3.5" />Reset All Settings</button></SettingRow></Group></>}
+        {activeTab === 'general' && <><Group><SettingRow title="Language"><Select value={settings.language} onChange={(value) => patch('language', value)} options={['English', 'Hindi', 'Spanish', 'French', 'German', 'Japanese']} /></SettingRow><SettingRow title="Region"><Select value={settings.region} onChange={(value) => patch('region', value)} options={['India', 'United States', 'United Kingdom', 'Canada', 'Australia', 'Japan']} /></SettingRow><SettingRow title="24-hour time" last><Toggle label="24-hour time" value={settings.use24HourTime} onChange={(value) => patch('use24HourTime', value)} /></SettingRow></Group><Group><div className="space-y-2 p-4"><label htmlFor="custom-ai-instructions" className="text-[13px] font-medium">AI response instructions</label><p className="text-[11px] leading-4" style={{ color: 'var(--macos-secondary)' }}>Set tone, format, language, and response preferences for the desktop assistant. Requires an active subscription.</p><textarea id="custom-ai-instructions" value={settings.customAIInstructions} onChange={(event) => patch('customAIInstructions', event.target.value)} maxLength={2000} rows={5} placeholder="Example: Answer concisely, use TypeScript examples, and explain tradeoffs." className="w-full resize-y rounded-lg border p-3 text-xs leading-5 outline-none focus:ring-2" style={{ background: 'var(--macos-surface-raised)', borderColor: 'var(--macos-border)', '--tw-ring-color': 'var(--theme-primary-soft)' } as React.CSSProperties} /><p className="text-right text-[10px] tabular-nums" style={{ color: 'var(--macos-secondary)' }}>{settings.customAIInstructions.length}/2000</p></div></Group><Group><SettingRow title="Software Update" description="SmartyAI is up to date"><Info className="h-5 w-5" style={{ color: 'var(--theme-primary-color)' }} /></SettingRow><SettingRow title="Transfer or Reset" last><button onClick={() => confirm('Reset every desktop setting?') && resetSettings()} className="flex items-center gap-1.5 text-xs font-medium text-red-500"><RotateCcw className="h-3.5 w-3.5" />Reset All Settings</button></SettingRow></Group></>}
 
         {activeTab === 'telegram' && <>
           {/* WebSocket Connection Status */}
@@ -521,6 +618,49 @@ export default function SettingsModal({ isSocketConnected = false, socketError, 
                     {cmd}
                   </div>
                 ))}
+              </div>
+            </SettingRow>
+          </Group>
+        </>}
+
+        {activeTab === 'career' && <>
+          <div className="rounded-2xl border p-5 text-center" style={{ background: 'var(--macos-surface)', borderColor: 'var(--macos-border)' }}>
+            <Briefcase className="mx-auto h-14 w-14" style={{ color: '#ff9500' }} />
+            <h2 className="mt-2 font-semibold">Career Agent Notifications</h2>
+            <p className="mx-auto mt-1 max-w-md text-xs leading-5" style={{ color: 'var(--macos-secondary)' }}>
+              Configure how you want to receive reminders about your career preparation tasks and interviews.
+            </p>
+          </div>
+
+          <Group>
+            <SettingRow
+              title="Email Reminders"
+              description="Receive career task reminders via email"
+            >
+              <Toggle
+                label="Email reminders"
+                value={settings.careerEmailReminders}
+                onChange={(value) => patch('careerEmailReminders', value)}
+              />
+            </SettingRow>
+
+            <SettingRow
+              title="Telegram Notifications"
+              description="Get reminders through Telegram when connected"
+              last
+            >
+              <Toggle
+                label="Telegram reminders"
+                value={settings.careerTelegramReminders}
+                onChange={(value) => patch('careerTelegramReminders', value)}
+              />
+            </SettingRow>
+          </Group>
+
+          <Group>
+            <SettingRow title="About Career Reminders" last>
+              <div className="text-xs" style={{ color: 'var(--macos-secondary)' }}>
+                Notifications are sent for upcoming tasks, overdue items, and scheduled mock interviews.
               </div>
             </SettingRow>
           </Group>

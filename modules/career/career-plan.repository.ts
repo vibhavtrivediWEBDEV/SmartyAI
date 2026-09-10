@@ -18,6 +18,8 @@ interface CareerPlanDocument extends Omit<CareerPlan, '_id' | 'missionId'> {
   steps: PlanStep[];
 }
 
+let notesIndexesPromise: Promise<string> | null = null;
+
 // ============================================
 // SERIALIZERS
 // ============================================
@@ -198,15 +200,45 @@ export async function createNote(note: any): Promise<string> {
   return result.insertedId.toHexString();
 }
 
-export async function findNotesByUserId(userId: string): Promise<any[]> {
+export async function findNotesByUserId(
+  userId: string,
+  options: { start?: Date; end?: Date; query?: string; limit?: number } = {},
+): Promise<any[]> {
   const { notes } = await getCollections();
+  if (!notesIndexesPromise) {
+    notesIndexesPromise = notes.createIndex(
+      { userId: 1, createdAt: -1 },
+      { name: 'notes_user_created' },
+    ).catch((error) => {
+      notesIndexesPromise = null;
+      throw error;
+    });
+  }
+  await notesIndexesPromise;
   const userIds: Array<string | ObjectId> = [userId];
 
   if (ObjectId.isValid(userId)) {
     userIds.push(new ObjectId(userId));
   }
 
-  return notes.find({ userId: { $in: userIds } }).sort({ createdAt: -1 }).toArray();
+  const createdAt = options.start || options.end ? {
+    ...(options.start ? { $gte: options.start } : {}),
+    ...(options.end ? { $lt: options.end } : {}),
+  } : undefined;
+  const escapedQuery = options.query?.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const search = escapedQuery ? {
+    $or: [
+      { title: { $regex: escapedQuery, $options: 'i' } },
+      { content: { $regex: escapedQuery, $options: 'i' } },
+    ],
+  } : {};
+  const limit = Math.min(Math.max(options.limit ?? 100, 1), 200);
+
+  return notes.find({
+    userId: { $in: userIds },
+    ...(createdAt ? { createdAt } : {}),
+    ...search,
+  }).sort({ createdAt: -1 }).limit(limit).toArray();
 }
 
 export async function createCalendarEvent(event: any): Promise<string> {

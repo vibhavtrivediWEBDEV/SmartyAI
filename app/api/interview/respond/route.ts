@@ -1,4 +1,4 @@
-import { createAIService } from "@/lib/ai";
+import { createMeteredAIService, CreditLimitError } from "@/lib/ai/metered";
 import { getSessionUserId } from "@/lib/auth/session";
 
 interface InterviewResponseRequest {
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
       ? `Briefly acknowledge the answer, give no score, then naturally ask this exact next interview question: ${nextQuestion}`
       : "Briefly acknowledge the answer, then politely explain that all interview questions are complete.";
 
-    const response = await createAIService().chat([
+    const response = await createMeteredAIService(userId, { source: "interview", feature: "response" }).chat([
       {
         role: "system",
         content: `You are a warm, concise professional interviewer. The candidate just answered: ${currentQuestion}\n${instruction} Do not answer the interview question for the candidate. Keep the response suitable for text-to-speech and under 90 words.`,
@@ -48,6 +48,9 @@ export async function POST(request: Request) {
 
     return Response.json({ success: true, response: response.content.trim() });
   } catch (error) {
+    if (error instanceof CreditLimitError) {
+      return Response.json({ success: false, error: error.message }, { status: error.status });
+    }
     console.error("Interview response generation failed:", error);
     return Response.json({ success: false, error: "The interviewer could not respond." }, { status: 500 });
   }

@@ -15,6 +15,7 @@ import { verifyLinkingToken, createTelegramConnection, updateTelegramConnectionL
 import { logToTelegram } from './logger'
 import { processMessageThroughAI, processFileThroughATS, processAutomationCommand, analyzeMessageIntent } from './ai'
 import { logTelegramIncoming, logTelegramOutgoing } from './logModel'
+import { consumePlanUsage } from '@/modules/users/user.repository'
 
 // ============================================
 // ROUTER TYPES
@@ -157,6 +158,12 @@ async function handleMessage(ctx: RouterContext): Promise<void> {
   // Add user context
   ctx.userId = auth.userId
   ctx.userContext = auth.context
+
+  const usage = await consumePlanUsage(auth.userId, 'telegramCommands')
+  if (!usage.allowed) {
+    await bot.sendMessage(chatId, `Monthly Telegram command limit reached (${usage.limit}).`, { parse_mode: 'Markdown' })
+    return
+  }
   
   // Handle different message types
   if (message.document) {

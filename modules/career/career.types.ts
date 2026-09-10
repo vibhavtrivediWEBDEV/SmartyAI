@@ -14,6 +14,7 @@ export type CareerMissionStatus =
   | 'WAITING_FOR_USER'
   | 'RESUMING'
   | 'COMPLETED'
+  | 'FAILED'
   | 'CANCELLED';
 
 export type TaskStatus = 

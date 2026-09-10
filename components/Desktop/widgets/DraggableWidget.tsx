@@ -35,6 +35,8 @@ export default function DraggableWidget({
     width: widget.width || 160, 
     height: widget.height || 160 
   });
+  const [position, setPosition] = useState({ x: widget.x, y: widget.y });
+  const positionRef = useRef(position);
   const widgetRef = useRef<HTMLDivElement>(null);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -73,7 +75,9 @@ export default function DraggableWidget({
       newX = Math.max(0, Math.min(newX, desktopRect.width - widgetWidth));
       newY = Math.max(0, Math.min(newY, desktopRect.height - widgetHeight - 80)); // Account for dock
 
-      onPositionChange(widget.id, newX, newY);
+      const nextPosition = { x: newX, y: newY };
+      positionRef.current = nextPosition;
+      setPosition(nextPosition);
     }
 
     if (isResizing && desktopRef.current) {
@@ -102,9 +106,12 @@ export default function DraggableWidget({
   }, [isDragging, isResizing, desktopRef, dragOffset, widget.id, onPositionChange, onResize, widget.x, widget.y]);
 
   const handleMouseUp = useCallback(() => {
+    if (isDragging) {
+      onPositionChange(widget.id, positionRef.current.x, positionRef.current.y);
+    }
     setIsDragging(false);
     setIsResizing(false);
-  }, []);
+  }, [isDragging, onPositionChange, widget.id]);
 
   useEffect(() => {
     if (isDragging || isResizing) {
@@ -127,20 +134,26 @@ export default function DraggableWidget({
     }
   }, [widget.width, widget.height]);
 
+  useEffect(() => {
+    const nextPosition = { x: widget.x, y: widget.y };
+    positionRef.current = nextPosition;
+    setPosition(nextPosition);
+  }, [widget.x, widget.y]);
+
   return (
     <div
       ref={widgetRef}
       className="absolute group z-10 cursor-grab active:cursor-grabbing pointer-events-auto"
       style={{ 
-        left: widget.x, 
-        top: widget.y,
+        left: position.x,
+        top: position.y,
         width: size.width,
         height: size.height,
         userSelect: isDragging || isResizing ? 'none' : 'auto',
       }}
       onMouseDown={handleMouseDown}
     >
-      <div className="w-full h-full overflow-hidden">
+      <div className={`w-full h-full ${widget.type === 'reaction' ? 'overflow-visible' : 'overflow-hidden'}`}>
         {children}
       </div>
       

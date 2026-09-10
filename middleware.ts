@@ -5,13 +5,13 @@ import type { NextRequest } from "next/server";
 const publicRoutes = [
   "/",
   "/apps",
+  "/marketing",
   "/sign-in",
   "/sign-up",
   "/forgot-password",
   "/robots.txt",
   "/sitemap.xml",
   "/manifest.webmanifest",
-  "/desktop", // For testing purposes
 ];
 
 // Routes that should redirect to desktop if already authenticated

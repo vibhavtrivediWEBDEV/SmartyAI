@@ -36,10 +36,18 @@ export async function POST(req: NextRequest) {
 
         // ── visit ───────────────────────────────────────────────────────────────
         if (action === "visit") {
-            const snap = await ref.get()
-            const current = snap.exists ? (snap.data()?.visitors ?? 0) : 0
-            await ref.set({ visitors: current + 1 }, { merge: true })
-            return NextResponse.json({ visitors: current + 1 })
+            const data = await db.runTransaction(async (tx) => {
+                const snap = await tx.get(ref)
+                const current = snap.exists ? snap.data() ?? {} : {}
+                const visitors = (current.visitors ?? 0) + 1
+                tx.set(ref, { visitors }, { merge: true })
+                return {
+                    counts: current.counts ?? { love: 0, fire: 0, wow: 0, clap: 0, rocket: 0 },
+                    comments: current.comments ?? [],
+                    visitors,
+                }
+            })
+            return NextResponse.json(data)
         }
 
         // ── react ───────────────────────────────────────────────────────────────

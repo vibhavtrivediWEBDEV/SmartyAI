@@ -156,7 +156,7 @@ export default function SmartyAIAgent({
       const response = await fetch("/api/teaching/respond", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ context: contextRef.current, messages: nextMessages }),
+        body: JSON.stringify({ context: contextRef.current, messages: nextMessages, sessionId: activeSessionIdRef.current || undefined }),
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || "Teacher could not answer")

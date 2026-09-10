@@ -113,11 +113,14 @@ export function useWhatsAppAccount() {
   )
 
   useEffect(() => {
+    // ✅ OPTIMIZED: Only fetch on mount and when explicitly triggered
+    // Removed aggressive polling (was every 5-15 seconds making 4+ API calls)
     void refreshWhatsAppData()
-    const interval = window.setInterval(() => void refreshWhatsAppData(), store.account.connected ? 15_000 : 5_000)
     const onUpdate = () => void refreshWhatsAppData()
     window.addEventListener('whatsapp-updated', onUpdate)
-    return () => { window.clearInterval(interval); window.removeEventListener('whatsapp-updated', onUpdate) }
+    return () => {
+      window.removeEventListener('whatsapp-updated', onUpdate)
+    }
   }, [])
 
   return {

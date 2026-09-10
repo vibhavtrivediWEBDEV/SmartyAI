@@ -1,23 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAIService } from '@/lib/ai'
+import { createMeteredAIService, CreditLimitError } from '@/lib/ai/metered'
+import { getSessionUserId } from '@/lib/auth/session'
 import { getUserAIContextServer } from '@/lib/ai/userAIContext.server'
 import { generateDesktopAssistantPrompt } from '@/lib/ai/userAIContext'
 
 export async function POST(request: NextRequest) {
   try {
-    const { messages, userId } = await request.json()
+    const sessionUserId = await getSessionUserId()
+    if (!sessionUserId) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    const { messages } = await request.json()
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: 'Messages array is required' }, { status: 400 })
     }
 
     // Create AI service (auto-detects provider from env)
-    const aiService = createAIService()
+    const aiService = createMeteredAIService(sessionUserId, { source: 'assistant', feature: 'terminal' })
 
     // Convert { type: 'input' | 'output', value: string } to { role: 'user' | 'assistant', content }
     const mappedMessages = messages.map((msg) => {
       return {
-        role: msg.type === 'input' ? 'user' : 'assistant',
+        role: msg.type === 'input' ? 'user' as const : 'assistant' as const,
         content: typeof msg.value === 'string' ? msg.value : JSON.stringify(msg.value),
       }
     })
@@ -32,7 +35,7 @@ export async function POST(request: NextRequest) {
     
     // Try to get user context (from userId parameter or auth session)
     try {
-      console.log('🎯 Loading user context for terminal AI (userId:', userId || 'from auth', ')');
+      console.log('🎯 Loading user context for terminal AI');
       const userContext = await getUserAIContextServer();
       if (userContext) {
         systemContent = generateDesktopAssistantPrompt(userContext) + '\n\nYou are responding in the Terminal app. Keep responses brief and technical. You know about the user\'s projects, skills, and experience.';
@@ -47,7 +50,7 @@ export async function POST(request: NextRequest) {
     // Inject system prompt at the beginning
     const fullMessages = [
       {
-        role: 'system',
+        role: 'system' as const,
         content: systemContent,
       },
       ...userMessages,
@@ -65,6 +68,9 @@ export async function POST(request: NextRequest) {
       model: response.model
     })
   } catch (error: any) {
+    if (error instanceof CreditLimitError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.status })
+    }
     console.error('AI error:', error)
     return NextResponse.json({ success: false, error: error.message || String(error) }, { status: 500 })
   }

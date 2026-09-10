@@ -133,6 +133,7 @@ function Preview({ item }: { item?: ProjectFile }) {
 
 export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplorerWindowProps) {
   const [nodes, setNodes] = useState<ProjectFile[]>([])
+  const [knownFolders, setKnownFolders] = useState<Record<string, ProjectFile>>({})
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
   const [smartLocation, setSmartLocation] = useState<SmartLocation>("recents")
   const [history, setHistory] = useState<Array<{ folderId: string | null; smart: SmartLocation }>>([{ folderId: null, smart: "recents" }])
@@ -161,51 +162,62 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
     setCurrentTargetLocation,
   } = useKeyboard()
 
-  const fetchNodes = useCallback(async (trash = smartLocation === "trash") => {
+  const fetchNodes = useCallback(async (_forceRefresh?: boolean) => {
     try {
       setLoading(true)
-      const [response, subscriptionResponse] = await Promise.all([
-        fetch(`/api/Projects${trash ? "?trash=true" : ""}`),
-        fetch("/api/subscription"),
-      ])
-      const [result, subscriptionResult] = await Promise.all([response.json(), subscriptionResponse.json()])
+      const location = smartLocation ?? (currentFolderId ? "folder" : "root")
+      const params = new URLSearchParams({ location })
+      if (location === "folder" && currentFolderId) params.set("parentId", currentFolderId)
+      const response = await fetch(`/api/Projects?${params}`)
+      const result = await response.json()
       if (!response.ok) throw new Error(result.error || "Could not load Finder")
-      setNodes(result.data ?? [])
-      setSubscription(subscriptionResult.subscription ?? null)
+      const nextNodes: ProjectFile[] = result.data ?? []
+      setNodes(nextNodes)
+      setKnownFolders((current) => {
+        const next = { ...current }
+        nextNodes.forEach((node) => { if (node.type === "folder") next[node.id] = node })
+        return next
+      })
       setError(null)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load Finder")
     } finally {
       setLoading(false)
     }
-  }, [smartLocation])
+  }, [currentFolderId, smartLocation])
 
   useEffect(() => { void fetchNodes() }, [fetchNodes])
 
+  useEffect(() => {
+    let active = true
+    void fetch("/api/subscription")
+      .then((response) => response.json())
+      .then((result) => { if (active) setSubscription(result.subscription ?? null) })
+      .catch(() => {})
+    return () => { active = false }
+  }, [])
+
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])
-  const rootFolders = useMemo(() => nodes.filter((node) => !node.parentId && node.type === "folder" && !node.isTrashed), [nodes])
+  const rootFolders = useMemo(() => Object.values(knownFolders).filter((node) => !node.parentId && node.type === "folder" && !node.isTrashed), [knownFolders])
   const developerFolders = useMemo(() => rootFolders.filter((folder) => /^(Resume|About Me|Projects|GitHub\s—)/i.test(folder.name)), [rootFolders])
   const otherRootFolders = useMemo(() => rootFolders.filter((folder) => !developerFolders.some((generated) => generated.id === folder.id)), [developerFolders, rootFolders])
   const downloadsFolder = useMemo(() => rootFolders.find((f) => f.name.toLowerCase() === 'downloads'), [rootFolders])
-  const currentFolder = currentFolderId ? nodeById.get(currentFolderId) : undefined
+  const currentFolder = currentFolderId ? knownFolders[currentFolderId] : undefined
 
   const rawItems = useMemo(() => {
-    if (smartLocation === "recents") return [...nodes].filter((node) => !node.isTrashed).sort((a, b) => +new Date(b.updatedAt ?? 0) - +new Date(a.updatedAt ?? 0)).slice(0, 100)
-    if (smartLocation === "starred") return nodes.filter((node) => node.isStarred && !node.isTrashed)
-    if (smartLocation === "trash") return nodes.filter((node) => node.isTrashed)
-    return currentFolderId ? currentFolder?.files ?? [] : nodes.filter((node) => !node.parentId && !node.isTrashed)
-  }, [currentFolder, currentFolderId, nodes, smartLocation])
+    return nodes
+  }, [nodes])
 
   const visibleItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
     const filtered = query ? rawItems.filter((item) => item.name.toLowerCase().includes(query)) : rawItems
     return [...filtered].sort((a, b) => {
-      if (sortMode === "date") return +new Date(b.updatedAt ?? 0) - +new Date(a.updatedAt ?? 0)
+      if (sortMode === "date" || (smartLocation === "recents" && sortMode === "name")) return +new Date(b.updatedAt ?? 0) - +new Date(a.updatedAt ?? 0)
       if (sortMode === "size") return (b.sizeBytes ?? 0) - (a.sizeBytes ?? 0)
       if (sortMode === "kind") return a.type.localeCompare(b.type) || a.name.localeCompare(b.name)
       return Number(b.type === "folder") - Number(a.type === "folder") || a.name.localeCompare(b.name)
     })
-  }, [rawItems, searchQuery, sortMode])
+  }, [rawItems, searchQuery, smartLocation, sortMode])
 
   const selectedItem = selectedItems.length === 1 ? nodeById.get(selectedItems[0]) : undefined
 
@@ -240,9 +252,16 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
     navigate(location.folderId, location.smart, false)
   }
 
-  const openItem = useCallback((item: ProjectFile) => {
-    if (item.type === "folder") navigate(item.id)
-    else onOpenFile({ ...item, projectId: item.parentId ?? currentFolderId ?? "root" })
+  const openItem = useCallback(async (item: ProjectFile) => {
+    if (item.type === "folder") return navigate(item.id)
+    try {
+      const response = await fetch(`/api/Projects/${item.id}`)
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || "Could not open file")
+      onOpenFile({ ...result.data, projectId: item.parentId ?? currentFolderId ?? "root" })
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not open file")
+    }
   }, [currentFolderId, navigate, onOpenFile])
 
   const createNode = async (type: "folder" | "file") => {
@@ -497,10 +516,10 @@ export function ProjectExplorerWindow({ onOpenFile, onDataChange }: ProjectExplo
 
   const columnSets = useMemo(() => {
     const path = breadcrumbs
-    const sets: Array<{ title: string; items: ProjectFile[] }> = [{ title: "My Files", items: nodes.filter((node) => !node.parentId && !node.isTrashed) }]
-    path.forEach((folder) => sets.push({ title: folder.name, items: folder.files ?? [] }))
+    const sets: Array<{ title: string; items: ProjectFile[] }> = [{ title: currentFolder?.name ?? "My Files", items: nodes }]
+    path.slice(0, -1).forEach((folder) => sets.unshift({ title: folder.name, items: [] }))
     return sets
-  }, [breadcrumbs, nodes])
+  }, [breadcrumbs, currentFolder, nodes])
 
   const renderColumnView = () => (
     <div className="flex h-full min-w-max">

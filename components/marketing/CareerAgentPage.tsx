@@ -1,88 +1,40 @@
 'use client'
 
 import Navigation from './career-agent/Navigation'
-import HeroSection from './career-agent/HeroSection'
-import HowItWorks from './career-agent/HowItWorks'
-import CareerAgentSection from './career-agent/CareerAgentSection'
-import InterviewExample from './career-agent/InterviewExample'
-import AITeacher from './career-agent/AITeacher'
-import AIInterviewer from './career-agent/AIInterviewer'
-import CodingWorkspace from './career-agent/CodingWorkspace'
-import ResumeATS from './career-agent/ResumeATS'
-import CalendarIntelligence from './career-agent/CalendarIntelligence'
-import YoutubeLearning from './career-agent/YoutubeLearning'
-import NotesOrganization from './career-agent/NotesOrganization'
-import AgenticDesktop from './career-agent/AgenticDesktop'
-import MultiPlatform from './career-agent/MultiPlatform'
-import Demo from './career-agent/Demo'
+import RichHeroSection from './career-agent/RichHeroSection'
+import PermissionAutomationShowcase from './career-agent/PermissionAutomationShowcase'
+import RichHowItWorks from './career-agent/RichHowItWorks'
+import ProductSystemTour from './career-agent/ProductSystemTour'
+import ProductProofSections from './career-agent/ProductProofSections'
+import PricingSection from '../VibhavMarketing/PricingSection'
 import FinalCTA from './career-agent/FinalCTA'
 import Footer from './career-agent/Footer'
-import { useRef, useEffect } from 'react'
-import { gsap } from 'gsap'
-import { ScrollTrigger } from 'gsap/dist/ScrollTrigger'
-
-// Register GSAP plugins
-if (typeof window !== 'undefined') {
-  gsap.registerPlugin(ScrollTrigger)
-}
 
 export default function CareerAgentMarketingPage() {
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    return () => {
-      ScrollTrigger.getAll().forEach(trigger => trigger.kill())
-    }
-  }, [])
-
   return (
-    <div ref={containerRef} className="min-h-screen bg-black text-white overflow-x-hidden">
+    <div className="min-h-dvh w-full overflow-x-clip bg-black text-white">
       {/* Navigation */}
       <Navigation />
 
       {/* Main Content */}
       <main className="relative">
         {/* Hero Section */}
-        <HeroSection />
+        <RichHeroSection />
+
+        {/* Permission-controlled OS automation */}
+        <PermissionAutomationShowcase />
+
+        {/* Real Product System */}
+        <ProductSystemTour />
 
         {/* How It Works */}
-        <HowItWorks />
+        <RichHowItWorks />
 
-        {/* Career Agent Section */}
-        <CareerAgentSection />
+        {/* Screenshot-led product chapters */}
+        <ProductProofSections />
 
-        {/* Real Example */}
-        <InterviewExample />
-
-        {/* AI Teacher */}
-        <AITeacher />
-
-        {/* AI Interviewer */}
-        <AIInterviewer />
-
-        {/* Coding Workspace */}
-        <CodingWorkspace />
-
-        {/* Resume + ATS */}
-        <ResumeATS />
-
-        {/* Calendar Intelligence */}
-        <CalendarIntelligence />
-
-        {/* YouTube Learning */}
-        <YoutubeLearning />
-
-        {/* Notes */}
-        <NotesOrganization />
-
-        {/* Agentic Desktop */}
-        <AgenticDesktop />
-
-        {/* Multi-Platform */}
-        <MultiPlatform />
-
-        {/* Interactive Demo */}
-        <Demo />
+        {/* Plans and checkout */}
+        <PricingSection />
 
         {/* Final CTA */}
         <FinalCTA />

@@ -99,9 +99,8 @@ export default function MacCreateAccount({ goNext, goBack }: MacCreateAccountPro
       
       const photoUrl = canvas.toDataURL();
 
-      // Save to local storage for LockScreen
+      // Save non-sensitive setup preferences for the desktop profile.
       localStorage.setItem('lock_username', fullName);
-      localStorage.setItem('lock_password', password);
       localStorage.setItem('lock_profile_photo', photoUrl);
       localStorage.setItem('lock_profile_bg', selectedAvatar.color);
       localStorage.setItem('setup_completed', 'true');
@@ -126,7 +125,7 @@ export default function MacCreateAccount({ goNext, goBack }: MacCreateAccountPro
       // Show loading for 3 seconds like Mac boot
       await new Promise(resolve => setTimeout(resolve, 3000));
       
-      // Transition to lock screen
+      // Continue to the authenticated desktop lock screen.
       goNext();
       
     } catch (error) {
@@ -138,7 +137,7 @@ export default function MacCreateAccount({ goNext, goBack }: MacCreateAccountPro
 
   return (
     <div
-      className="w-screen h-screen flex items-center justify-center relative overflow-hidden"
+      className="w-screen min-h-dvh p-3 sm:p-6 flex items-center justify-center relative overflow-hidden"
       style={{
         backgroundImage: "url('/Wallpaper/GoldenGate_6k.png')",
         backgroundSize: 'cover',
@@ -153,18 +152,18 @@ export default function MacCreateAccount({ goNext, goBack }: MacCreateAccountPro
         animate={{ opacity: 1, scale: 1, x: 0 }}
         exit={{ opacity: 0, scale: 0.95, x: -20 }}
         transition={{ duration: 0.4 }}
-        className="w-[750px] max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl z-10 flex flex-col relative"
+        className="w-full max-w-[750px] max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto bg-white rounded-lg sm:rounded-2xl shadow-2xl z-10 flex flex-col relative"
       >
         {/* Back button */}
         <button
           onClick={goBack}
           disabled={isCreating}
-          className="absolute top-6 left-6 w-10 h-10 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors bg-white text-blue-600 shadow-md z-20 disabled:opacity-50"
+          className="absolute top-3 left-3 sm:top-6 sm:left-6 w-10 h-10 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors bg-white text-blue-600 shadow-md z-20 disabled:opacity-50"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
 
-        <div className="p-14 pt-16">
+        <div className="p-5 pt-16 sm:p-14 sm:pt-16">
           {/* Header */}
           <div className="mb-8">
             <h2 className="text-[15px] font-bold text-gray-900 mb-1">Create a Mac Account</h2>
@@ -174,7 +173,7 @@ export default function MacCreateAccount({ goNext, goBack }: MacCreateAccountPro
           {/* Avatar Selection */}
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-3">Choose your avatar</label>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               {avatars.map((avatar) => (
                 <button
                   key={avatar.id}
@@ -344,7 +343,7 @@ export default function MacCreateAccount({ goNext, goBack }: MacCreateAccountPro
           </div>
 
           {/* Continue Button */}
-          <div className="mt-8 flex items-center justify-between">
+          <div className="mt-8 flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-3 sm:justify-between">
             <button
               onClick={goBack}
               disabled={isCreating}

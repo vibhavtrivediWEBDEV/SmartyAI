@@ -8,6 +8,7 @@ import {
   createCalendar,
 } from "@/modules/calendar/calendar.repository";
 import { HOLIDAYS } from "@/lib/calendar-holidays";
+import { consumePlanUsage, refundPlanUsage } from "@/modules/users/user.repository";
 
 /**
  * Ensure user has default calendars and global holidays are seeded
@@ -75,6 +76,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  let reservedUserId: string | null = null;
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -101,6 +103,10 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    const usage = await consumePlanUsage(user.id, "calendarEvents");
+    if (!usage.allowed) return NextResponse.json({ error: `Your plan includes ${usage.limit} calendar events per month.`, code: "CALENDAR_LIMIT_REACHED", usage }, { status: 429 });
+    reservedUserId = user.id;
 
     // Use default calendar if not provided
     let finalCalendarId = calendarId;
@@ -137,6 +143,7 @@ export async function POST(request: Request) {
       message: "Event created successfully"
     }, { status: 201 });
   } catch (error) {
+    if (reservedUserId) await refundPlanUsage(reservedUserId, "calendarEvents");
     console.error("Error creating event:", error);
     return NextResponse.json(
       { error: "Failed to create event", details: error instanceof Error ? error.message : "Unknown error" },

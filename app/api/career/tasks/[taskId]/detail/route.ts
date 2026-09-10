@@ -1,6 +1,6 @@
-import { createAIService } from '@/lib/ai';
+import { createMeteredAIService, CreditLimitError } from '@/lib/ai/metered';
 import { getSessionUserId } from '@/lib/auth/session';
-import { findTasksByUserId, updateTask } from '@/modules/career/career.repository';
+import { findTaskByIdForUser, updateTask } from '@/modules/career/career.repository';
 import { jsonrepair } from 'jsonrepair';
 import { fallbackPreparationBrief, normalizeGeneratedPreparationBrief, preparationBriefSchema } from '../../../../../../lib/career/preparationBrief';
 
@@ -16,7 +16,7 @@ export async function POST(_request: Request, { params }: Context) {
   if (!userId) return Response.json({ success: false, error: 'You must be signed in.' }, { status: 401 });
 
   const { taskId } = await params;
-  const task = (await findTasksByUserId(userId)).find((item) => item.id === taskId);
+  const task = await findTaskByIdForUser(taskId, userId);
   if (!task) return Response.json({ success: false, error: 'Preparation task not found.' }, { status: 404 });
 
   const cached = preparationBriefSchema.safeParse(task.result?.preparationBrief);
@@ -25,7 +25,7 @@ export async function POST(_request: Request, { params }: Context) {
   }
 
   try {
-    const response = await createAIService().chat([
+    const response = await createMeteredAIService(userId, { source: 'career', feature: 'preparation-brief' }).chat([
       {
         role: 'system',
         content: `You create practical interview-preparation lesson briefs. Return only valid JSON with this exact shape: {"summary":"...","objective":"...","agenda":[{"title":"...","detail":"...","minutes":15}],"keyConcepts":[{"name":"...","explanation":"..."}],"practice":[{"task":"...","expectedOutcome":"..."}],"completionCriteria":["..."],"encouragement":"..."}. Make it specific, actionable, accurate, and suitable for one focused session. Do not include markdown fences.`,
@@ -46,6 +46,9 @@ export async function POST(_request: Request, { params }: Context) {
     await updateTask(task.id, { result: { ...(task.result || {}), preparationBrief: brief } });
     return Response.json({ success: true, source: 'ai', brief });
   } catch (error) {
+    if (error instanceof CreditLimitError) {
+      return Response.json({ success: false, error: error.message }, { status: error.status });
+    }
     console.error('Preparation brief generation failed:', error);
     return Response.json({ success: true, source: 'fallback', brief: fallbackPreparationBrief(task) });
   }

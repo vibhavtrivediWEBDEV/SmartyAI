@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { getSessionUserId } from '@/lib/auth/session';
 import { createCareerCodingWorkspaceSpec } from '@/lib/career/executor';
-import { findTasksByUserId, updateTask } from '@/modules/career/career.repository';
+import { findTaskByIdForUser, updateTask } from '@/modules/career/career.repository';
 import { createWorkspace, getWorkspace } from '@/modules/workspace/workspace.repository';
 
 type Context = { params: Promise<{ taskId: string }> };
@@ -17,7 +17,7 @@ export async function POST(_request: Request, { params }: Context) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { taskId } = await params;
-  const task = (await findTasksByUserId(userId)).find((item) => item.id === taskId);
+  const task = await findTaskByIdForUser(taskId, userId);
   if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
   if (!isCodingTask(task)) return NextResponse.json({ error: 'Task is not a coding task' }, { status: 400 });
 

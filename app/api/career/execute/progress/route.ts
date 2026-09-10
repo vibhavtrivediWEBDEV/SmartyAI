@@ -35,9 +35,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
     
-    // Get plan for this mission
-    const plan = await careerPlanRepo.findPlanByMission(missionId);
-    const preparationTasks = await careerMissionRepo.findTasksByMission(missionId);
+    const [plan, preparationTasks] = await Promise.all([
+      careerPlanRepo.findPlanByMission(missionId),
+      careerMissionRepo.findTasksByMission(missionId)
+    ]);
     const completedTasks = preparationTasks.filter((task) => task.status === 'completed').length;
     const learnerProgress = preparationTasks.length > 0
       ? Math.round((completedTasks / preparationTasks.length) * 100)

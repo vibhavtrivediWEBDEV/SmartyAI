@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireFinderSubscription } from "@/lib/auth/finder-access";
-import { createFinderNode, listFinderNodes, trashFinderNodes } from "@/modules/finder/finder.repository";
+import { createFinderNode, listFinderLocation, trashFinderNodes, type FinderLocation } from "@/modules/finder/finder.repository";
 import { commitReservedStorage, releaseReservedStorage, reserveStorage } from "@/modules/storage/storage.repository";
 
 const createSchema = z.object({
@@ -17,8 +17,14 @@ export async function GET(request: Request) {
   const access = await requireFinderSubscription();
   if (access.response) return access.response;
   const user = access.user!;
-  const includeTrash = new URL(request.url).searchParams.get("trash") === "true";
-  return NextResponse.json({ data: await listFinderNodes(user.id, includeTrash) });
+  const params = new URL(request.url).searchParams;
+  const requestedLocation = params.get("location") ?? "recents";
+  const locations: FinderLocation[] = ["recents", "starred", "trash", "root", "folder"];
+  if (!locations.includes(requestedLocation as FinderLocation)) {
+    return NextResponse.json({ error: "Invalid Finder location" }, { status: 400 });
+  }
+  const location = requestedLocation as FinderLocation;
+  return NextResponse.json({ data: await listFinderLocation(user.id, location, params.get("parentId")) });
 }
 
 export async function POST(request: Request) {

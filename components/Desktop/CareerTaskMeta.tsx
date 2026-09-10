@@ -15,6 +15,7 @@ const timingStyles = {
   upcoming: 'text-black/50 dark:text-white/50',
   active: 'text-[#007AFF] dark:text-[#0A84FF]',
   overdue: 'text-red-600 dark:text-red-400',
+  failed: 'text-red-700 dark:text-red-300',
   completed: 'text-black/35 dark:text-white/35',
 };
 

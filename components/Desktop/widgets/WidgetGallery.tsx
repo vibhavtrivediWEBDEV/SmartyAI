@@ -17,6 +17,7 @@ import GlassSmallWorldClockWidget from './GlassSmallWorldClockWidget';
 import GlassWideRemindersWidget from './GlassWideRemindersWidget';
 import GlassSFWeatherWidget from './GlassSFWeatherWidget';
 import CareerAgentWidget from './CareerAgentWidget';
+import LoveCounter from '../../Dekstop/macFeedback';
 
 interface WidgetGalleryProps {
   isOpen: boolean;
@@ -59,6 +60,21 @@ export default function WidgetGallery({ isOpen, onClose, onAddWidget, isDarkMode
       </div>
       
       <div className="relative z-10 flex-1 overflow-y-auto p-5 pb-10 space-y-6">
+        <div className="flex flex-col items-center">
+          <div className="w-full mb-3 flex items-center justify-between">
+            <span className={`font-medium ${textColorPrimary}`}>Reactions</span>
+            <button
+              onClick={() => onAddWidget('reaction')}
+              className={`px-3 py-1 rounded-full text-xs ${buttonBg} ${textColor} transition-colors`}
+            >
+              Add
+            </button>
+          </div>
+          <div className="pointer-events-none h-16 w-full flex justify-center">
+            <LoveCounter enabled={false} />
+          </div>
+        </div>
+
         <div className="flex flex-col items-center">
           <div className="w-full mb-3 flex items-center justify-between">
             <span className={`font-medium ${textColorPrimary}`}>Career Agent</span>

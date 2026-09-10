@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSessionUserId } from '@/lib/auth/session';
-import { getAIService } from '@/lib/ai';
-import { emitCareerProgress } from '../../../../lib/career/careerEvents';
+import { createMeteredAIService, CreditLimitError } from '@/lib/ai/metered';
+import { recordVerifiedCareerEvidence } from '@/lib/career/recordCareerFeedback';
+import { consumePlanUsage, refundPlanUsage } from '@/modules/users/user.repository';
 import {
   buildVideoEvidence,
   gradeYouTubeQuiz,
@@ -13,7 +14,6 @@ import {
 import {
   findMissionById,
   findTasksByMission,
-  updateMission,
   updateTask,
 } from '@/modules/career/career.repository';
 
@@ -49,19 +49,6 @@ function parseQuestions(content: string): YouTubeQuizQuestion[] {
       explanation: String(question.explanation || 'Review this concept and try again.'),
     };
   });
-}
-
-async function refreshMissionProgress(userId: string, missionId: string) {
-  const tasks = await findTasksByMission(missionId);
-  const completed = tasks.filter((task) => task.status === 'completed').length;
-  const progress = tasks.length ? Math.round((completed / tasks.length) * 100) : 0;
-  await updateMission(missionId, {
-    progress,
-    status: progress === 100 ? 'COMPLETED' : 'READY',
-    completedAt: progress === 100 ? new Date() : null,
-  });
-  emitCareerProgress(userId, { missionId, reason: 'task', progress });
-  return progress;
 }
 
 export async function POST(request: Request) {
@@ -107,20 +94,32 @@ export async function POST(request: Request) {
     if (!evidence?.related || evidence?.status !== 'watched') {
       return NextResponse.json({ error: 'Finish at least 80% of a related video before the check-in' }, { status: 409 });
     }
-    const response = await getAIService().complete(`You are the separate YouTube Learning Agent for a strict career game.
+    const usage = await consumePlanUsage(userId, 'youtubeSuggestions');
+    if (!usage.allowed) {
+      return NextResponse.json({ error: `Your plan includes ${usage.limit} YouTube suggestions per month.`, code: 'YOUTUBE_LIMIT_REACHED', usage }, { status: 429 });
+    }
+    try {
+      const response = await createMeteredAIService(userId, { source: 'career', feature: 'youtube-quiz' }).complete(`You are the separate YouTube Learning Agent for a strict career game.
 Create exactly 3 multiple-choice questions that verify understanding of this learning topic and watched video.
 Topic: ${topic}
 Video title: ${evidence.title}
 Return only JSON: {"questions":[{"prompt":"...","options":["...","...","...","..."],"correctOptionIndex":0,"explanation":"..."}]}
 Questions must test concepts, not ask for the video title or channel.`);
-    const questions = parseQuestions(response.content);
-    await updateTask(taskId, {
-      result: {
-        ...previousResult,
-        youtubeQuiz: { questions, generatedAt: new Date().toISOString(), attempts: previousResult.youtubeQuiz?.attempts ?? [] },
-      },
-    });
-    return NextResponse.json({ questions: publicQuizQuestions(questions) });
+      const questions = parseQuestions(response.content);
+      await updateTask(taskId, {
+        result: {
+          ...previousResult,
+          youtubeQuiz: { questions, generatedAt: new Date().toISOString(), attempts: previousResult.youtubeQuiz?.attempts ?? [] },
+        },
+      });
+      return NextResponse.json({ questions: publicQuizQuestions(questions), usage });
+    } catch (error) {
+      await refundPlanUsage(userId, 'youtubeSuggestions');
+      if (error instanceof CreditLimitError) {
+        return NextResponse.json({ error: error.message }, { status: error.status });
+      }
+      throw error;
+    }
   }
 
   if (action === 'submit') {
@@ -130,7 +129,7 @@ Questions must test concepts, not ask for the video title or channel.`);
     }
     const questions = previousResult.youtubeQuiz?.questions as YouTubeQuizQuestion[] | undefined;
     const answers = Array.isArray(body.answers) ? body.answers.map(Number) : [];
-    if (!questions?.length || answers.length !== questions.length || answers.some((answer) => !Number.isInteger(answer))) {
+    if (!questions?.length || answers.length !== questions.length || answers.some((answer: number) => !Number.isInteger(answer))) {
       return NextResponse.json({ error: 'Answer every YouTube Agent question' }, { status: 400 });
     }
     const grade = gradeYouTubeQuiz(questions, answers);
@@ -138,9 +137,20 @@ Questions must test concepts, not ask for the video title or channel.`);
     const attempts = [...(previousResult.youtubeQuiz?.attempts ?? []), attempt].slice(-10);
     await updateTask(taskId, {
       result: { ...previousResult, youtubeQuiz: { ...previousResult.youtubeQuiz, attempts, latest: attempt } },
-      ...(grade.passed ? { status: 'completed' as const, completedAt: new Date() } : { status: 'pending' as const }),
+      ...(!grade.passed ? { status: 'pending' as const } : {}),
     });
-    const progress = grade.passed ? await refreshMissionProgress(userId, missionId) : undefined;
+    const feedback = grade.passed
+      ? await recordVerifiedCareerEvidence({
+          userId,
+          missionId,
+          taskId,
+          tool: 'youtube',
+          evidenceKey: `${evidence.videoId || evidence.id || 'video'}:${previousResult.youtubeQuiz.generatedAt || 'quiz'}`,
+          progress: 100,
+          metadata: { score: grade.score, watchedPercent: evidence.watchedPercent, videoId: evidence.videoId || evidence.id },
+        })
+      : undefined;
+    const progress = feedback?.missionProgress;
     return NextResponse.json({ ...grade, progress });
   }
 

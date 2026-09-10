@@ -99,8 +99,12 @@ async function ensureTeacherBookIndexes() {
   await indexesPromise;
 }
 
-export async function countTeacherBooksForPeriod(userId: string, periodStart: Date): Promise<number> {
-  return (await collection()).countDocuments({ userId, generationSource: { $ne: "career" }, createdAt: { $gte: periodStart } });
+export async function countTeacherBooksForPeriod(userId: string, periodStart: Date, periodEnd?: Date): Promise<number> {
+  return (await collection()).countDocuments({
+    userId,
+    generationSource: { $ne: "career" },
+    createdAt: { $gte: periodStart, ...(periodEnd ? { $lt: periodEnd } : {}) },
+  });
 }
 
 export async function createTeacherBook(input: Omit<TeacherBookDocument, "createdAt" | "updatedAt">) {
@@ -148,6 +152,14 @@ export async function setTeacherBookStatus(userId: string, id: string, status: T
   await (await collection()).updateOne({ _id: new ObjectId(id), userId }, { $set: { status, updatedAt: new Date() } });
 }
 
+export async function prepareTeacherBookRegeneration(userId: string, id: string): Promise<void> {
+  if (!ObjectId.isValid(id)) return;
+  await (await collection()).updateOne(
+    { _id: new ObjectId(id), userId },
+    { $set: { status: "generating", generationSource: "interactive", updatedAt: new Date() }, $unset: { lastError: "" } },
+  );
+}
+
 export async function failTeacherBook(userId: string, id: string, message: string): Promise<void> {
   if (!ObjectId.isValid(id)) return;
   await (await collection()).updateOne(
@@ -156,8 +168,27 @@ export async function failTeacherBook(userId: string, id: string, message: strin
   );
 }
 
-export async function listTeacherBooks(userId: string, limit = 20): Promise<Array<WithId<TeacherBookDocument>>> {
-  return (await collection()).find({ userId }).sort({ createdAt: -1 }).limit(limit).toArray();
+export async function listTeacherBooks(
+  userId: string,
+  options: { start?: Date; end?: Date; query?: string; limit?: number } = {},
+): Promise<Array<WithId<TeacherBookDocument>>> {
+  const createdAt = options.start || options.end ? {
+    ...(options.start ? { $gte: options.start } : {}),
+    ...(options.end ? { $lt: options.end } : {}),
+  } : undefined;
+  const escapedQuery = options.query?.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const search = escapedQuery ? {
+    $or: [
+      { title: { $regex: escapedQuery, $options: "i" } },
+      { subject: { $regex: escapedQuery, $options: "i" } },
+    ],
+  } : {};
+  const limit = Math.min(Math.max(options.limit ?? 20, 1), 100);
+  return (await collection()).find({
+    userId,
+    ...(createdAt ? { createdAt } : {}),
+    ...search,
+  }).sort({ createdAt: -1 }).limit(limit).toArray();
 }
 
 export async function findTeacherBook(userId: string, id: string): Promise<WithId<TeacherBookDocument> | null> {
@@ -227,6 +258,27 @@ export async function findPublicTeacherBook(id: string): Promise<PublicTeacherBo
   };
 }
 
+export async function findLatestPublicTeacherBook(): Promise<PublicTeacherBookDetail | null> {
+  const book = await (await collection()).findOne(
+    { isPublic: true, status: "complete", publishedAt: { $type: "date" } },
+    {
+      projection: {
+        subject: 1, title: 1, pages: 1, publishedAt: 1,
+        "publicMetadata.creatorName": 1, "publicMetadata.summary": 1,
+        "publicMetadata.coverImageUrl": 1, "publicMetadata.interview": 1,
+      },
+      sort: { publishedAt: -1, _id: -1 },
+    },
+  );
+  if (!book?.publishedAt || !book.publicMetadata) return null;
+  return {
+    id: book._id.toHexString(), subject: book.subject, title: book.title,
+    creatorName: book.publicMetadata.creatorName, summary: book.publicMetadata.summary,
+    coverImageUrl: book.publicMetadata.coverImageUrl, interview: book.publicMetadata.interview,
+    pageCount: book.pages?.length || 0, publishedAt: book.publishedAt.toISOString(), pages: book.pages || [],
+  };
+}
+
 export async function publishTeacherBook(
   userId: string,
   id: string,
@@ -234,8 +286,12 @@ export async function publishTeacherBook(
 ): Promise<boolean> {
   if (!ObjectId.isValid(id)) return false;
   const result = await (await collection()).updateOne(
-    { _id: new ObjectId(id), userId, status: "complete" },
-    { $set: { isPublic: true, publishedAt: new Date(), publicMetadata: metadata, updatedAt: new Date() } },
+    {
+      _id: new ObjectId(id),
+      userId,
+      $or: [{ status: "complete" }, { status: "failed", lastError: { $exists: false } }],
+    },
+    { $set: { status: "complete", isPublic: true, publishedAt: new Date(), publicMetadata: metadata, updatedAt: new Date() } },
   );
   return result.matchedCount === 1;
 }

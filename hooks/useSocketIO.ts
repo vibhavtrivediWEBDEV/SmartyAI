@@ -55,9 +55,9 @@ export function useSocketIO(options: UseSocketIOOptions = {}) {
 
     // Initialize Socket.io client
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || window.location.origin
-    
+
     console.log('[Socket.io Client] Connecting to:', socketUrl)
-    
+
     const socket = io(socketUrl, {
       transports: ['websocket', 'polling'],
       autoConnect: true,
@@ -81,11 +81,11 @@ export function useSocketIO(options: UseSocketIOOptions = {}) {
         })
       }
     }
-    
+
     // 🔥 FIX: Register event listeners IMMEDIATELY in same effect
     if (onCommand) {
       console.log('[Socket.io Client] 🔧 Setting up event listeners for automation events');
-      
+
       // Handler for automation-command
       const handleCommand = (command: AutomationCommand) => {
         console.log('\n' + '📥'.repeat(80))
@@ -95,12 +95,12 @@ export function useSocketIO(options: UseSocketIOOptions = {}) {
         console.log(`   Source: ${command.source}`)
         console.log(`   Timestamp: ${new Date(command.timestamp).toLocaleTimeString()}`)
         console.log('📥'.repeat(80) + '\n')
-        
+
         onCommand(command)
       }
-      
+
       socket.on('automation-command', handleCommand)
-      
+
       console.log('[Socket.io Client] ✅ Event listeners registered');
     }
 
@@ -127,14 +127,14 @@ export function useSocketIO(options: UseSocketIOOptions = {}) {
       console.log('='.repeat(80) + '\n')
       setIsConnected(true)
       setError(null)
-      
+
       // Join user-specific room
       console.log('\n' + '🚪'.repeat(80))
       console.log('[Desktop WebSocket] JOINING ROOM')
       console.log(`   Event: join-user-room`)
       console.log(`   Payload: "${userId}"`)
       console.log('🚪'.repeat(80) + '\n')
-      
+
       socket.emit('join-user-room', userId)
       console.log('✅ [Desktop WebSocket] Join event emitted')
     })
@@ -154,47 +154,60 @@ export function useSocketIO(options: UseSocketIOOptions = {}) {
     socket.on('whatsapp-updated', (update: WhatsAppUpdatedEvent) => {
       window.dispatchEvent(new CustomEvent('whatsapp-updated'))
       const call = update.call
-      if (!call || update.event !== 'call.received' || call.status !== 'ringing') {
-        if (update.event.startsWith('call.') && update.event !== 'call.received') {
-          if (call) toast.dismiss(`whatsapp-call-${call.callId}`)
-          whatsappNotificationRef.current?.close()
-          whatsappNotificationRef.current = null
+
+      // Handle call status changes
+      if (update.event.startsWith('call.')) {
+        if (call && update.event !== 'call.received' && call.status !== 'ringing') {
+          // Dismiss toast and close notification for non-ringing states
+          toast.dismiss(`whatsapp-call-${call.callId}`)
+          if (whatsappNotificationRef.current?.tag === `whatsapp-call-${call.callId}`) {
+            whatsappNotificationRef.current.close()
+            whatsappNotificationRef.current = null
+          }
+          // Clear the notified call ID so a new call can show notifications
+          notifiedWhatsAppCallIdRef.current = null
         }
-        return
-      }
-      if (notifiedWhatsAppCallIdRef.current === call.callId) return
-      notifiedWhatsAppCallIdRef.current = call.callId
 
-      toast(`Incoming WhatsApp ${call.type} call`, {
-        id: `whatsapp-call-${call.callId}`,
-        description: `From ${call.from}`,
-        duration: Infinity,
-        action: {
-          label: 'Open WhatsApp Web',
-          onClick: () => { window.open('https://web.whatsapp.com/', 'whatsapp-web') },
-        },
-      })
+        // Only handle incoming ringing calls
+        if (!call || update.event !== 'call.received' || call.status !== 'ringing') {
+          return
+        }
 
-      if (!("Notification" in window)) return
+        // Avoid duplicate notifications for the same call
+        if (notifiedWhatsAppCallIdRef.current === call.callId) return
+        notifiedWhatsAppCallIdRef.current = call.callId
 
-      const showNotification = () => {
-        if (Notification.permission !== 'granted') return
-        whatsappNotificationRef.current?.close()
-        const notification = new Notification(`Incoming WhatsApp ${call.type} call`, {
-          body: `From ${call.from}`,
-          tag: `whatsapp-call-${call.callId}`,
-          requireInteraction: true,
+        toast(`Incoming WhatsApp ${call.type} call`, {
+          id: `whatsapp-call-${call.callId}`,
+          description: `From ${call.from}`,
+          duration: Infinity,
+          action: {
+            label: 'Open WhatsApp Web',
+            onClick: () => { window.open('https://web.whatsapp.com/', 'whatsapp-web') },
+          },
         })
-        notification.onclick = () => {
-          window.focus()
-          window.open('https://web.whatsapp.com/', 'whatsapp-web')
-          notification.close()
-        }
-        whatsappNotificationRef.current = notification
-      }
 
-      if (Notification.permission === 'granted') showNotification()
-      else if (Notification.permission === 'default') void Notification.requestPermission().then(showNotification)
+        if (!("Notification" in window)) return
+
+        const showNotification = () => {
+          if (Notification.permission !== 'granted') return
+          whatsappNotificationRef.current?.close()
+          const notification = new Notification(`Incoming WhatsApp ${call.type} call`, {
+            body: `From ${call.from}`,
+            tag: `whatsapp-call-${call.callId}`,
+            requireInteraction: true,
+          })
+          notification.onclick = () => {
+            window.focus()
+            window.open('https://web.whatsapp.com/', 'whatsapp-web')
+            notification.close()
+          }
+          whatsappNotificationRef.current = notification
+        }
+
+        if (Notification.permission === 'granted') showNotification()
+        else if (Notification.permission === 'default') void Notification.requestPermission().then(showNotification)
+      }
     })
 
     socket.on('disconnect', (reason) => {
@@ -205,7 +218,7 @@ export function useSocketIO(options: UseSocketIOOptions = {}) {
       console.log(`   User ID: "${userId}"`)
       console.log('🔌'.repeat(80) + '\n')
       setIsConnected(false)
-      
+
       // Show user-friendly notification
       if (reason === 'io server disconnect') {
         // Server disconnected, try to reconnect
@@ -247,7 +260,7 @@ export function useSocketIO(options: UseSocketIOOptions = {}) {
       console.log(`   User ID: "${userId}"`)
       console.log(`   Socket ID: ${socket.id}`)
       console.log('🧹'.repeat(80) + '\n')
-      
+
       socket.off('connect')
       socket.off('disconnect')
       socket.off('room-joined')
@@ -264,7 +277,7 @@ export function useSocketIO(options: UseSocketIOOptions = {}) {
       document.removeEventListener('visibilitychange', reconnectWhenAvailable)
       whatsappNotificationRef.current?.close()
       whatsappNotificationRef.current = null
-      
+
       if (socket.connected) {
         socket.disconnect()
       }

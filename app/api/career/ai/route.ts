@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUserId } from '@/lib/auth/session';
-import { getAIService } from '@/lib/ai';
+import { createMeteredAIService, CreditLimitError } from '@/lib/ai/metered';
 import * as sessionRepo from '@/modules/career/careerSession.repository';
 import { CareerSessionManager } from '@/lib/career/CareerSessionManager';
 
@@ -34,27 +34,30 @@ export async function POST(req: NextRequest) {
     switch (task) {
       case 'conversation':
         return await handleConversation(userId, data);
+
+      case 'extract_onboarding':
+        return await extractOnboarding(userId, data);
       
       case 'extract_job_profile':
-        return await extractJobProfile(data);
+        return await extractJobProfile(userId, data);
       
       case 'generate_preparation_plan':
-        return await generatePreparationPlan(data);
+        return await generatePreparationPlan(userId, data);
       
       case 'generate_questions':
         return await generateInterviewQuestions(data);
       
       case 'generate_calendar_events':
-        return await generateCalendarEvents(data);
+        return await generateCalendarEvents(userId, data);
       
       case 'generate_notes':
-        return await generateNotesContent(data);
+        return await generateNotesContent(userId, data);
       
       case 'generate_learning_plan':
-        return await generateLearningPlan(data);
+        return await generateLearningPlan(userId, data);
       
       case 'generate_interview_session':
-        return await generateInterviewSession(data);
+        return await generateInterviewSession(userId, data);
       
       default:
         return NextResponse.json(
@@ -64,6 +67,9 @@ export async function POST(req: NextRequest) {
     }
     
   } catch (error: any) {
+    if (error instanceof CreditLimitError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error('Career AI error:', error);
     return NextResponse.json(
       { error: error.message || 'AI processing failed' },
@@ -72,10 +78,70 @@ export async function POST(req: NextRequest) {
   }
 }
 
+async function extractOnboarding(userId: string, data: { transcript?: string }) {
+  const transcript = data?.transcript?.trim();
+  if (!transcript) {
+    return NextResponse.json({ error: 'Career transcript is required' }, { status: 400 });
+  }
+
+  const aiService = createMeteredAIService(userId, { source: 'career', feature: 'onboarding-extraction' });
+  const today = new Date().toISOString().split('T')[0];
+  const response = await aiService.complete(`Extract career onboarding fields from the user's speech.
+
+Today is ${today}.
+Transcript:
+${transcript}
+
+Return only valid JSON in this exact shape:
+{
+  "company": "",
+  "role": "",
+  "jobDescription": "",
+  "interviewDate": "YYYY-MM-DD"
+}
+
+Rules:
+- Extract only career interview information explicitly supplied by the user.
+- Resolve relative dates such as "next Friday" using today's date.
+- Do not infer a company, role, or date that was not supplied.
+- jobDescription is optional and may be empty.`);
+
+  const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    return NextResponse.json({ error: 'Could not extract career details' }, { status: 422 });
+  }
+
+  let extracted: Record<string, unknown>;
+  try {
+    extracted = JSON.parse(jsonMatch[0]);
+  } catch {
+    return NextResponse.json({ error: 'Could not extract career details' }, { status: 422 });
+  }
+  const minimumDate = new Date();
+  minimumDate.setHours(0, 0, 0, 0);
+  const extractedDate = typeof extracted.interviewDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(extracted.interviewDate)
+    ? extracted.interviewDate
+    : '';
+  const validFutureDate = extractedDate && new Date(`${extractedDate}T00:00:00`).getTime() >= minimumDate.getTime();
+  const formData = {
+    company: typeof extracted.company === 'string' ? extracted.company.trim() : '',
+    role: typeof extracted.role === 'string' ? extracted.role.trim() : '',
+    jobDescription: typeof extracted.jobDescription === 'string' ? extracted.jobDescription.trim() : '',
+    interviewDate: validFutureDate ? extractedDate : ''
+  };
+  const missingFields = [
+    !formData.company && 'company',
+    !formData.role && 'role',
+    !formData.interviewDate && 'interview date'
+  ].filter(Boolean);
+
+  return NextResponse.json({ formData, missingFields });
+}
+
 /**
  * Extract Job Profile AND Compare with User Profile
  */
-async function extractJobProfile(data: {
+async function extractJobProfile(userId: string, data: {
   jobDescription: string;
   company: string;
   role: string;
@@ -93,7 +159,7 @@ async function extractJobProfile(data: {
     });
     
     // Use existing AI service
-    const aiService = await getAIService();
+    const aiService = createMeteredAIService(userId, { source: 'career', feature: 'job-profile' });
     
     // Build user profile summary for AI prompt
     const userProfileSummary = userProfile ? `
@@ -220,7 +286,7 @@ Only return valid JSON.`;
 /**
  * Generate Preparation Plan
  */
-async function generatePreparationPlan(data: {
+async function generatePreparationPlan(userId: string, data: {
   jobProfile: any;
   skillGaps: any[];
   daysUntilInterview: number;
@@ -230,7 +296,7 @@ async function generatePreparationPlan(data: {
   const { jobProfile, skillGaps, daysUntilInterview, startDate, interviewDate } = data;
   
   // Use existing AI service
-  const aiService = await getAIService();
+  const aiService = createMeteredAIService(userId, { source: 'career', feature: 'preparation-plan' });
   
   const prompt = `Generate a ${daysUntilInterview}-day preparation plan for ${jobProfile.company} ${jobProfile.role} interview.
 
@@ -308,7 +374,7 @@ async function generateInterviewQuestions(data: {
 /**
  * Generate Calendar Events - AI Powered
  */
-async function generateCalendarEvents(data: {
+async function generateCalendarEvents(userId: string, data: {
   company: string;
   role: string;
   jobProfile: any;
@@ -320,7 +386,7 @@ async function generateCalendarEvents(data: {
 }) {
   const { company, role, jobProfile, userProfile, skillGaps, interviewDate, startDate, daysUntilInterview } = data;
   
-  const aiService = await getAIService();
+  const aiService = createMeteredAIService(userId, { source: 'career', feature: 'calendar-generation' });
   
   const prompt = `Generate a ${daysUntilInterview}-day interview preparation calendar schedule for ${company} ${role}.
 
@@ -377,7 +443,7 @@ Only return valid JSON.`;
 /**
  * Generate Notes Content - AI Powered
  */
-async function generateNotesContent(data: {
+async function generateNotesContent(userId: string, data: {
   company: string;
   role: string;
   jobProfile: any;
@@ -386,7 +452,7 @@ async function generateNotesContent(data: {
 }) {
   const { company, role, jobProfile, userProfile, skillGaps } = data;
   
-  const aiService = await getAIService();
+  const aiService = createMeteredAIService(userId, { source: 'career', feature: 'notes-generation' });
   
   const prompt = `Generate comprehensive interview preparation notes for ${company} ${role} position.
 
@@ -448,7 +514,7 @@ Only return valid JSON.`;
 /**
  * Generate Learning Plan - AI Powered
  */
-async function generateLearningPlan(data: {
+async function generateLearningPlan(userId: string, data: {
   company: string;
   role: string;
   jobProfile: any;
@@ -458,7 +524,7 @@ async function generateLearningPlan(data: {
 }) {
   const { company, role, jobProfile, userProfile, skillGaps, daysUntilInterview } = data;
   
-  const aiService = await getAIService();
+  const aiService = createMeteredAIService(userId, { source: 'career', feature: 'learning-plan' });
   
   const prompt = `Generate a ${daysUntilInterview}-day learning plan for ${company} ${role} interview.
 
@@ -520,7 +586,7 @@ Only return valid JSON.`;
 /**
  * Generate Interview Session - AI Powered
  */
-async function generateInterviewSession(data: {
+async function generateInterviewSession(userId: string, data: {
   company: string;
   role: string;
   jobProfile: any;
@@ -528,7 +594,7 @@ async function generateInterviewSession(data: {
 }) {
   const { company, role, jobProfile, userProfile } = data;
   
-  const aiService = await getAIService();
+  const aiService = createMeteredAIService(userId, { source: 'career', feature: 'interview-session' });
   
   const prompt = `Generate interview questions for ${company} ${role} position.
 

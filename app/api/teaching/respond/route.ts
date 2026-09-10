@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "node:crypto";
+import { FieldValue } from "firebase-admin/firestore";
 
+import { db } from "@/firebase/admin";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import type { ChatMessage } from "@/lib/ai";
 import { chatOpenAIFirst } from "@/lib/ai/fallback";
@@ -15,6 +18,7 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (!consumeRateLimit(`teacher:${user.id}`, 30, 60_000).allowed) return NextResponse.json({ error: "Too many teacher requests. Please retry shortly." }, { status: 429 });
     const body = await request.json().catch(() => null);
+    const sessionId = typeof body?.sessionId === "string" ? body.sessionId.trim() : "";
     const contextResult = lessonContextSchema.safeParse(body?.context ?? { subject: body?.subject });
     const messages = body?.messages as ChatMessage[] | undefined;
     if (!contextResult.success || !Array.isArray(messages) || !messages.length || messages.length > 100) {
@@ -25,6 +29,14 @@ export async function POST(request: NextRequest) {
       message && ["system", "user", "assistant"].includes(message.role) && typeof message.content === "string" && message.content.length <= 10000
     ).slice(-30);
     if (!cleanMessages.some((message) => message.role === "user")) return NextResponse.json({ error: "A valid question is required." }, { status: 400 });
+
+    const sessionRef = sessionId ? db.collection("teachingSessions").doc(sessionId) : null;
+    if (sessionRef) {
+      const session = await sessionRef.get();
+      if (!session.exists || session.data()?.userId !== user.id) {
+        return NextResponse.json({ error: "Teaching session not found." }, { status: 404 });
+      }
+    }
 
     const latestContent = [...cleanMessages].reverse().find((message) => message.role === "user")?.content;
     const latestQuestion = typeof latestContent === "string" ? latestContent : "";
@@ -59,10 +71,17 @@ Always create at least one concise board item as excellent student notes: a clea
 ${textbookContext}`,
       },
       ...cleanMessages,
-    ], { temperature: 0.5, maxTokens: 1800, openAIModel: process.env.TEACHER_MODEL?.trim() || "gpt-5.6-sol", responseFormat: { type: "json_object" } });
+    ], { temperature: 0.5, maxTokens: 1800, openAIModel: process.env.TEACHER_MODEL?.trim() || "gpt-5.6-sol", responseFormat: { type: "json_object" }, metering: { userId: user.id, source: "teacher", feature: "lesson-response" } });
 
     const structured = parseTeacherResponse(response.content, response.provider, response.model);
     if (serverReference) structured.documentReference = serverReference as NonNullable<typeof structured.documentReference>;
+    if (sessionRef) {
+      const exchangeKey = createHash("sha256").update(`${sessionId}:${latestQuestion.trim()}`).digest("hex");
+      await sessionRef.update({
+        verifiedExchangeKeys: FieldValue.arrayUnion(exchangeKey),
+        lastVerifiedExchangeAt: new Date().toISOString(),
+      });
+    }
     return NextResponse.json({ ...structured, answer: structured.bookAnswer });
   } catch (error) {
     console.error("Teacher response failed:", error instanceof Error ? error.name : "unknown error");
