@@ -3,7 +3,9 @@
     "filesystem.read",
     "browser.control",
     "system.command",
-    "finder.control"
+    "finder.control",
+    "mail.compose",
+    "mail.send"
   ],
   "ephemeral": []
 }

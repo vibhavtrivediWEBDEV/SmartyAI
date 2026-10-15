@@ -232,5 +232,17 @@
     "capability": "filesystem.read",
     "actor": "user",
     "at": 1789032883790
+  },
+  {
+    "action": "grant",
+    "capability": "mail.compose",
+    "actor": "user",
+    "at": 1789112049895
+  },
+  {
+    "action": "grant",
+    "capability": "mail.send",
+    "actor": "user",
+    "at": 1789112050023
   }
 ]
