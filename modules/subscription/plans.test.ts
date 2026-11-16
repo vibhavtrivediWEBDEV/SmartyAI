@@ -35,6 +35,7 @@ describe("subscription plans", () => {
 
   it("scales monthly feature usage by subscription", () => {
     expect(SUBSCRIPTION_PLANS.free.teacherBooksPerMonth).toBe(3);
+    expect(SUBSCRIPTION_PLANS.free.monthlyLimits.careerMissions).toBe(1);
     expect(SUBSCRIPTION_PLANS.starter.teacherBooksPerMonth).toBe(20);
     expect(SUBSCRIPTION_PLANS.pro.teacherBooksPerMonth).toBe(50);
     expect(SUBSCRIPTION_PLANS.job_seeker.teacherBooksPerMonth).toBe(200);

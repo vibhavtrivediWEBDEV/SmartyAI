@@ -50,9 +50,9 @@ export const SUBSCRIPTION_PLANS: Record<Plan, SubscriptionPlan> = {
     excelOperationsPerMonth: 10,
     tableGenerationsPerMonth: 50,
     teacherBooksPerMonth: 3,
-    monthlyLimits: { careerMissions: 0, teacherBooks: 3, teachingSessions: 1, interviews: 1, youtubeSuggestions: 10, notes: 5, vscodeQuestions: 5, calendarEvents: 10, telegramCommands: 20 },
+    monthlyLimits: { careerMissions: 1, teacherBooks: 3, teachingSessions: 1, interviews: 1, youtubeSuggestions: 10, notes: 5, vscodeQuestions: 5, calendarEvents: 10, telegramCommands: 20 },
     description: "A private workspace for getting started.",
-    features: ["Private Finder", "1 GB Finder storage", "Excel & CSV preview/editing", "10 Excel AI operations/month", "50 AI table generations/month", "3 AI teacher books/month", "Community support"],
+    features: ["1 career plan/month", "Private Finder", "1 GB Finder storage", "Excel & CSV preview/editing", "10 Excel AI operations/month", "50 AI table generations/month", "3 AI teacher books/month", "Community support"],
     purchasable: false,
   },
   trial: {
